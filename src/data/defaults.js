@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Tags
 } from 'lucide-react';
 
-export const APP_VERSION = '3.1.0';
+export const APP_VERSION = '3.3.0';
 export const DB_KEY = 'bm_pos_ultimate_v3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -130,12 +130,27 @@ export const createSeedDb = () => ({
   configs: {
     companyName: 'BUMI MAKMUR', address: 'Jl. Pembangunan No. 88, Surabaya', phone: '031-0000000',
     activeBranchId: MAIN_BRANCH_ID, darkMode: false, printAuto: false, taxEnabled: false, taxRate: 11,
+    cameraPermissionOnStartup: true,
     serviceEnabled: false, serviceRate: 0, roundingStep: 0, loyaltyEnabled: true, pointRate: 10000,
-    pointValue: 100, refundApprovalLimit: 500000, requireShiftForCash: true, receiptFooter: 'Terima kasih telah berbelanja.',
+    pointValue: 100, refundApprovalLimit: 500000, requireShiftForCash: true,
+    receiptHeader: 'NOTA PEMBELIAN', receiptFooter: 'Terima kasih telah berbelanja.',
+    receiptMessage: 'Barang yang sudah dibeli harap diperiksa kembali. Simpan nota sebagai bukti transaksi.',
+    receiptWhatsappNote: 'Terima kasih. Bumi Makmur siap melayani kebutuhan bangunan, listrik, dan air Anda.',
+    receiptLogo: '', receiptShowLogo: true, receiptShowCustomer: true, receiptShowCashier: true,
+    receiptShowPayment: true, receiptShowStorePhone: true, receiptPaperWidth: 80,
+    whatsappCountryCode: '62', whatsappReceiptEnabled: true,
+    qrisMerchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.',
     paymentMethods: [
-      { id: 'cash', name: 'Tunai', type: 'cash', active: true }, { id: 'qris', name: 'QRIS', type: 'digital', active: true },
-      { id: 'transfer', name: 'Transfer Bank', type: 'bank', active: true }, { id: 'card', name: 'Kartu/EDC', type: 'card', active: true },
-      { id: 'tempo', name: 'Tempo/Piutang', type: 'credit', active: true }, { id: 'other', name: 'Lainnya', type: 'other', active: true }
+      { id: 'cash', name: 'Tunai', type: 'cash', brand: 'cash', active: true },
+      { id: 'qris', name: 'QRIS', type: 'digital', brand: 'qris', active: true },
+      { id: 'shopeepay', name: 'ShopeePay', type: 'digital', brand: 'shopeepay', active: true },
+      { id: 'ovo', name: 'OVO', type: 'digital', brand: 'ovo', active: true },
+      { id: 'gopay', name: 'GoPay', type: 'digital', brand: 'gopay', active: true },
+      { id: 'dana', name: 'DANA', type: 'digital', brand: 'dana', active: true },
+      { id: 'transfer', name: 'Transfer Bank', type: 'bank', brand: 'bank', active: true },
+      { id: 'card', name: 'Kartu/EDC', type: 'card', brand: 'card', active: true },
+      { id: 'tempo', name: 'Tempo/Piutang', type: 'credit', brand: 'credit', active: true },
+      { id: 'other', name: 'Lainnya', type: 'other', brand: 'other', active: true }
     ],
     bankAccounts: [
       { id: 'BCA', bank: 'BCA', number: '1234567890', holder: 'Bumi Makmur' },

@@ -1,16 +1,24 @@
-# Cara memperbarui repository GitHub
+# Memperbarui repository ke v3.3
 
-1. Ekstrak ZIP v3.1.
-2. Buka repository `Bumi-Makmur-POS-Ultimate` di GitHub.
-3. Upload seluruh isi folder v3.1 dan izinkan file lama diganti.
-4. Pastikan folder `.github/workflows/build-android.yml` tetap ada.
+1. Backup JSON dari APK yang sekarang bila sudah berisi data penting.
+2. Ekstrak ZIP v3.3.
+3. Upload seluruh isi project ke repository `Bumi-Makmur-POS-Ultimate` dan izinkan file lama diganti.
+4. Pastikan dua workflow ini ada:
+
+```text
+.github/workflows/generate-signing-key.yml
+.github/workflows/build-android.yml
+```
+
 5. Commit message:
 
 ```text
-Fix price input, markup percentage, login and transaction bugs v3.1
+Add premium e-wallet payments, WhatsApp receipts and custom receipt v3.3
 ```
 
-6. Buka tab **Actions** dan tunggu workflow **Build Web and Android APK** menjadi hijau.
-7. Download artifact `Bumi-Makmur-POS-debug-apk`, ekstrak, lalu instal `app-debug.apk`.
+6. Jika keystore v3.2 dan empat Actions Secrets sudah dibuat, **jangan membuat keystore baru**. Langsung jalankan **Build Signed Android Release**.
+7. Hanya untuk repository yang belum pernah memiliki signing key, jalankan **Generate Android Signing Key** satu kali dan ikuti `ANDROID-SIGNING-SETUP.md`.
+8. Download artifact `Bumi-Makmur-POS-signed-release`.
+9. Instal file APK bertanda tangan.
 
-Data lokal pada APK lama tidak dijamin otomatis berpindah ke APK debug baru jika Android memperlakukan paket/signature berbeda. Gunakan menu Backup JSON sebelum mengganti aplikasi bila sudah ada data penting.
+Jangan membuat keystore baru untuk update berikutnya. Gunakan secret dan file `.jks` yang sama selamanya untuk package `app.bumimakmur.pos`.

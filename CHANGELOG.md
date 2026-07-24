@@ -29,3 +29,28 @@ Catatan: implementasi ini menggunakan pola fitur POS umum. Source, aset, identit
 - Membatasi refund dan retur pembelian berdasarkan sisa kuantitas yang benar-benar masih dapat dikembalikan.
 - Memperbaiki penentuan status refund penuh berdasarkan kuantitas, bukan hanya nominal.
 - Memperbaiki kalkulasi pembelian: diskon item tidak boleh melampaui subtotal dan jatuh tempo wajib untuk pembelian tempo yang diterima.
+
+## 3.2.0 — Camera, Biometric, Signed Release & Stability
+
+- Menambahkan permission kamera native Android dan permintaan izin otomatis saat aplikasi pertama dibuka.
+- Scanner langsung memulai kamera belakang saat modal Scan dibuka, dilengkapi retry dan pintasan Pengaturan Android.
+- Menambahkan plugin native Capacitor `BumiMakmurNative` untuk permission kamera, app settings, dan autentikasi biometrik.
+- Menambahkan pengaturan keamanan untuk kamera, sidik jari/pengenalan wajah, dan prompt biometrik otomatis.
+- Mengganti build debug menjadi APK/AAB release bertanda tangan dengan keystore tetap melalui GitHub Actions.
+- Menambahkan workflow satu kali untuk membuat keystore dan empat Actions Secrets.
+- Menambahkan verifikasi signature APK memakai `apksigner`.
+- Menetapkan version code `30200` dan version name `3.2.0` secara otomatis saat build Android.
+- Memperketat validasi produk, PIN karyawan ganda, kas masuk/keluar, pembayaran campuran, loyalty, refund, pembelian, retur, stok opname, dan transfer stok.
+- Menambahkan 5 pengujian konfigurasi release; total 14 pengujian otomatis lulus.
+
+## 3.3.0 — Premium Payments, WhatsApp Receipt & Custom Branding
+
+- Menambahkan metode pembayaran QRIS, ShopeePay, OVO, GoPay, DANA, transfer, kartu, tunai, tempo, dan metode khusus.
+- Menambahkan kartu pembayaran cepat, nominal tunai cepat, nomor referensi, tampilan QR merchant, serta split payment yang lebih jelas.
+- Menambahkan nota digital teks terperinci untuk WhatsApp dan nota gambar premium melalui menu berbagi Android.
+- Menambahkan kirim ulang nota dari riwayat transaksi, tombol salin, bagikan, WhatsApp, dan cetak.
+- Menambahkan unggah logo toko, judul nota, footer, pesan khusus, pesan WhatsApp, dan pilihan informasi nota.
+- Menambahkan unggah QRIS, nama merchant, petunjuk pembayaran, dan pilihan kertas 58/80 mm.
+- Menambahkan migrasi metode pembayaran agar data lama tidak hilang saat e-wallet baru ditambahkan.
+- Memperbarui tampilan global menjadi lebih premium dengan sidebar gradasi, header lembut, kartu pembayaran bermerek, dan nota modern.
+- Menambahkan pengujian nota digital dan metode pembayaran; total 18 pengujian otomatis lulus.

@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Package, Save, ReceiptText, Star, User, SlidersHorizontal, QrCode, CreditCard, Banknote, WalletCards, Printer, X } from 'lucide-react';
+import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Package, Save, ReceiptText, Star, User, SlidersHorizontal, QrCode, CreditCard, Banknote, WalletCards, Printer, X, MessageCircle, Copy, Share2, CheckCircle2 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { formatRp, generateId, localDateKey } from '../utils/helpers.js';
 import { Badge, Button, Card, Field, Input, Modal, MoneyInput, Select, Textarea } from '../components/ui.jsx';
+import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
+import { copyReceiptText, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
 
 export default function POSScreen() {
-  const { db, scoped, completeSale, holdSale, findOpenShift, setCustomerDisplay } = usePos();
+  const { db, scoped, completeSale, holdSale, findOpenShift, setCustomerDisplay, currentUser } = usePos();
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Semua');
@@ -80,6 +82,12 @@ export default function POSScreen() {
     setCustomerDisplay({ cart, total: totals.total, customerName: customer?.name || 'Umum', message: notes });
   }, [cart, totals.total, customer?.name, notes, setCustomerDisplay]);
 
+  useEffect(() => {
+    if (!receipt || !db.configs.printAuto) return undefined;
+    const timer = window.setTimeout(() => window.print(), 500);
+    return () => window.clearTimeout(timer);
+  }, [receipt, db.configs.printAuto]);
+
   const addProduct = (product, options = {}) => {
     const conversion = product.conversions?.find(item => item.unit === options.unit);
     const factor = conversion ? Number(conversion.factor) : 1;
@@ -128,10 +136,10 @@ export default function POSScreen() {
     if (credit && !credit.dueDate) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
     const sale = completeSale({
       items: cart.map(line => ({ ...line, netUnitPrice: Math.max(0, line.price - Number(line.itemDiscount || 0) / Math.max(1, line.qty)) })),
-      customerId: customer?.id, customerName: customer?.name || 'Umum', saleType, notes, globalDiscount: Number(globalDiscount || 0),
+      customerId: customer?.id, customerName: customer?.name || 'Umum', customerPhone: customer?.phone || '', cashierName: currentUser?.name || 'Kasir', saleType, notes, globalDiscount: Number(globalDiscount || 0),
       promoDiscount: totals.promoDiscount, appliedPromos: totals.appliedPromo ? [{ id: totals.appliedPromo.id, name: totals.appliedPromo.name, discount: totals.appliedPromo.discount }] : [],
       loyaltyDiscount: totals.loyaltyDiscount, subtotal: Math.round(totals.subtotal), tax: totals.tax, service: totals.service, rounding: totals.rounding, total: totals.total,
-      payments, heldSaleId, pointsRedeemed: Number(pointsRedeemed || 0)
+      payments, change: Math.max(0, paid - totals.total), heldSaleId, pointsRedeemed: Number(pointsRedeemed || 0)
     });
     setReceipt(sale); setPaymentOpen(false); setMobileCart(false); clear();
   };
@@ -175,7 +183,7 @@ export default function POSScreen() {
 
       {choosingProduct && <ProductChoiceModal product={choosingProduct} saleType={saleType} onClose={() => setChoosingProduct(null)} onAdd={options => { addProduct(choosingProduct, options); setChoosingProduct(null); }}/>}      
       {editingLine && <LineEditModal line={editingLine} product={scoped.products.find(item => item.id === editingLine.productId)} onClose={() => setEditingLine(null)} onSave={line => { updateLine(line); setEditingLine(null); }}/>}      
-      {paymentOpen && <PaymentModal total={totals.total} methods={db.configs.paymentMethods.filter(item => item.active)} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
+      {paymentOpen && <PaymentModal total={totals.total} methods={db.configs.paymentMethods.filter(item => item.active)} configs={db.configs} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
       {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={product => { addProduct(product); setScannerOpen(false); }}/>}      
@@ -205,22 +213,39 @@ function LineEditModal({ line, product, onClose, onSave }) {
   return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave(form)}>Simpan</Button></>}><div className="space-y-4"><div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>{(product?.conversions?.length || 0) > 0 && <Field label="Satuan"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {item.factor} {product.baseUnit}</option>)}</Select></Field>}<div className="grid grid-cols-2 gap-3"><Field label="Jumlah"><Input type="number" min="0.01" step="0.01" value={form.qty} onChange={event => setForm(previous => ({...previous, qty:Number(event.target.value), baseQty:Number(event.target.value)*previous.factor}))}/></Field><Field label="Harga per Satuan"><MoneyInput value={form.price} onValueChange={value => setForm(previous => ({...previous, price:value}))}/></Field></div><Field label="Diskon Item (Rp)"><MoneyInput max={Math.max(0, form.price * form.qty)} value={form.itemDiscount} onValueChange={value => setForm(previous => ({...previous,itemDiscount:value}))}/></Field><div className="grid grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><MoneyInput value={form.modifierAmount || 0} onValueChange={amount => setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]}))}/></Field></div><Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field></div></Modal>;
 }
 
-function PaymentModal({ total, methods, onClose, onConfirm }) {
-  const firstMethod = methods[0] || { id: 'cash', type: 'cash', name: 'Tunai' };
-  const [payments, setPayments] = useState([{ id: generateId('PAYLINE'), methodId: firstMethod.id, type: firstMethod.type, name: firstMethod.name, amount: total, dueDate: '', reference: '' }]);
+function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
+  const firstMethod = methods[0] || { id: 'cash', type: 'cash', name: 'Tunai', brand: 'cash' };
+  const [payments, setPayments] = useState([{ id: generateId('PAYLINE'), methodId: firstMethod.id, type: firstMethod.type, name: firstMethod.name, brand: firstMethod.brand, amount: total, dueDate: '', reference: '' }]);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const paid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const current = payments[0];
 
+  const brandClass = {
+    cash: 'payment-cash', qris: 'payment-qris', shopeepay: 'payment-shopeepay', ovo: 'payment-ovo',
+    gopay: 'payment-gopay', dana: 'payment-dana', bank: 'payment-bank', card: 'payment-card', credit: 'payment-credit', other: 'payment-other'
+  };
+  const brandIcon = brand => {
+    if (brand === 'cash') return Banknote;
+    if (brand === 'qris') return QrCode;
+    if (brand === 'bank') return WalletCards;
+    if (brand === 'card') return CreditCard;
+    return WalletCards;
+  };
+
+  const selectSingleMethod = method => {
+    setError('');
+    setPayments([{ id: generateId('PAYLINE'), methodId: method.id, type: method.type, name: method.name, brand: method.brand || method.id, amount: total, dueDate: '', reference: '' }]);
+  };
   const add = () => {
-    const method = methods[0] || firstMethod;
+    const method = methods.find(item => item.id === 'cash') || methods[0] || firstMethod;
     setPayments(previous => [...previous, {
-      id: generateId('PAYLINE'), methodId: method.id, type: method.type, name: method.name,
+      id: generateId('PAYLINE'), methodId: method.id, type: method.type, name: method.name, brand: method.brand || method.id,
       amount: Math.max(0, total - paid), dueDate: '', reference: ''
     }]);
   };
-
   const update = (id, patch) => setPayments(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
+  const applyCashPreset = amount => update(current.id, { amount });
 
   const submit = async () => {
     if (submitting) return;
@@ -238,7 +263,63 @@ function PaymentModal({ total, methods, onClose, onConfirm }) {
     }
   };
 
-  return <Modal title="Pembayaran & Split Payment" onClose={submitting ? undefined : onClose} size="lg" footer={<><Button variant="secondary" onClick={onClose} disabled={submitting}>Batal</Button><Button variant="orange" onClick={submit} disabled={submitting}>{submitting ? 'Memproses...' : 'Selesaikan Transaksi'}</Button></>}><div className="space-y-4"><Card className="p-4 bg-emerald-50 border-emerald-100 text-center"><p className="text-xs font-bold text-emerald-800">Total Tagihan</p><p className="text-3xl font-black text-emerald-700">{formatRp(total)}</p><p className={`text-sm font-bold mt-1 ${paid>=total?'text-emerald-700':'text-orange-600'}`}>Terbayar {formatRp(paid)} · Sisa {formatRp(Math.max(0,total-paid))}</p></Card>{error&&<p className="p-3 bg-red-50 text-red-700 rounded-xl text-sm font-bold">{error}</p>}<div className="space-y-3">{payments.map(payment=><Card key={payment.id} className="p-3"><div className="flex gap-2 items-start"><div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2"><Select value={payment.methodId} onChange={event=>{const method=methods.find(item=>item.id===event.target.value);if(method)update(payment.id,{methodId:method.id,type:method.type,name:method.name,amount:Math.max(0,total-(paid-payment.amount)),dueDate:method.type==='credit'?payment.dueDate:'',reference:''});}}>{methods.map(method=><option key={method.id} value={method.id}>{method.name}</option>)}</Select><MoneyInput value={payment.amount} onValueChange={amount=>update(payment.id,{amount})} placeholder="Nominal"/>{payment.type==='credit'&&<Input type="date" value={payment.dueDate} onChange={event=>update(payment.id,{dueDate:event.target.value})}/>} {payment.type!=='cash'&&payment.type!=='credit'&&<Input value={payment.reference} onChange={event=>update(payment.id,{reference:event.target.value})} placeholder="Nomor referensi (opsional)"/>}</div>{payments.length>1&&<button onClick={()=>setPayments(previous=>previous.filter(item=>item.id!==payment.id))} disabled={submitting} className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><X size={18}/></button>}</div></Card>)}</div><Button variant="secondary" onClick={add} className="w-full" disabled={submitting}><Plus size={18}/> Tambah Metode Pembayaran</Button>{payments.some(item=>item.type==='cash')&&paid>total&&<Card className="p-3 bg-orange-50 text-orange-700 text-center font-bold">Kembalian: {formatRp(paid-total)}</Card>}</div></Modal>;
+  const cashPresets = [...new Set([total, Math.ceil(total / 10000) * 10000, Math.ceil(total / 20000) * 20000, Math.ceil(total / 50000) * 50000, Math.ceil(total / 100000) * 100000])].filter(value => value >= total).slice(0, 5);
+  return (
+    <Modal title="Pembayaran Premium" onClose={submitting ? undefined : onClose} size="lg" footer={<><Button variant="secondary" onClick={onClose} disabled={submitting}>Batal</Button><Button variant="orange" onClick={submit} disabled={submitting}>{submitting ? 'Memproses...' : 'Selesaikan Transaksi'}</Button></>}>
+      <div className="space-y-4">
+        <Card className="premium-total-card p-5 text-center">
+          <p className="text-xs font-bold text-emerald-800 uppercase tracking-[.18em]">Total Tagihan</p>
+          <p className="text-3xl md:text-4xl font-black text-emerald-800 mt-1">{formatRp(total)}</p>
+          <p className={`text-sm font-bold mt-2 ${paid >= total ? 'text-emerald-700' : 'text-orange-600'}`}>Terbayar {formatRp(paid)} · Sisa {formatRp(Math.max(0, total - paid))}</p>
+        </Card>
+
+        <div>
+          <div className="flex items-center justify-between mb-2"><p className="font-black text-sm text-gray-800">Pilih pembayaran cepat</p><Badge tone="green">QR & E-Wallet</Badge></div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {methods.map(method => { const Icon = brandIcon(method.brand || method.id); const active = payments.length === 1 && current?.methodId === method.id; return (
+              <button key={method.id} onClick={() => selectSingleMethod(method)} className={`payment-method-card ${brandClass[method.brand || method.id] || 'payment-other'} ${active ? 'is-active' : ''}`}>
+                <span className="payment-method-icon"><Icon size={21}/></span><span className="text-left min-w-0"><b className="block truncate">{method.name}</b><small>{method.type === 'digital' ? 'E-Wallet / QR' : method.type}</small></span>{active && <CheckCircle2 size={18} className="ml-auto shrink-0"/>}
+              </button>
+            )})}
+          </div>
+        </div>
+
+        {error && <p className="p-3 bg-red-50 text-red-700 rounded-xl text-sm font-bold border border-red-100">{error}</p>}
+
+        {payments.length === 1 && current?.type === 'digital' && (
+          <Card className="p-4 bg-gradient-to-br from-slate-950 to-emerald-950 text-white border-0 overflow-hidden relative">
+            <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-emerald-400/20 blur-2xl"/>
+            <div className="relative flex flex-col sm:flex-row items-center gap-4">
+              <div className="w-40 h-40 bg-white rounded-2xl p-3 flex items-center justify-center shadow-xl shrink-0">
+                {configs.qrisImage ? <img src={configs.qrisImage} alt="QRIS Bumi Makmur" className="w-full h-full object-contain rounded-xl"/> : <QrCode size={105} className="text-gray-900"/>}
+              </div>
+              <div className="text-center sm:text-left"><Badge tone="green">{current.name}</Badge><h3 className="font-black text-xl mt-2">{configs.qrisMerchantName || configs.companyName}</h3><p className="text-sm text-emerald-100 mt-2">{configs.qrisInstruction || 'Scan QR lalu konfirmasi pembayaran kepada kasir.'}</p><p className="text-xs text-white/60 mt-3">Nominal: {formatRp(current.amount)}</p></div>
+            </div>
+          </Card>
+        )}
+
+        <div className="space-y-3">
+          {payments.map(payment => (
+            <Card key={payment.id} className="p-3 premium-line-card">
+              <div className="flex gap-2 items-start">
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Select value={payment.methodId} onChange={event => { const method = methods.find(item => item.id === event.target.value); if (method) update(payment.id, { methodId: method.id, type: method.type, name: method.name, brand: method.brand || method.id, amount: Math.max(0, total - (paid - payment.amount)), dueDate: method.type === 'credit' ? payment.dueDate : '', reference: '' }); }}>{methods.map(method => <option key={method.id} value={method.id}>{method.name}</option>)}</Select>
+                  <MoneyInput value={payment.amount} onValueChange={amount => update(payment.id, { amount })} placeholder="Nominal"/>
+                  {payment.type === 'credit' && <Input type="date" value={payment.dueDate} onChange={event => update(payment.id, { dueDate: event.target.value })}/>} 
+                  {payment.type !== 'cash' && payment.type !== 'credit' && <Input value={payment.reference} onChange={event => update(payment.id, { reference: event.target.value })} placeholder="Nomor referensi / approval (opsional)"/>}
+                </div>
+                {payments.length > 1 && <button onClick={() => setPayments(previous => previous.filter(item => item.id !== payment.id))} disabled={submitting} className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><X size={18}/></button>}
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        {payments.length === 1 && current?.type === 'cash' && <div><p className="text-xs font-bold text-gray-500 mb-2">Nominal cepat</p><div className="grid grid-cols-2 sm:grid-cols-5 gap-2">{cashPresets.map(amount => <button key={amount} onClick={() => applyCashPreset(amount)} className={`min-h-[44px] rounded-xl border font-bold text-xs ${Number(current.amount) === amount ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-700 border-gray-200'}`}>{formatRp(amount)}</button>)}</div></div>}
+        <Button variant="secondary" onClick={add} className="w-full" disabled={submitting}><Plus size={18}/> Split / Tambah Metode Pembayaran</Button>
+        {payments.some(item => item.type === 'cash') && paid > total && <Card className="p-3 bg-orange-50 text-orange-700 text-center font-black border-orange-100">Kembalian: {formatRp(paid - total)}</Card>}
+      </div>
+    </Modal>
+  );
 }
 
 function SplitBillModal({ cart, onClose, onSplit }) {
@@ -260,6 +341,7 @@ function ScannerModal({ products, onClose, onDetected }) {
   const streamRef = useRef(null);
   const frameRef = useRef(null);
   const detectedRef = useRef(false);
+  const aliveRef = useRef(true);
 
   const stopCamera = () => {
     if (frameRef.current) cancelAnimationFrame(frameRef.current);
@@ -268,7 +350,11 @@ function ScannerModal({ products, onClose, onDetected }) {
     streamRef.current = null;
   };
 
-  useEffect(() => stopCamera, []);
+  useEffect(() => {
+    aliveRef.current = true;
+    void startCamera();
+    return () => { aliveRef.current = false; stopCamera(); };
+  }, []);
 
   const resolveProduct = rawCode => {
     const normalized = String(rawCode || '').trim();
@@ -291,11 +377,18 @@ function ScannerModal({ products, onClose, onDetected }) {
 
   const startCamera = async () => {
     try {
+      stopCamera();
       setError('');
       detectedRef.current = false;
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Kamera browser tidak tersedia.');
       setCameraStatus('starting');
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      const permission = await requestCameraPermission();
+      if (permission.state === 'denied') throw new Error('Izin kamera ditolak. Buka Pengaturan Aplikasi lalu izinkan Kamera.');
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Kamera perangkat tidak tersedia.');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+      if (!aliveRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -308,7 +401,16 @@ function ScannerModal({ products, onClose, onDetected }) {
         return;
       }
 
-      const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'] });
+      const preferredFormats = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'];
+      const supportedFormats = typeof window.BarcodeDetector.getSupportedFormats === 'function'
+        ? await window.BarcodeDetector.getSupportedFormats()
+        : preferredFormats;
+      const formats = preferredFormats.filter(format => supportedFormats.includes(format));
+      if (!formats.length) {
+        setError('Format barcode otomatis tidak didukung perangkat ini. Gunakan scanner fisik atau masukkan kode manual.');
+        return;
+      }
+      const detector = new window.BarcodeDetector({ formats });
       const scanFrame = async () => {
         if (detectedRef.current || !videoRef.current || !streamRef.current) return;
         try {
@@ -325,9 +427,10 @@ function ScannerModal({ products, onClose, onDetected }) {
       };
       frameRef.current = requestAnimationFrame(scanFrame);
     } catch (err) {
+      stopCamera();
+      if (!aliveRef.current) return;
       setCameraStatus('error');
       setError(err.message || 'Kamera tidak dapat dibuka.');
-      stopCamera();
     }
   };
 
@@ -338,12 +441,15 @@ function ScannerModal({ products, onClose, onDetected }) {
       <div className="space-y-3">
         <div className="relative overflow-hidden rounded-2xl bg-black aspect-video">
           <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover"/>
-          {cameraStatus !== 'active' && <div className="absolute inset-0 flex items-center justify-center text-white/80 text-sm">Kamera belum aktif</div>}
+          {cameraStatus !== 'active' && <div className="absolute inset-0 flex items-center justify-center text-white/80 text-sm">{cameraStatus === 'error' ? 'Kamera gagal dibuka' : 'Mempersiapkan kamera...'}</div>}
           {cameraStatus === 'active' && <div className="absolute inset-x-8 top-1/2 h-0.5 bg-red-500 shadow-[0_0_12px_rgba(239,68,68,.9)]"/>}
         </div>
-        <Button variant="secondary" onClick={startCamera} className="w-full" disabled={cameraStatus === 'starting'}>
-          <ScanLine size={18}/> {cameraStatus === 'starting' ? 'Membuka Kamera...' : 'Aktifkan Kamera'}
-        </Button>
+        {cameraStatus === 'error' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Button variant="secondary" onClick={startCamera} className="w-full"><ScanLine size={18}/> Coba Lagi</Button>
+            <Button variant="secondary" onClick={() => void openNativeAppSettings()} className="w-full">Buka Pengaturan Izin</Button>
+          </div>
+        )}
         <p className="text-xs text-gray-500">Mendukung BarcodeDetector bila tersedia. Scanner USB/Bluetooth yang bekerja sebagai keyboard dapat langsung mengisi kolom di bawah.</p>
         <div className="flex gap-2">
           <Input value={code} onChange={event => setCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && find()} placeholder="Ketik/scan barcode atau SKU" autoFocus/>
@@ -356,54 +462,64 @@ function ScannerModal({ products, onClose, onDetected }) {
 }
 
 function ReceiptModal({ sale, configs, onClose }) {
+  const [phone, setPhone] = useState(sale.customerPhone && sale.customerPhone !== '-' ? sale.customerPhone : '');
+  const [notice, setNotice] = useState('');
   const print = () => window.print();
+  const copy = async () => { try { await copyReceiptText(sale, configs); setNotice('Nota berhasil disalin.'); } catch { setNotice('Gagal menyalin nota.'); } };
+  const whatsapp = () => { openWhatsappReceipt(sale, configs, phone); setNotice('WhatsApp dibuka dengan isi nota.'); };
+  const share = async () => { try { const native = await shareReceipt(sale, configs); setNotice(native ? 'Menu berbagi dibuka.' : 'Nota disalin karena menu berbagi tidak tersedia.'); } catch (error) { if (error?.name !== 'AbortError') setNotice('Gagal membuka menu berbagi.'); } };
   return (
-    <div className="fixed inset-0 z-[120] bg-black/60 flex items-center justify-center p-4 receipt-overlay">
-      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden print-area">
-        <div className="p-5 text-center border-b border-dashed">
-          <h3 className="font-black">{configs.companyName}</h3>
-          <p className="text-xs">{configs.address}</p>
-          <p className="text-xs mt-2">{sale.id}</p>
-          <p className="text-xs">{new Date(sale.createdAt).toLocaleString('id-ID')}</p>
-        </div>
-        <div className="p-5 text-sm max-h-[55vh] overflow-y-auto">
-          <p className="font-bold mb-3">Pelanggan: {sale.customerName}</p>
-          {sale.items.map(line => (
-            <div key={line.lineId} className="mb-2 flex justify-between gap-3">
-              <div>
-                <p className="font-bold">{line.name}</p>
-                <p className="text-xs">
-                  {line.qty} {line.unit} x {formatRp(line.price)}
-                  {line.itemDiscount > 0 ? ` - diskon ${formatRp(line.itemDiscount)}` : ''}
-                </p>
-                {line.modifiers?.length > 0 && (
-                  <p className="text-xs">+ {line.modifiers.map(modifier => modifier.name).join(', ')}</p>
-                )}
-              </div>
-              <b>{formatRp(line.price * line.qty - line.itemDiscount)}</b>
-            </div>
-          ))}
-          <div className="border-t border-dashed pt-3 mt-3 space-y-1">
-            <div className="flex justify-between"><span>Subtotal</span><span>{formatRp(sale.subtotal)}</span></div>
-            {sale.globalDiscount > 0 && <div className="flex justify-between"><span>Diskon</span><span>-{formatRp(sale.globalDiscount)}</span></div>}
-            {sale.promoDiscount > 0 && <div className="flex justify-between"><span>Promo</span><span>-{formatRp(sale.promoDiscount)}</span></div>}
-            {sale.loyaltyDiscount > 0 && <div className="flex justify-between"><span>Reward Poin</span><span>-{formatRp(sale.loyaltyDiscount)}</span></div>}
-            {sale.tax > 0 && <div className="flex justify-between"><span>Pajak</span><span>{formatRp(sale.tax)}</span></div>}
-            {sale.service > 0 && <div className="flex justify-between"><span>Service</span><span>{formatRp(sale.service)}</span></div>}
-            <div className="flex justify-between text-lg font-black border-t pt-2"><span>TOTAL</span><span>{formatRp(sale.total)}</span></div>
+    <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 md:p-4 receipt-overlay">
+      <div className={`bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden print-area premium-receipt ${Number(configs.receiptPaperWidth)===58?'receipt-58':'receipt-80'}`}>
+        <div className="receipt-premium-header p-5 text-center border-b border-dashed relative overflow-hidden">
+          <div className="absolute inset-0 receipt-header-glow"/>
+          <div className="relative">
+            {configs.receiptShowLogo !== false && configs.receiptLogo && <img src={configs.receiptLogo} alt="Logo toko" className="w-16 h-16 rounded-2xl object-contain bg-white p-1.5 shadow-lg mx-auto mb-3"/>}
+            <p className="text-[10px] uppercase tracking-[.22em] font-bold text-emerald-700">{configs.receiptHeader || 'Nota Pembelian'}</p>
+            <h3 className="font-black text-xl text-gray-900 mt-1">{configs.companyName}</h3>
+            <p className="text-xs text-gray-600 mt-1">{configs.address}</p>
+            {configs.receiptShowStorePhone !== false && configs.phone && <p className="text-xs text-gray-600">Telp: {configs.phone}</p>}
+            <div className="mt-3 inline-flex px-3 py-1.5 rounded-full bg-white/80 border border-emerald-100 text-[10px] font-black text-emerald-800 shadow-sm">{sale.id}</div>
+            <p className="text-[10px] text-gray-500 mt-2">{new Date(sale.createdAt).toLocaleString('id-ID')}</p>
           </div>
-          <div className="border-t border-dashed mt-3 pt-3">
-            {sale.payments.map(payment => (
-              <div key={payment.id} className="flex justify-between"><span>{payment.name}</span><span>{formatRp(payment.amount)}</span></div>
+        </div>
+        <div className="p-5 text-sm max-h-[55vh] overflow-y-auto custom-scrollbar">
+          <div className="grid grid-cols-2 gap-2 mb-4 text-xs">
+            {configs.receiptShowCustomer !== false && <div className="p-3 rounded-xl bg-gray-50"><span className="text-gray-500 block">Pelanggan</span><b className="text-gray-800">{sale.customerName}</b></div>}
+            {configs.receiptShowCashier !== false && <div className="p-3 rounded-xl bg-gray-50"><span className="text-gray-500 block">Kasir</span><b className="text-gray-800">{sale.cashierName || '-'}</b></div>}
+          </div>
+          <div className="space-y-3">
+            {sale.items.map(line => (
+              <div key={line.lineId} className="flex justify-between gap-3 pb-2 border-b border-dashed border-gray-200">
+                <div className="min-w-0"><p className="font-bold text-gray-900">{line.name}</p><p className="text-xs text-gray-500">{line.qty} {line.unit} × {formatRp(line.price)}{line.itemDiscount > 0 ? ` · diskon ${formatRp(line.itemDiscount)}` : ''}</p>{line.modifiers?.length > 0 && <p className="text-xs text-gray-500">+ {line.modifiers.map(modifier => modifier.name).join(', ')}</p>}</div>
+                <b className="shrink-0 text-gray-900">{formatRp(line.price * line.qty - line.itemDiscount)}</b>
+              </div>
             ))}
           </div>
-          <p className="text-center text-xs mt-5">{configs.receiptFooter}</p>
+          <div className="pt-3 mt-3 space-y-1 text-gray-700">
+            <div className="flex justify-between"><span>Subtotal</span><span>{formatRp(sale.subtotal)}</span></div>
+            {sale.globalDiscount > 0 && <div className="flex justify-between text-emerald-700"><span>Diskon</span><span>-{formatRp(sale.globalDiscount)}</span></div>}
+            {sale.promoDiscount > 0 && <div className="flex justify-between text-emerald-700"><span>Promo</span><span>-{formatRp(sale.promoDiscount)}</span></div>}
+            {sale.loyaltyDiscount > 0 && <div className="flex justify-between text-yellow-700"><span>Reward Poin</span><span>-{formatRp(sale.loyaltyDiscount)}</span></div>}
+            {sale.tax > 0 && <div className="flex justify-between"><span>Pajak</span><span>{formatRp(sale.tax)}</span></div>}
+            {sale.service > 0 && <div className="flex justify-between"><span>Service</span><span>{formatRp(sale.service)}</span></div>}
+            <div className="premium-receipt-total flex justify-between text-xl font-black mt-3 p-3 rounded-2xl"><span>TOTAL</span><span>{formatRp(sale.total)}</span></div>
+          </div>
+          {configs.receiptShowPayment !== false && <div className="border-t border-dashed mt-4 pt-3 space-y-1">{sale.payments.map(payment => <div key={payment.id} className="flex justify-between text-sm"><span>{payment.name}</span><b>{formatRp(payment.amount)}</b></div>)}</div>}
+          <div className="text-center mt-5"><p className="text-xs font-bold text-gray-800">{configs.receiptFooter}</p>{configs.receiptMessage && <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">{configs.receiptMessage}</p>}</div>
         </div>
-        <div className="p-3 bg-gray-100 flex gap-2 print-controls">
-          <Button variant="secondary" onClick={onClose} className="flex-1">Tutup</Button>
-          <Button onClick={print} className="flex-1"><Printer size={18}/> Cetak</Button>
+        <div className="p-3 bg-gray-50 border-t print-controls space-y-2">
+          {configs.whatsappReceiptEnabled !== false && <div className="flex gap-2"><Input value={phone} onChange={event => setPhone(event.target.value)} inputMode="tel" placeholder="Nomor WhatsApp pelanggan" className="min-h-[44px]"/><Button onClick={whatsapp} className="shrink-0 bg-[#25D366] hover:bg-[#20bd5a]"><MessageCircle size={18}/> WhatsApp</Button></div>}
+          {notice && <p className="text-xs text-center font-bold text-emerald-700">{notice}</p>}
+          <div className="grid grid-cols-4 gap-2">
+            <Button variant="secondary" onClick={onClose} className="px-2">Tutup</Button>
+            <Button variant="secondary" onClick={copy} className="px-2"><Copy size={17}/><span className="hidden sm:inline">Salin</span></Button>
+            <Button variant="secondary" onClick={share} className="px-2"><Share2 size={17}/><span className="hidden sm:inline">Bagikan</span></Button>
+            <Button onClick={print} className="px-2"><Printer size={17}/><span className="hidden sm:inline">Cetak</span></Button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+

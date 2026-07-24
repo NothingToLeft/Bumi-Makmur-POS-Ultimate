@@ -4,6 +4,7 @@ import { createPinCredential, verifyPinCredential } from '../services/security.j
 import { generateId, safeJSONParse, downloadFile, localDateKey } from '../utils/helpers.js';
 
 const PosContext = createContext(null);
+const DEVICE_SETTINGS_KEY = 'bm_pos_device_security_v1';
 const clone = value => typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const nowISO = () => new Date().toISOString();
 const money = value => Math.max(0, Math.round(Number(value) || 0));
@@ -56,10 +57,18 @@ export function PosProvider({ children }) {
     const saved = safeJSONParse(localStorage.getItem(DB_KEY), null);
     const base = saved?.meta?.version ? saved : migrateLegacy();
     const seed = createSeedDb();
+    const storedMethods = Array.isArray(base.configs?.paymentMethods) ? base.configs.paymentMethods : [];
+    const paymentMethods = [
+      ...seed.configs.paymentMethods.map(defaultMethod => ({
+        ...defaultMethod,
+        ...(storedMethods.find(method => method.id === defaultMethod.id) || {})
+      })),
+      ...storedMethods.filter(method => !seed.configs.paymentMethods.some(defaultMethod => defaultMethod.id === method.id))
+    ];
     return {
       ...seed,
       ...base,
-      configs: { ...seed.configs, ...(base.configs || {}) },
+      configs: { ...seed.configs, ...(base.configs || {}), paymentMethods },
       promotions: Array.isArray(base.promotions) ? base.promotions : seed.promotions,
       auditLogs: Array.isArray(base.auditLogs) ? base.auditLogs : [],
       syncQueue: Array.isArray(base.syncQueue) ? base.syncQueue : []
@@ -67,6 +76,10 @@ export function PosProvider({ children }) {
   });
   const dbRef = useRef(db);
   const [currentUser, setCurrentUser] = useState(null);
+  const [deviceSettings, setDeviceSettingsState] = useState(() => ({
+    biometricEnabled: false, biometricUserId: '', biometricAutoPrompt: true,
+    ...safeJSONParse(localStorage.getItem(DEVICE_SETTINGS_KEY), {})
+  }));
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [customerDisplay, setCustomerDisplay] = useState({ cart: [], total: 0, customerName: 'Umum', message: '' });
 
@@ -80,6 +93,10 @@ export function PosProvider({ children }) {
       window.removeEventListener('offline', onOffline);
     };
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem(DEVICE_SETTINGS_KEY, JSON.stringify(deviceSettings));
+  }, [deviceSettings]);
 
   useEffect(() => {
     dbRef.current = db;
@@ -130,6 +147,20 @@ export function PosProvider({ children }) {
     return { success: false, message: 'PIN tidak dikenali.' };
   }, [db.users, branchId]);
 
+  const loginWithBiometric = useCallback(userId => {
+    const user = db.users.find(item => item.id === userId && item.active !== false);
+    if (!user) return { success: false, message: 'Akun biometrik tidak tersedia atau sudah dinonaktifkan.' };
+    setCurrentUser(user);
+    if (user.role !== 'owner' && user.branchId && user.branchId !== branchId) {
+      setDb(previous => ({ ...previous, configs: { ...previous.configs, activeBranchId: user.branchId } }));
+    }
+    return { success: true, user };
+  }, [db.users, branchId]);
+
+  const updateDeviceSettings = useCallback(patch => {
+    setDeviceSettingsState(previous => ({ ...previous, ...patch }));
+  }, []);
+
   const logout = () => setCurrentUser(null);
   const hasPermission = permission => can(currentUser, permission);
 
@@ -155,6 +186,8 @@ export function PosProvider({ children }) {
   });
 
   const saveProduct = data => commit(data.id ? 'PRODUCT_UPDATE' : 'PRODUCT_CREATE', data.name, next => {
+    const productName = String(data.name || '').trim();
+    if (!productName) throw new Error('Nama produk wajib diisi.');
     const existing = next.products.find(product => product.id === data.id);
     const targetBranchId = data.branchId || next.configs.activeBranchId;
     const sku = String(data.sku || generateId('SKU')).trim();
@@ -167,7 +200,7 @@ export function PosProvider({ children }) {
     }
     const item = {
       id: data.id || generateId('PRD'), branchId: targetBranchId,
-      name: data.name.trim(), category: data.category || 'Lainnya', sku,
+      name: productName, category: data.category || 'Lainnya', sku,
       barcode, baseUnit: data.baseUnit || 'pcs', stock: existing?.stock ?? money(data.stock),
       minStock: money(data.minStock || 0), rack: data.rack || '-', modalPrice: money(data.modalPrice),
       initialModalPrice: existing?.initialModalPrice ?? money(data.modalPrice),
@@ -235,11 +268,19 @@ export function PosProvider({ children }) {
   });
 
   const saveEmployee = async data => {
+    const employeeName = String(data.name || '').trim();
+    if (!employeeName) throw new Error('Nama karyawan wajib diisi.');
+    if (!data.id && !data.pin) throw new Error('PIN 4 digit wajib diisi untuk karyawan baru.');
+    if (data.pin) {
+      for (const user of db.users.filter(user => user.id !== data.id && user.active !== false)) {
+        if (await verifyPinCredential(data.pin, user)) throw new Error(`PIN sudah digunakan oleh ${user.name}. Gunakan PIN lain.`);
+      }
+    }
     const credential = data.pin ? await createPinCredential(data.pin) : null;
-    return commit(data.id ? 'EMPLOYEE_UPDATE' : 'EMPLOYEE_CREATE', data.name, next => {
+    return commit(data.id ? 'EMPLOYEE_UPDATE' : 'EMPLOYEE_CREATE', employeeName, next => {
       const existing = next.users.find(user => user.id === data.id);
       const item = {
-        ...(existing || {}), id: data.id || generateId('USR'), name: data.name, role: data.role,
+        ...(existing || {}), id: data.id || generateId('USR'), name: employeeName, role: data.role,
         branchId: data.branchId || next.configs.activeBranchId, active: data.active !== false,
         permissions: data.permissions || [], ...(credential || {})
       };
@@ -267,7 +308,9 @@ export function PosProvider({ children }) {
   const addCashMovement = ({ type, amount, note }) => commit('CASH_MOVEMENT', `${type}:${amount}`, next => {
     const shift = next.shifts.find(item => item.branchId === next.configs.activeBranchId && item.status === 'OPEN');
     if (!shift) throw new Error('Tidak ada shift aktif.');
-    const item = { id: generateId('CASH'), branchId: shift.branchId, shiftId: shift.id, type, amount: money(amount), note: note || '', createdAt: nowISO(), userId: currentUser.id };
+    const safeAmount = money(amount);
+    if (safeAmount <= 0) throw new Error('Nominal kas harus lebih dari Rp 0.');
+    const item = { id: generateId('CASH'), branchId: shift.branchId, shiftId: shift.id, type, amount: safeAmount, note: note || '', createdAt: nowISO(), userId: currentUser.id };
     next.cashMovements.unshift(item);
     return item;
   });
@@ -313,6 +356,8 @@ export function PosProvider({ children }) {
 
   const completeSale = payload => commit('SALE_COMPLETE', payload.total, next => {
     if (!payload.items?.length) throw new Error('Keranjang kosong.');
+    if (payload.items.some(item => Number(item.qty || 0) <= 0 || money(item.price) < 0)) throw new Error('Jumlah atau harga item transaksi tidak valid.');
+    if (payload.id && next.sales.some(sale => sale.id === payload.id)) throw new Error('Transaksi ini sudah tersimpan. Hindari menekan tombol bayar dua kali.');
     const activeShift = next.shifts.find(item => item.branchId === next.configs.activeBranchId && item.status === 'OPEN');
     const cashTotal = (payload.payments || []).filter(payment => payment.type === 'cash').reduce((sum, payment) => sum + money(payment.amount), 0);
     if (next.configs.requireShiftForCash && cashTotal > 0 && !activeShift) throw new Error('Mulai shift sebelum menerima pembayaran tunai.');
@@ -331,7 +376,7 @@ export function PosProvider({ children }) {
     const creditPayments = (payload.payments || []).filter(payment => payment.type === 'credit' && money(payment.amount) > 0);
     if (creditPayments.some(payment => !payment.dueDate)) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
     const overpayment = paymentTotal - money(payload.total);
-    if (overpayment > 0 && cashTotal <= 0) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan.');
+    if (overpayment > cashTotal) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan. Kelebihan hanya boleh berasal dari pembayaran tunai sebagai kembalian.');
 
     const rawStockRows = payload.items.flatMap(item => resolveProductStockRows(next, item));
     const stockMap = new Map();
@@ -363,10 +408,11 @@ export function PosProvider({ children }) {
     next.sales.unshift(sale);
     if (payload.heldSaleId) next.heldSales = next.heldSales.filter(row => row.id !== payload.heldSaleId);
 
+    const cashApplied = Math.max(0, cashTotal - overpayment);
+    if (cashApplied > 0 && activeShift) {
+      next.cashMovements.unshift({ id: generateId('CASH'), branchId: sale.branchId, shiftId: activeShift.id, type: 'SALE', amount: cashApplied, note: sale.id, createdAt: sale.createdAt, userId: currentUser.id });
+    }
     for (const payment of payload.payments || []) {
-      if (payment.type === 'cash' && activeShift) {
-        next.cashMovements.unshift({ id: generateId('CASH'), branchId: sale.branchId, shiftId: activeShift.id, type: 'SALE', amount: money(payment.amount), note: sale.id, createdAt: sale.createdAt, userId: currentUser.id });
-      }
       if (payment.type === 'credit' && money(payment.amount) > 0) {
         next.receivables.unshift({
           id: generateId('REC'), branchId: sale.branchId, saleId: sale.id, customerId: sale.customerId,
@@ -377,8 +423,10 @@ export function PosProvider({ children }) {
     }
     const customer = next.customers.find(item => item.id === payload.customerId);
     if (customer && next.configs.loyaltyEnabled && customer.name !== 'Umum (Non-Member)') {
+      const redeemed = money(payload.pointsRedeemed);
+      if (redeemed > money(customer.points)) throw new Error('Poin yang ditukar melebihi saldo poin pelanggan.');
       const earned = Math.floor(money(payload.total) / Math.max(1, money(next.configs.pointRate)));
-      customer.points = Math.max(0, money(customer.points) - money(payload.pointsRedeemed)) + earned;
+      customer.points = money(customer.points) - redeemed + earned;
       sale.pointsEarned = earned;
     }
     return sale;
@@ -392,6 +440,8 @@ export function PosProvider({ children }) {
   };
 
   const refundSale = async payload => {
+    if (!payload.items?.length) throw new Error('Pilih minimal satu item untuk refund.');
+    if (!String(payload.reason || '').trim()) throw new Error('Alasan refund wajib diisi.');
     const sale = db.sales.find(item => item.id === payload.saleId);
     if (!sale) throw new Error('Transaksi tidak ditemukan.');
     if (['REFUNDED', 'VOIDED'].includes(sale.status)) throw new Error('Transaksi ini sudah selesai direfund/dibatalkan.');
@@ -404,10 +454,16 @@ export function PosProvider({ children }) {
       const remaining = Math.max(0, Number(original.qty || 0) - alreadyRefunded);
       if (Number(refundItem.qty || 0) <= 0 || Number(refundItem.qty) > remaining) throw new Error(`Jumlah refund ${original.name} melebihi sisa yang dapat direfund (${remaining}).`);
     }
-    const amount = payload.items.reduce((sum, refundItem) => {
+    const itemNetTotal = sale.items.reduce((sum, item) => sum + money(item.netUnitPrice ?? item.price) * Number(item.qty || 0), 0);
+    const saleAllocationRatio = itemNetTotal > 0 ? money(sale.total) / itemNetTotal : 0;
+    const calculatedRefund = payload.items.reduce((sum, refundItem) => {
       const original = sale.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
-      return sum + (original ? money(original.netUnitPrice ?? original.price) * Number(refundItem.qty || 0) : 0);
+      if (!original) return sum;
+      const base = money(original.netUnitPrice ?? original.price) * Number(refundItem.qty || 0);
+      return sum + Math.round(base * saleAllocationRatio);
     }, 0);
+    const amount = Math.min(Math.max(0, money(sale.total) - money(sale.refundedTotal)), calculatedRefund);
+    if (amount <= 0) throw new Error('Nilai refund tidak valid atau transaksi sudah direfund penuh.');
     if (currentUser.role === 'kasir' || amount >= money(db.configs.refundApprovalLimit)) {
       const approver = await authorizeManagerPin(payload.managerPin);
       if (!approver) throw new Error('PIN Manager/Owner tidak valid.');
@@ -450,25 +506,51 @@ export function PosProvider({ children }) {
 
   const savePurchase = payload => commit(payload.id ? 'PURCHASE_UPDATE' : 'PURCHASE_CREATE', payload.invoiceNo || '', next => {
     const existing = next.purchases.find(item => item.id === payload.id);
+    if (existing?.inventoryApplied) throw new Error('Pembelian yang sudah diterima tidak dapat diubah. Gunakan fitur retur atau pembayaran hutang.');
+
+    const status = payload.status || 'DRAFT';
+    if (!['DRAFT', 'ORDERED', 'RECEIVED', 'CANCELLED'].includes(status)) throw new Error('Status pembelian tidak valid.');
+    const invoiceNo = String(payload.invoiceNo || '').trim() || generateId('PO');
+    const duplicateInvoice = next.purchases.find(item => item.id !== payload.id && item.branchId === next.configs.activeBranchId && String(item.invoiceNo || '').trim().toLowerCase() === invoiceNo.toLowerCase());
+    if (duplicateInvoice) throw new Error(`Nomor faktur ${invoiceNo} sudah digunakan.`);
+    if (status !== 'DRAFT' && !payload.supplierId) throw new Error('Pemasok wajib dipilih.');
+    if (status !== 'DRAFT' && !payload.items?.length) throw new Error('Tambahkan minimal satu barang.');
+
+    const items = (payload.items || []).map(item => {
+      const qty = Number(item.qty);
+      const price = money(item.price);
+      const itemDiscount = money(item.discount);
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error(`Jumlah ${item.name || 'barang'} harus lebih dari 0.`);
+      if (itemDiscount > qty * price) throw new Error(`Diskon ${item.name || 'barang'} melebihi subtotal item.`);
+      return { ...item, qty, price, discount: itemDiscount };
+    });
+    const subtotal = items.reduce((sum, item) => sum + Math.max(0, item.qty * item.price - item.discount), 0);
+    const additional = money(payload.additional);
+    const discount = money(payload.discount);
+    if (discount > subtotal + additional) throw new Error('Diskon faktur tidak boleh melebihi subtotal dan biaya tambahan.');
+    const total = Math.max(0, subtotal + additional - discount);
+    const paid = Math.min(total, money(payload.paid));
+    const balance = total - paid;
+    if (status === 'RECEIVED' && balance > 0 && !payload.dueDate) throw new Error('Tanggal jatuh tempo wajib diisi untuk pembelian yang belum lunas.');
+
     const purchase = {
-      ...(existing || {}), ...payload, id: payload.id || generateId('BUY'), branchId: next.configs.activeBranchId,
-      createdAt: existing?.createdAt || nowISO(), updatedAt: nowISO(), inventoryApplied: existing?.inventoryApplied || false,
-      status: payload.status || 'DRAFT'
+      ...(existing || {}), ...payload, invoiceNo, status, items, subtotal, additional, discount, total, paid,
+      id: payload.id || generateId('BUY'), branchId: next.configs.activeBranchId,
+      createdAt: existing?.createdAt || nowISO(), updatedAt: nowISO(), inventoryApplied: false
     };
-    if (purchase.status === 'RECEIVED' && !purchase.inventoryApplied) {
+    if (purchase.status === 'RECEIVED') {
       for (const item of purchase.items) {
         const product = next.products.find(row => row.id === item.productId && row.branchId === purchase.branchId);
-        if (!product) continue;
+        if (!product) throw new Error(`Produk ${item.name || item.productId} tidak ditemukan di cabang aktif.`);
         item.previousModalPrice = product.modalPrice;
-        product.stock += money(item.qty);
+        product.stock += Number(item.qty);
         product.modalPrice = money(item.price);
-        next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE', qtyChange: money(item.qty), refId: purchase.id, note: purchase.invoiceNo, createdAt: nowISO(), userId: currentUser.id });
+        next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE', qtyChange: Number(item.qty), refId: purchase.id, note: purchase.invoiceNo, createdAt: nowISO(), userId: currentUser.id });
       }
       purchase.inventoryApplied = true;
-      const balance = Math.max(0, money(purchase.total) - money(purchase.paid));
-      if (balance > 0) next.payables.unshift({ id: generateId('PAY'), branchId: purchase.branchId, purchaseId: purchase.id, supplierId: purchase.supplierId, supplierName: purchase.supplierName, total: balance, paid: 0, balance, dueDate: purchase.dueDate || '', status: 'OPEN', payments: [], createdAt: nowISO() });
+      if (balance > 0) next.payables.unshift({ id: generateId('PAY'), branchId: purchase.branchId, purchaseId: purchase.id, supplierId: purchase.supplierId, supplierName: purchase.supplierName, total: balance, paid: 0, balance, dueDate: purchase.dueDate, status: 'OPEN', payments: [], createdAt: nowISO() });
       const activeShift = next.shifts.find(item => item.branchId === purchase.branchId && item.status === 'OPEN');
-      if (activeShift && purchase.paymentMethod === 'Tunai' && money(purchase.paid) > 0) next.cashMovements.unshift({ id: generateId('CASH'), branchId: purchase.branchId, shiftId: activeShift.id, type: 'PURCHASE', amount: money(purchase.paid), note: purchase.id, createdAt: nowISO(), userId: currentUser.id });
+      if (activeShift && purchase.paymentMethod === 'Tunai' && purchase.paid > 0) next.cashMovements.unshift({ id: generateId('CASH'), branchId: purchase.branchId, shiftId: activeShift.id, type: 'PURCHASE', amount: purchase.paid, note: purchase.id, createdAt: nowISO(), userId: currentUser.id });
     }
     const index = next.purchases.findIndex(row => row.id === purchase.id);
     if (index >= 0) next.purchases[index] = purchase; else next.purchases.unshift(purchase);
@@ -476,8 +558,11 @@ export function PosProvider({ children }) {
   });
 
   const returnPurchase = payload => commit('PURCHASE_RETURN', payload.purchaseId, next => {
+    if (!payload.items?.length) throw new Error('Pilih minimal satu barang untuk diretur.');
+    if (!String(payload.reason || '').trim()) throw new Error('Alasan retur wajib diisi.');
     const purchase = next.purchases.find(item => item.id === payload.purchaseId);
     if (!purchase) throw new Error('Pembelian tidak ditemukan.');
+    if (!purchase.inventoryApplied || purchase.status !== 'RECEIVED') throw new Error('Hanya pembelian yang sudah diterima yang dapat diretur.');
     let total = 0;
     for (const item of payload.items) {
       const original = purchase.items.find(row => row.id === item.id || row.productId === item.productId);
@@ -488,7 +573,7 @@ export function PosProvider({ children }) {
       const product = next.products.find(row => row.id === item.productId && row.branchId === purchase.branchId);
       if (!product || product.stock < item.qty) throw new Error(`Stok ${item.name} tidak cukup untuk retur.`);
       product.stock -= money(item.qty);
-      total += money(item.qty) * money(item.price);
+      total += money(item.qty) * money(original.price);
       next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE_RETURN', qtyChange: -money(item.qty), refId: purchase.id, note: payload.reason, createdAt: nowISO(), userId: currentUser.id });
     }
     purchase.returns = [...(purchase.returns || []), { id: generateId('PRET'), items: payload.items, total, reason: payload.reason, createdAt: nowISO() }];
@@ -500,6 +585,8 @@ export function PosProvider({ children }) {
   const payReceivable = ({ id, amount, method = 'Tunai' }) => commit('RECEIVABLE_PAYMENT', `${id}:${amount}`, next => {
     const item = next.receivables.find(row => row.id === id);
     if (!item) throw new Error('Piutang tidak ditemukan.');
+    if (money(amount) <= 0) throw new Error('Nominal pembayaran harus lebih dari Rp 0.');
+    if (item.status !== 'OPEN' || money(item.balance) <= 0) throw new Error('Piutang ini sudah lunas.');
     const paid = Math.min(item.balance, money(amount));
     item.paid += paid; item.balance -= paid; item.payments.unshift({ id: generateId('RCP'), amount: paid, method, createdAt: nowISO(), userId: currentUser.id });
     if (item.balance <= 0) item.status = 'PAID';
@@ -511,6 +598,8 @@ export function PosProvider({ children }) {
   const payPayable = ({ id, amount, method = 'Tunai' }) => commit('PAYABLE_PAYMENT', `${id}:${amount}`, next => {
     const item = next.payables.find(row => row.id === id);
     if (!item) throw new Error('Hutang tidak ditemukan.');
+    if (money(amount) <= 0) throw new Error('Nominal pembayaran harus lebih dari Rp 0.');
+    if (item.status !== 'OPEN' || money(item.balance) <= 0) throw new Error('Hutang ini sudah lunas.');
     const paid = Math.min(item.balance, money(amount));
     item.paid += paid; item.balance -= paid; item.payments.unshift({ id: generateId('PPY'), amount: paid, method, createdAt: nowISO(), userId: currentUser.id });
     if (item.balance <= 0) item.status = 'PAID';
@@ -520,6 +609,7 @@ export function PosProvider({ children }) {
   });
 
   const addExpense = data => commit('EXPENSE_CREATE', data.note, next => {
+    if (money(data.amount) <= 0) throw new Error('Nominal pengeluaran harus lebih dari Rp 0.');
     const item = { id: generateId('EXP'), branchId: next.configs.activeBranchId, category: data.category || 'Operasional', amount: money(data.amount), note: data.note || '', method: data.method || 'Tunai', createdAt: nowISO(), userId: currentUser.id };
     next.expenses.unshift(item);
     const activeShift = next.shifts.find(row => row.branchId === item.branchId && row.status === 'OPEN');
@@ -531,6 +621,7 @@ export function PosProvider({ children }) {
     const product = next.products.find(item => item.id === data.productId && item.branchId === next.configs.activeBranchId);
     if (!product) throw new Error('Produk tidak ditemukan.');
     const change = Number(data.qtyChange) || 0;
+    if (change === 0) throw new Error('Perubahan stok tidak boleh 0.');
     if (product.stock + change < 0) throw new Error('Stok tidak boleh negatif.');
     product.stock += change;
     const adjustment = { id: generateId('ADJ'), branchId: product.branchId, productId: product.id, productName: product.name, qtyChange: change, reason: data.reason, createdAt: nowISO(), userId: currentUser.id };
@@ -540,14 +631,17 @@ export function PosProvider({ children }) {
   });
 
   const stockOpname = ({ counts, notes }) => commit('STOCK_OPNAME', notes, next => {
+    if (!Array.isArray(counts) || counts.length === 0) throw new Error('Data stok opname masih kosong.');
     const opname = { id: generateId('OPN'), branchId: next.configs.activeBranchId, createdAt: nowISO(), userId: currentUser.id, notes: notes || '', items: [] };
     for (const count of counts) {
       const product = next.products.find(item => item.id === count.productId && item.branchId === next.configs.activeBranchId);
       if (!product) continue;
-      const difference = Number(count.actual) - product.stock;
-      opname.items.push({ productId: product.id, productName: product.name, system: product.stock, actual: Number(count.actual), difference });
+      const actual = Number(count.actual);
+      if (!Number.isFinite(actual) || actual < 0) throw new Error(`Stok fisik ${product.name} tidak valid.`);
+      const difference = actual - product.stock;
+      opname.items.push({ productId: product.id, productName: product.name, system: product.stock, actual, difference });
       if (difference !== 0) {
-        product.stock = Number(count.actual);
+        product.stock = actual;
         next.stockMovements.unshift({ id: generateId('MOV'), branchId: product.branchId, productId: product.id, productName: product.name, type: 'OPNAME', qtyChange: difference, refId: opname.id, note: notes, createdAt: opname.createdAt, userId: currentUser.id });
       }
     }
@@ -556,18 +650,21 @@ export function PosProvider({ children }) {
   });
 
   const transferStock = ({ productId, destinationBranchId, qty, notes }) => commit('STOCK_TRANSFER', `${productId}:${qty}`, next => {
+    const transferQty = money(qty);
+    if (transferQty <= 0) throw new Error('Jumlah transfer harus lebih dari 0.');
+    if (!destinationBranchId || destinationBranchId === next.configs.activeBranchId) throw new Error('Pilih cabang tujuan yang berbeda.');
     const source = next.products.find(item => item.id === productId && item.branchId === next.configs.activeBranchId);
-    if (!source || source.stock < qty) throw new Error('Stok sumber tidak cukup.');
+    if (!source || source.stock < transferQty) throw new Error('Stok sumber tidak cukup.');
     let destination = next.products.find(item => item.sku === source.sku && item.branchId === destinationBranchId);
     if (!destination) {
       destination = { ...clone(source), id: generateId('PRD'), branchId: destinationBranchId, stock: 0 };
       next.products.push(destination);
     }
-    source.stock -= money(qty); destination.stock += money(qty);
-    const transfer = { id: generateId('TRF'), sourceBranchId: source.branchId, destinationBranchId, productId: source.id, productName: source.name, qty: money(qty), notes: notes || '', status: 'RECEIVED', createdAt: nowISO(), userId: currentUser.id };
+    source.stock -= transferQty; destination.stock += transferQty;
+    const transfer = { id: generateId('TRF'), sourceBranchId: source.branchId, destinationBranchId, productId: source.id, productName: source.name, qty: transferQty, notes: notes || '', status: 'RECEIVED', createdAt: nowISO(), userId: currentUser.id };
     next.stockTransfers.unshift(transfer);
-    next.stockMovements.unshift({ id: generateId('MOV'), branchId: source.branchId, productId: source.id, productName: source.name, type: 'TRANSFER_OUT', qtyChange: -money(qty), refId: transfer.id, note: destinationBranchId, createdAt: transfer.createdAt, userId: currentUser.id });
-    next.stockMovements.unshift({ id: generateId('MOV'), branchId: destinationBranchId, productId: destination.id, productName: destination.name, type: 'TRANSFER_IN', qtyChange: money(qty), refId: transfer.id, note: source.branchId, createdAt: transfer.createdAt, userId: currentUser.id });
+    next.stockMovements.unshift({ id: generateId('MOV'), branchId: source.branchId, productId: source.id, productName: source.name, type: 'TRANSFER_OUT', qtyChange: -transferQty, refId: transfer.id, note: destinationBranchId, createdAt: transfer.createdAt, userId: currentUser.id });
+    next.stockMovements.unshift({ id: generateId('MOV'), branchId: destinationBranchId, productId: destination.id, productName: destination.name, type: 'TRANSFER_IN', qtyChange: transferQty, refId: transfer.id, note: source.branchId, createdAt: transfer.createdAt, userId: currentUser.id });
     return transfer;
   });
 
@@ -663,7 +760,7 @@ export function PosProvider({ children }) {
 
   const value = {
     db, scoped, currentUser, online, branchId, branch, customerDisplay, setCustomerDisplay,
-    login, logout, hasPermission, setConfig, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
+    deviceSettings, updateDeviceSettings, login, loginWithBiometric, logout, hasPermission, setConfig, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,

@@ -17,6 +17,7 @@ import ReportsScreen from './screens/ReportsScreen.jsx';
 import OrdersScreen from './screens/OrdersScreen.jsx';
 import { EmployeesScreen, BranchesScreen } from './screens/AdminScreens.jsx';
 import { CustomerDisplayScreen, DevicesScreen, SettingsScreen } from './screens/DeviceSettingsScreens.jsx';
+import { requestStartupCameraPermission } from './services/nativeDevice.js';
 
 export default function App(){return <PosProvider><AppShell/></PosProvider>}
 
@@ -24,6 +25,9 @@ function AppShell(){
  const {currentUser,db,logout,online,branchId,setActiveBranch}=usePos();
  const [active,setActive]=useState(currentUser?.role==='kasir'?'pos':'dashboard'); const[more,setMore]=useState(false);
  const allowed=useMemo(()=>currentUser?MODULES.filter(module=>can(currentUser,module.permission)):[],[currentUser]);
+ useEffect(()=>{
+  if(db.configs.cameraPermissionOnStartup!==false) void requestStartupCameraPermission();
+ },[db.configs.cameraPermissionOnStartup]);
  useEffect(() => {
   if (currentUser && !allowed.some(module => module.id === active)) setActive(allowed[0]?.id || 'pos');
  }, [currentUser, active, allowed]);
@@ -32,9 +36,9 @@ function AppShell(){
  const content=()=>{switch(active){
   case'dashboard':return <DashboardScreen/>;case'pos':return <POSScreen/>;case'openBills':return <OpenBillsScreen onNavigate={navigate}/>;case'transactions':return <TransactionsScreen/>;case'products':return <ProductsScreen/>;case'promotions':return <PromotionsScreen/>;case'inventory':return <InventoryScreen/>;case'purchases':return <PurchasesScreen/>;case'suppliers':return <SuppliersScreen/>;case'customers':return <CustomersScreen/>;case'shifts':return <ShiftsScreen/>;case'finance':return <FinanceScreen/>;case'reports':return <ReportsScreen/>;case'orders':return <OrdersScreen onNavigate={navigate}/>;case'employees':return <EmployeesScreen/>;case'branches':return <BranchesScreen/>;case'devices':return <DevicesScreen/>;case'customerDisplay':return <CustomerDisplayScreen/>;case'settings':return <SettingsScreen/>;default:return <POSScreen/>}}
  const bottomIds=['pos','transactions','products','inventory'];const bottom=bottomIds.map(id=>allowed.find(m=>m.id===id)).filter(Boolean).slice(0,4);
- return <div className={`h-screen flex overflow-hidden font-sans ${db.configs.darkMode?'theme-dark':'theme-light'}`}>
-  <aside className="hidden md:flex w-20 lg:w-64 bg-emerald-900 text-white flex-col shrink-0 sidebar-nav">
-   <div className="h-[72px] border-b border-emerald-800 flex items-center justify-center lg:justify-start gap-3 px-4 lg:px-5"><div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center"><Package/></div><div className="hidden lg:block"><p className="font-black tracking-tight">BUMI MAKMUR</p><p className="text-[10px] text-emerald-300">POS Ultimate v3.1</p></div></div>
+ return <div className={`h-screen flex overflow-hidden font-sans app-shell-premium ${db.configs.darkMode?'theme-dark':'theme-light'}`}>
+  <aside className="hidden md:flex w-20 lg:w-64 bg-emerald-900 text-white flex-col shrink-0 sidebar-nav sidebar-premium">
+   <div className="h-[72px] border-b border-emerald-800 flex items-center justify-center lg:justify-start gap-3 px-4 lg:px-5"><div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center"><Package/></div><div className="hidden lg:block"><p className="font-black tracking-tight">BUMI MAKMUR</p><p className="text-[10px] text-emerald-300">POS Ultimate v3.3</p></div></div>
    <nav className="flex-1 overflow-y-auto p-2 lg:p-3 space-y-1 custom-scrollbar">{allowed.map(module=>{const Icon=module.icon;return <button key={module.id} title={module.label} onClick={()=>navigate(module.id)} className={`w-full min-h-[48px] rounded-xl flex items-center justify-center lg:justify-start gap-3 px-3 transition-colors ${active===module.id?'bg-emerald-600 text-white shadow-md':'text-emerald-100 hover:bg-emerald-800'}`}><Icon size={21}/><span className="hidden lg:block font-bold text-sm whitespace-nowrap">{module.label}</span></button>})}</nav>
    <div className="p-2 lg:p-3 border-t border-emerald-800"><button onClick={logout} className="w-full min-h-[48px] rounded-xl bg-red-500/10 text-red-100 hover:bg-red-500 flex items-center justify-center lg:justify-start gap-3 px-3"><LogOut size={20}/><span className="hidden lg:block font-bold">Keluar</span></button></div>
   </aside>

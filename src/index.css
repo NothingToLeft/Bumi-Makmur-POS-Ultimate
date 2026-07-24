@@ -46,12 +46,61 @@ body {
   }
 
   @media print {
-    @page { margin: 4mm; size: 80mm auto; }
-    html, body { width: 80mm; background: white !important; }
+    @page { margin: 4mm; size: auto; }
+    html, body { width: auto; background: white !important; }
     body * { visibility: hidden !important; }
     .receipt-overlay, .print-area, .print-area * { visibility: visible !important; }
     .receipt-overlay { position: static !important; display: block !important; background: white !important; padding: 0 !important; }
     .print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 80mm !important; max-width: 80mm !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; border: none !important; border-radius: 0 !important; color: black !important; background: white !important; }
     .print-area * { color: black !important; background: white !important; }
+    .print-area.receipt-58 { width: 58mm !important; max-width: 58mm !important; }
+    .print-area.receipt-80 { width: 80mm !important; max-width: 80mm !important; }
     .print-controls { display: none !important; }
   }
+
+/* v3.3 Premium visual system */
+:root {
+  --bm-emerald-950: #052e26;
+  --bm-emerald-900: #064e3b;
+  --bm-emerald-700: #047857;
+  --bm-emerald-500: #10b981;
+  --bm-gold: #f59e0b;
+}
+.app-shell-premium { background: radial-gradient(circle at 15% 0%, rgba(16,185,129,.09), transparent 32%), #f8fafc; }
+.sidebar-premium { background: linear-gradient(180deg, #052e26 0%, #064e3b 52%, #043b2f 100%) !important; box-shadow: 16px 0 40px rgba(6,78,59,.14); }
+.card-element { box-shadow: 0 8px 28px rgba(15,23,42,.055); }
+.premium-settings-hero { background: linear-gradient(135deg, rgba(236,253,245,.98), rgba(255,255,255,.98) 55%, rgba(255,247,237,.94)); border-color: rgba(16,185,129,.24); }
+.premium-total-card { background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 55%, #fff7ed 100%); border-color: rgba(16,185,129,.22); box-shadow: 0 18px 45px rgba(16,185,129,.12); }
+.premium-line-card { border-color: rgba(148,163,184,.22); box-shadow: 0 6px 18px rgba(15,23,42,.04); }
+.payment-method-card, .payment-setting-card {
+  min-height: 58px; border-radius: 16px; border: 1px solid rgba(148,163,184,.25); padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px; background: white; color: #334155; transition: .18s ease;
+}
+.payment-method-card:hover, .payment-setting-card:hover { transform: translateY(-1px); box-shadow: 0 10px 25px rgba(15,23,42,.08); }
+.payment-method-card.is-active, .payment-setting-card.is-enabled { border-width: 2px; box-shadow: 0 10px 24px rgba(15,23,42,.09); }
+.payment-method-icon { width: 38px; height: 38px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,.7); flex-shrink: 0; }
+.payment-method-card small, .payment-setting-card small { display: block; font-size: 10px; opacity: .72; text-transform: capitalize; }
+.payment-cash { background: linear-gradient(135deg,#ecfdf5,#d1fae5); color:#065f46; border-color:#a7f3d0; }
+.payment-qris { background: linear-gradient(135deg,#f8fafc,#e2e8f0); color:#0f172a; border-color:#cbd5e1; }
+.payment-shopeepay { background: linear-gradient(135deg,#fff7ed,#ffedd5); color:#c2410c; border-color:#fed7aa; }
+.payment-ovo { background: linear-gradient(135deg,#faf5ff,#f3e8ff); color:#6b21a8; border-color:#e9d5ff; }
+.payment-gopay { background: linear-gradient(135deg,#ecfeff,#cffafe); color:#0e7490; border-color:#a5f3fc; }
+.payment-dana { background: linear-gradient(135deg,#eff6ff,#dbeafe); color:#1d4ed8; border-color:#bfdbfe; }
+.payment-bank { background: linear-gradient(135deg,#eff6ff,#e0e7ff); color:#3730a3; border-color:#c7d2fe; }
+.payment-card { background: linear-gradient(135deg,#f8fafc,#f1f5f9); color:#334155; border-color:#cbd5e1; }
+.payment-credit { background: linear-gradient(135deg,#fff7ed,#fef3c7); color:#92400e; border-color:#fde68a; }
+.payment-other { background: linear-gradient(135deg,#f9fafb,#f3f4f6); color:#4b5563; border-color:#e5e7eb; }
+.receipt-premium-header { background: linear-gradient(145deg,#f0fdf4 0%,#ffffff 55%,#fff7ed 100%); }
+.receipt-header-glow { background: radial-gradient(circle at 50% -15%, rgba(16,185,129,.24), transparent 48%); }
+.premium-receipt-total { background: linear-gradient(135deg,#064e3b,#047857); color:white; box-shadow: 0 12px 28px rgba(6,78,59,.18); }
+.premium-receipt { border: 1px solid rgba(255,255,255,.55); }
+.theme-dark .premium-settings-hero, .theme-dark .premium-total-card { background: linear-gradient(135deg,#1f2937,#111827) !important; }
+.theme-dark .payment-method-card, .theme-dark .payment-setting-card { filter: saturate(.85) brightness(.82); }
+@media (max-width: 480px) {
+  .payment-method-card, .payment-setting-card { min-height: 54px; padding: 8px 10px; }
+  .payment-method-icon { width: 34px; height: 34px; border-radius: 10px; }
+}
+
+.premium-page-header { background: linear-gradient(120deg, rgba(255,255,255,.98), rgba(236,253,245,.72)); position: relative; overflow: hidden; }
+.premium-page-header::after { content: ''; position: absolute; width: 180px; height: 180px; border-radius: 999px; right: -80px; top: -120px; background: rgba(16,185,129,.08); pointer-events: none; }
+.theme-dark .premium-page-header { background: linear-gradient(120deg,#1f2937,#172033) !important; }
