@@ -1,0 +1,71 @@
+name: Generate Android Signing Key
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-key:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Generate private upload key and secret values
+        shell: bash
+        run: |
+          set -euo pipefail
+          STORE_PASSWORD=$(openssl rand -hex 24)
+          KEY_PASSWORD=$(openssl rand -hex 24)
+          KEY_ALIAS="bumi-makmur-upload"
+          KEYSTORE="bumi-makmur-upload.jks"
+
+          keytool -genkeypair -v \
+            -keystore "$KEYSTORE" \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -storetype JKS \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 10000 \
+            -dname "CN=Bumi Makmur POS, OU=Internal Distribution, O=Bumi Makmur, L=Surabaya, ST=Jawa Timur, C=ID"
+
+          KEYSTORE_BASE64=$(base64 -w 0 "$KEYSTORE")
+          mkdir -p signing-key-keep-safe
+          mv "$KEYSTORE" signing-key-keep-safe/
+          cat > signing-key-keep-safe/SIGNING-SECRETS.txt <<SECRETS
+          ANDROID_KEYSTORE_BASE64=$KEYSTORE_BASE64
+          ANDROID_KEYSTORE_PASSWORD=$STORE_PASSWORD
+          ANDROID_KEY_ALIAS=$KEY_ALIAS
+          ANDROID_KEY_PASSWORD=$KEY_PASSWORD
+          SECRETS
+
+          keytool -list -v \
+            -keystore signing-key-keep-safe/bumi-makmur-upload.jks \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" > signing-key-keep-safe/CERTIFICATE-INFO.txt
+
+          cat > signing-key-keep-safe/BACA-SAYA.txt <<'INFO'
+          RAHASIA — JANGAN DIUNGGAH KE REPOSITORY.
+
+          1. Simpan file bumi-makmur-upload.jks di minimal dua tempat aman.
+          2. Buka repository GitHub > Settings > Secrets and variables > Actions.
+          3. Buat empat Repository secrets memakai nama dan nilai dari SIGNING-SECRETS.txt.
+          4. Hapus artifact workflow ini setelah secrets berhasil disimpan.
+          5. Semua update APK harus memakai key yang sama. Kehilangan key dapat membuat APK lama tidak bisa diperbarui.
+          INFO
+
+      - name: Upload signing package once
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bumi-Makmur-POS-signing-key-KEEP-SAFE
+          path: signing-key-keep-safe
+          if-no-files-found: error
+          retention-days: 1
