@@ -1,7 +1,7 @@
 {
-  "name": "Bumi Makmur POS Ultimate",
+  "name": "Bumi Makmur POS Hybrid",
   "short_name": "BM POS",
-  "description": "POS profesional local-first untuk toko bahan bangunan, listrik, dan air.",
+  "description": "POS profesional Bumi Makmur dengan operasi offline dan sinkronisasi otomatis Firebase.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f9fafb",

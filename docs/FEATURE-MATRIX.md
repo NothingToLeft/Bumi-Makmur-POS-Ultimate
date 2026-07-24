@@ -1,35 +1,22 @@
-# Feature Matrix Bumi Makmur POS Ultimate v3.0
+# Feature Matrix — Bumi Makmur POS Hybrid v4.1
 
-| Area | Fitur | Status |
+| Area | Implementasi | Status |
 |---|---|---|
-| Kasir | Cari produk, kategori, favorit, kamera barcode/BarcodeDetector, scanner keyboard, item kustom | Aktif |
-| Kasir | Varian, konversi satuan, bundle | Aktif |
-| Kasir | Diskon item/transaksi, promo otomatis, loyalty | Aktif |
-| Kasir | Pajak, service charge, pembulatan | Aktif |
-| Kasir | Open bill, pending bill, split bill | Aktif |
-| Pembayaran | Tunai, QRIS, transfer, kartu, tempo, metode khusus | Aktif |
-| Pembayaran | Split payment | Aktif |
-| Produk | Harga eceran/grosir/proyek, modal, SKU, barcode, cetak label | Aktif |
-| Inventory | Stok, minimum, rak, movement, adjustment, opname | Aktif |
-| Inventory | Transfer stok antar-cabang | Aktif |
-| Pembelian | PO, penerimaan, pembayaran, hutang, retur | Aktif |
-| Pelanggan | Member, tipe pelanggan, proyek, credit limit | Aktif |
-| Loyalty | Poin, penukaran reward, feedback | Aktif |
-| Shift | Modal awal, kas masuk/keluar, tutup shift, selisih | Aktif |
-| Transaksi | Detail, cetak ulang, refund penuh/sebagian, void | Aktif |
-| Otorisasi | PIN Owner/Manager untuk refund sensitif | Aktif |
-| Keuangan | Pengeluaran, piutang, hutang, cicilan | Aktif |
-| Laporan | Omzet, HPP, laba, diskon, pajak, refund | Aktif |
-| Laporan | Pembayaran, produk, stok, utang/piutang, shift | Aktif |
-| Order | WhatsApp, marketplace, delivery, proyek | Aktif |
-| Multi-cabang | Data dan stok terpisah per cabang | Aktif |
-| Role | Owner, Manager, Kasir, permission khusus | Aktif |
-| Printer | Profil 58/80 mm, Bluetooth/USB/LAN/browser/PDF | Fondasi aktif; adapter native per printer diperlukan |
-| Customer display | Preview keranjang, kampanye, feedback | Aktif |
-| Offline | Local-first, PWA shell, sync queue, audit log | Aktif |
-| Cloud | Adapter Firebase | Disiapkan, konfigurasi asli belum dimasukkan |
-| Android | Capacitor dan workflow APK cloud | Disiapkan |
-
-## Fitur referensi yang tidak dijadikan modul utama
-
-Fitur restoran murni seperti table map, jumlah tamu/pax, resep ingredient, kitchen order ticket, dan modifier makanan tidak dijadikan prioritas karena tidak sesuai dengan toko bahan bangunan. Konsep modifier digantikan oleh varian, satuan, catatan item, bundle, dan harga bertingkat yang lebih relevan.
+| Kasir | Produk, barcode, varian, modifier, bundle, item kustom, diskon, promo, loyalty | Aktif |
+| Pembayaran | Tunai, QRIS, ShopeePay, OVO, GoPay, DANA, transfer, kartu, tempo, split | Aktif |
+| Produk | Modal, markup %, eceran, grosir, proyek, satuan, kategori | Aktif |
+| Stok | Movement, adjustment, opname, transfer cabang, retur, stok pecahan | Aktif |
+| Pembelian | Order/receive, hutang, pembayaran, retur | Aktif |
+| Pelanggan | Member, piutang, kredit, proyek, poin, reward | Aktif |
+| Shift | Modal awal, kas masuk/keluar, expected cash, selisih | Aktif |
+| Laporan | Omzet, HPP, laba, pembayaran, refund, stok, hutang/piutang | Aktif |
+| Multi-cabang | Data scope, owner branch switch per perangkat | Aktif |
+| Offline | IndexedDB cache, app shell, PIN offline, mutation queue | Aktif setelah login online pertama |
+| Auto-sync | Otomatis saat online, manual sync, retry, queue status | Aktif |
+| Konflik | Delta stock/balance/points, merge payment/return arrays | Aktif |
+| Cloud | Firestore realtime, Firebase Auth, Functions, Storage, Hosting | Aktif setelah konfigurasi |
+| Transaksi server | Atomic commit, optimistic concurrency, idempotency receipt, audit | Aktif |
+| Keamanan | PIN server-side, offline PBKDF2, claims, rules, approval token | Aktif |
+| Nota | Cetak 58/80 mm, logo, pesan, WhatsApp, nota online | Aktif |
+| Android | Kamera, biometrik, Bluetooth permission, signed APK/AAB | Aktif |
+| Backup | Export JSON lokal dan restore cloud oleh Owner | Aktif |

@@ -1,24 +1,19 @@
-# Memperbarui repository ke v3.3
+# Memperbarui Repository ke Bumi Makmur POS Hybrid v4.1
 
-1. Backup JSON dari APK yang sekarang bila sudah berisi data penting.
-2. Ekstrak ZIP v3.3.
-3. Upload seluruh isi project ke repository `Bumi-Makmur-POS-Ultimate` dan izinkan file lama diganti.
-4. Pastikan dua workflow ini ada:
-
-```text
-.github/workflows/generate-signing-key.yml
-.github/workflows/build-android.yml
-```
-
-5. Commit message:
+1. Backup JSON dari APK lama bila ada data operasional.
+2. Ekstrak ZIP v4.1.
+3. Upload seluruh isi ke repository yang sama dan timpa file lama.
+4. Pastikan `.github/workflows`, `functions`, `public/sw.js`, `src/services/offlineStore.js`, dan `src/services/syncEngine.js` ikut terunggah.
+5. Commit:
 
 ```text
-Add premium e-wallet payments, WhatsApp receipts and custom receipt v3.3
+Migrate Bumi Makmur POS to Hybrid Offline Auto-Sync Enterprise v4.1
 ```
 
-6. Jika keystore v3.2 dan empat Actions Secrets sudah dibuat, **jangan membuat keystore baru**. Langsung jalankan **Build Signed Android Release**.
-7. Hanya untuk repository yang belum pernah memiliki signing key, jalankan **Generate Android Signing Key** satu kali dan ikuti `ANDROID-SIGNING-SETUP.md`.
-8. Download artifact `Bumi-Makmur-POS-signed-release`.
-9. Instal file APK bertanda tangan.
+6. Pertahankan Firebase secrets dan Android signing secrets yang lama.
+7. Jalankan workflow **Deploy Firebase Cloud Backend** agar Functions dan Rules v4.1 terpasang.
+8. Jalankan workflow **Build Signed Android Hybrid Release**.
+9. Download artifact `Bumi-Makmur-POS-Hybrid-signed-release`.
+10. Instal sebagai update dan uji pada HP serta tablet.
 
-Jangan membuat keystore baru untuk update berikutnya. Gunakan secret dan file `.jks` yang sama selamanya untuk package `app.bumimakmur.pos`.
+Jangan membuat signing key baru. Package ID dan sertifikat harus tetap sama agar Android menerima update aplikasi.

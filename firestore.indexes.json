@@ -1,0 +1,29 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "privateCredentials",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pinLookup", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

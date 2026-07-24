@@ -37,6 +37,7 @@ export const buildReceiptText = (sale, configs = {}) => {
     sale.tax > 0 ? `Pajak: ${formatRp(sale.tax)}` : '',
     sale.service > 0 ? `Service: ${formatRp(sale.service)}` : '',
     `*TOTAL: ${formatRp(sale.total)}*`,
+    configs.onlineReceiptUrl ? `Nota online: ${configs.onlineReceiptUrl}` : '',
     divider,
     ...payments,
     sale.change > 0 ? `Kembalian: ${formatRp(sale.change)}` : '',
@@ -64,12 +65,21 @@ export const copyReceiptText = async (sale, configs) => {
   return copied;
 };
 
-export const openWhatsappReceipt = (sale, configs, phone = '') => {
+export const openWhatsappReceipt = async (sale, configs, phone = '') => {
   const number = normalizeWhatsappNumber(phone, configs.whatsappCountryCode || '62');
-  const text = encodeURIComponent(buildReceiptText(sale, configs));
+  let onlineReceiptUrl = '';
+  try {
+    const { createOnlineReceipt } = await import('./cloudStore.js');
+    const receipt = await createOnlineReceipt(sale);
+    onlineReceiptUrl = receipt?.url || '';
+  } catch (error) {
+    console.warn('Nota online gagal dibuat; WhatsApp tetap dibuka dengan nota teks.', error);
+  }
+  const text = encodeURIComponent(buildReceiptText(sale, { ...configs, onlineReceiptUrl }));
   const url = number ? `https://wa.me/${number}?text=${text}` : `https://wa.me/?text=${text}`;
   const popup = window.open(url, '_blank', 'noopener,noreferrer');
   if (!popup) window.location.href = url;
+  return { onlineReceiptUrl, whatsappUrl: url };
 };
 
 const loadImage = source => new Promise((resolve, reject) => {

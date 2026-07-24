@@ -1,91 +1,95 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { APP_VERSION, DB_KEY, MAIN_BRANCH_ID, can, createSeedDb } from '../data/defaults.js';
-import { createPinCredential, verifyPinCredential } from '../services/security.js';
+import { APP_VERSION, MAIN_BRANCH_ID, can, createSeedDb } from '../data/defaults.js';
 import { generateId, safeJSONParse, downloadFile, localDateKey } from '../utils/helpers.js';
+import { firebaseConfigured, DEFAULT_STORE_CODE, STORE_ID } from '../services/firebase.js';
+import { bootstrapCloudStore, getCloudSessionProfile, loginWithCloudPin, signOutCloudAccount, upsertCloudEmployee, verifyCloudManagerPin } from '../services/cloudAuth.js';
+import {
+  applyOperationsToDb,
+  buildDiffOperations,
+  loadCloudDb,
+  persistOperations,
+  replaceCloudDb,
+  rebaseOperationsAgainstRemote,
+  seedCloudDb,
+  subscribeCloudDb
+} from '../services/cloudStore.js';
+import {
+  cacheOfflineCredential,
+  clearOfflineIdentity,
+  enqueuePendingMutation,
+  enqueuePendingMutations,
+  getCachedOfflineProfile,
+  getOfflineQueueStats,
+  loadCachedDb,
+  readPendingMutations,
+  recoverPendingMutations,
+  removePendingMutation,
+  replacePendingMutation,
+  saveCachedDb,
+  verifyOfflinePin
+} from '../services/offlineStore.js';
 
 const PosContext = createContext(null);
 const DEVICE_SETTINGS_KEY = 'bm_pos_device_security_v1';
 const clone = value => typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const nowISO = () => new Date().toISOString();
 const money = value => Math.max(0, Math.round(Number(value) || 0));
+const quantity = value => Math.max(0, Math.round((Number(value) || 0) * 1000) / 1000);
+const isConflictError = error => String(error?.code || '').includes('aborted') || /telah berubah|menggabungkan pembaruan/i.test(String(error?.message || ''));
 
-function migrateLegacy() {
-  const seed = createSeedDb();
-  try {
-    const products = safeJSONParse(localStorage.getItem('bm_prod'), null);
-    const users = safeJSONParse(localStorage.getItem('bm_users'), null);
-    const branches = safeJSONParse(localStorage.getItem('bm_branches'), null);
-    const transactions = safeJSONParse(localStorage.getItem('bm_tx'), null);
-    const suppliers = safeJSONParse(localStorage.getItem('bm_supp'), null);
-    const purchases = safeJSONParse(localStorage.getItem('bm_purch'), null);
-    const movements = safeJSONParse(localStorage.getItem('bm_mov'), null);
-    const customers = safeJSONParse(localStorage.getItem('bm_cust'), null);
-    const expenses = safeJSONParse(localStorage.getItem('bm_exp'), null);
-    const receivables = safeJSONParse(localStorage.getItem('bm_recv'), null);
-    if (Array.isArray(products) && products.length) {
-      seed.products = products.map(product => ({
-        ...product,
-        id: String(product.id), branchId: product.branchId || MAIN_BRANCH_ID,
-        baseUnit: product.baseUnit || product.unit || 'pcs', minStock: product.minStock ?? 10,
-        rack: product.rack || '-', prices: product.prices || {
-          retail: product.price || 0,
-          wholesale: product.wholesalePrice || product.price || 0,
-          project: product.projectPrice || product.price || 0
-        },
-        variants: product.variants || [], conversions: product.conversions || [], bundleItems: product.bundleItems || [],
-        favorite: Boolean(product.favorite), available: product.available !== false, active: product.active !== false,
-        trackStock: product.trackStock !== false
-      }));
-    }
-    if (Array.isArray(users) && users.length && users.every(user => user.pinHash)) seed.users = users;
-    if (Array.isArray(branches) && branches.length) seed.branches = branches;
-    if (Array.isArray(transactions)) seed.sales = transactions.map(sale => ({ ...sale, branchId: sale.branchId || MAIN_BRANCH_ID, status: sale.status || 'COMPLETED' }));
-    if (Array.isArray(suppliers)) seed.suppliers = suppliers;
-    if (Array.isArray(purchases)) seed.purchases = purchases;
-    if (Array.isArray(movements)) seed.stockMovements = movements;
-    if (Array.isArray(customers) && customers.length) seed.customers = customers;
-    if (Array.isArray(expenses)) seed.expenses = expenses;
-    if (Array.isArray(receivables)) seed.receivables = receivables;
-  } catch (error) {
-    console.warn('Migrasi data lama gagal, memakai data demo.', error);
-  }
-  return seed;
-}
+const ACTION_PERMISSIONS = {
+  SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage',
+  PRODUCT_CREATE: 'products.manage', PRODUCT_UPDATE: 'products.manage', PRODUCT_ARCHIVE: 'products.manage', PRODUCT_TOGGLE: 'products.manage',
+  PROMOTION_CREATE: 'promotions.manage', PROMOTION_UPDATE: 'promotions.manage',
+  SUPPLIER_CREATE: 'suppliers.manage', SUPPLIER_UPDATE: 'suppliers.manage',
+  CUSTOMER_CREATE: 'customers.manage', CUSTOMER_UPDATE: 'customers.manage', LOYALTY_REDEEM: 'customers.manage',
+  SHIFT_START: 'shifts.manage', SHIFT_END: 'shifts.manage', CASH_MOVEMENT: 'shifts.manage',
+  BILL_HOLD: 'pos.use', BILL_DELETE: 'pos.use', SALE_COMPLETE: 'pos.use',
+  SALE_REFUND: 'transactions.refund', SALE_VOID: 'transactions.void',
+  PURCHASE_CREATE: 'purchases.manage', PURCHASE_UPDATE: 'purchases.manage', PURCHASE_RETURN: 'purchases.manage',
+  RECEIVABLE_PAYMENT: 'finance.manage', PAYABLE_PAYMENT: 'finance.manage', EXPENSE_CREATE: 'finance.manage',
+  STOCK_ADJUST: 'inventory.manage', STOCK_OPNAME: 'inventory.manage', STOCK_TRANSFER: 'inventory.manage',
+  ORDER_CREATE: 'orders.manage', ORDER_UPDATE: 'orders.manage', ORDER_TO_BILL: 'orders.manage',
+  PRINTER_CREATE: 'devices.manage', PRINTER_UPDATE: 'devices.manage',
+  CAMPAIGN_CREATE: 'display.manage', CAMPAIGN_UPDATE: 'display.manage', FEEDBACK_CREATE: 'display.view'
+};
 
 export function PosProvider({ children }) {
-  const [db, setDb] = useState(() => {
-    const saved = safeJSONParse(localStorage.getItem(DB_KEY), null);
-    const base = saved?.meta?.version ? saved : migrateLegacy();
-    const seed = createSeedDb();
-    const storedMethods = Array.isArray(base.configs?.paymentMethods) ? base.configs.paymentMethods : [];
-    const paymentMethods = [
-      ...seed.configs.paymentMethods.map(defaultMethod => ({
-        ...defaultMethod,
-        ...(storedMethods.find(method => method.id === defaultMethod.id) || {})
-      })),
-      ...storedMethods.filter(method => !seed.configs.paymentMethods.some(defaultMethod => defaultMethod.id === method.id))
-    ];
-    return {
-      ...seed,
-      ...base,
-      configs: { ...seed.configs, ...(base.configs || {}), paymentMethods },
-      promotions: Array.isArray(base.promotions) ? base.promotions : seed.promotions,
-      auditLogs: Array.isArray(base.auditLogs) ? base.auditLogs : [],
-      syncQueue: Array.isArray(base.syncQueue) ? base.syncQueue : []
-    };
-  });
+  const seedRef = useRef(createSeedDb());
+  const [db, setDb] = useState(() => ({ ...seedRef.current, users: [], branches: [], products: [], suppliers: [], customers: [], promotions: [], sales: [], heldSales: [], purchases: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [], expenses: [], receivables: [], payables: [], refunds: [], shifts: [], cashMovements: [], onlineOrders: [], printerProfiles: [], campaigns: [], feedback: [], auditLogs: [] }));
   const dbRef = useRef(db);
   const [currentUser, setCurrentUser] = useState(null);
-  const [deviceSettings, setDeviceSettingsState] = useState(() => ({
-    biometricEnabled: false, biometricUserId: '', biometricAutoPrompt: true,
-    ...safeJSONParse(localStorage.getItem(DEVICE_SETTINGS_KEY), {})
-  }));
+  const currentUserRef = useRef(null);
+  const [localReady, setLocalReady] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cloudSaving, setCloudSaving] = useState(false);
+  const [cloudError, setCloudError] = useState('');
+  const [cloudConfigured] = useState(firebaseConfigured);
+  const [deviceSettings, setDeviceSettingsState] = useState(() => {
+    const saved = safeJSONParse(localStorage.getItem(DEVICE_SETTINGS_KEY), {});
+    return {
+      biometricEnabled: false,
+      biometricUserId: '',
+      biometricAutoPrompt: true,
+      storeCode: DEFAULT_STORE_CODE,
+      activeBranchId: '',
+      deviceId: saved.deviceId || generateId('DEVICE'),
+      ...saved
+    };
+  });
+  const storeCode = deviceSettings.storeCode || DEFAULT_STORE_CODE;
+  const [pendingSyncCount, setPendingSyncCount] = useState(() => getOfflineQueueStats(storeCode).count);
+  const [syncConflictCount, setSyncConflictCount] = useState(0);
+  const [lastSyncAttemptAt, setLastSyncAttemptAt] = useState(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [customerDisplay, setCustomerDisplay] = useState({ cart: [], total: 0, customerName: 'Umum', message: '' });
+  const cloudUnsubscribeRef = useRef(null);
+  const writeChainRef = useRef(Promise.resolve());
 
   useEffect(() => {
-    const onOnline = () => setOnline(true);
-    const onOffline = () => setOnline(false);
+    const onOnline = () => { setOnline(true); setCloudError(''); };
+    const onOffline = () => { setOnline(false); setCloudError(''); };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
     return () => {
@@ -96,89 +100,383 @@ export function PosProvider({ children }) {
 
   useEffect(() => {
     localStorage.setItem(DEVICE_SETTINGS_KEY, JSON.stringify(deviceSettings));
+    setPendingSyncCount(getOfflineQueueStats(deviceSettings.storeCode || DEFAULT_STORE_CODE).count);
   }, [deviceSettings]);
 
   useEffect(() => {
     dbRef.current = db;
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
     document.documentElement.classList.toggle('dark', Boolean(db.configs.darkMode));
   }, [db]);
 
-  const branchId = db.configs.activeBranchId || MAIN_BRANCH_ID;
-  const branch = db.branches.find(item => item.id === branchId) || db.branches[0];
-
-  const commit = useCallback((action, details, mutator, options = {}) => {
-    const next = clone(dbRef.current);
-    const result = mutator(next);
-    const timestamp = nowISO();
-    next.meta = { ...next.meta, version: APP_VERSION, updatedAt: timestamp };
-    if (options.audit !== false) {
-      next.auditLogs = next.auditLogs || [];
-      next.auditLogs.unshift({
-        id: generateId('AUD'), action, details: details || '', createdAt: timestamp,
-        userId: currentUser?.id || 'SYSTEM', userName: currentUser?.name || 'Sistem', branchId: next.configs.activeBranchId
-      });
-      next.auditLogs = next.auditLogs.slice(0, 2000);
-    }
-    if (options.sync !== false) {
-      next.syncQueue = next.syncQueue || [];
-      next.syncQueue.unshift({
-        id: generateId('SYNC'), action, entityId: result?.id || '', status: 'PENDING', attempts: 0,
-        createdAt: timestamp, branchId: next.configs.activeBranchId
-      });
-      next.syncQueue = next.syncQueue.slice(0, 3000);
-    }
-    dbRef.current = next;
-    setDb(next);
-    return result;
+  useEffect(() => {
+    currentUserRef.current = currentUser;
   }, [currentUser]);
 
-  const login = useCallback(async pin => {
-    const activeUsers = db.users.filter(user => user.active !== false);
-    for (const user of activeUsers) {
-      if (await verifyPinCredential(pin, user)) {
-        setCurrentUser(user);
-        if (user.role !== 'owner' && user.branchId && user.branchId !== branchId) {
-          setDb(previous => ({ ...previous, configs: { ...previous.configs, activeBranchId: user.branchId } }));
+  useEffect(() => () => { cloudUnsubscribeRef.current?.(); }, []);
+
+  const saveLocalSnapshot = useCallback(async (nextDb, profile = currentUserRef.current) => {
+    try {
+      await saveCachedDb(deviceSettings.storeCode || DEFAULT_STORE_CODE, nextDb, profile);
+    } catch (error) {
+      console.error('Cache lokal gagal disimpan.', error);
+      setCloudError('Penyimpanan lokal perangkat bermasalah. Segera ekspor backup JSON.');
+    }
+  }, [deviceSettings.storeCode]);
+
+  const hydrateLocal = useCallback(async profile => {
+    const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
+    await recoverPendingMutations(key);
+    const cached = await loadCachedDb(key);
+    if (!cached?.db) return false;
+    let localDb = clone(cached.db);
+    const alreadyApplied = new Set(cached.appliedMutationIds || []);
+    for (const mutation of readPendingMutations(key)) {
+      if (!alreadyApplied.has(mutation.id)) localDb = applyOperationsToDb(localDb, mutation.operations);
+    }
+    dbRef.current = localDb;
+    setDb(localDb);
+    setLocalReady(true);
+    setPendingSyncCount(getOfflineQueueStats(key).count);
+    if (profile) await saveCachedDb(key, localDb, profile);
+    return true;
+  }, [deviceSettings.storeCode]);
+
+  const flushPendingMutations = useCallback(profile => {
+    const run = async () => {
+      if (!profile || !navigator.onLine || !firebaseConfigured) return { synced: 0, pending: getOfflineQueueStats(storeCode).count };
+      const queue = readPendingMutations(storeCode);
+      if (!queue.length) return { synced: 0, pending: 0, conflicts: 0 };
+      setCloudSaving(true);
+      setLastSyncAttemptAt(nowISO());
+      let synced = 0;
+      let conflicts = 0;
+      try {
+        for (const queued of queue) {
+          let mutation = clone(queued);
+          let completed = false;
+          for (let attempt = 0; attempt < 3 && !completed; attempt += 1) {
+            try {
+              await persistOperations(mutation.operations, profile.storeId || STORE_ID, {
+                action: mutation.action,
+                details: mutation.details,
+                approvalToken: mutation.approvalToken || '',
+                mutationId: mutation.id,
+                offlineCreatedAt: mutation.createdAt,
+                deviceId: deviceSettings.deviceId || ''
+              });
+              removePendingMutation(storeCode, mutation.id);
+              synced += 1;
+              completed = true;
+            } catch (error) {
+              if (!isConflictError(error) || attempt >= 2) throw error;
+              const remoteDb = await loadCloudDb(seedRef.current, profile, profile.storeId || STORE_ID);
+              const operations = rebaseOperationsAgainstRemote(mutation.operations, remoteDb);
+              conflicts += 1;
+              if (!operations.length) {
+                removePendingMutation(storeCode, mutation.id);
+                completed = true;
+                synced += 1;
+              } else {
+                mutation = { ...mutation, operations, rebasedAt: nowISO(), rebaseCount: Number(mutation.rebaseCount || 0) + 1 };
+                replacePendingMutation(storeCode, mutation);
+              }
+            }
+          }
         }
-        return { success: true, user };
+        setSyncConflictCount(previous => previous + conflicts);
+        setPendingSyncCount(getOfflineQueueStats(storeCode).count);
+        setCloudError('');
+        return { synced, pending: getOfflineQueueStats(storeCode).count, conflicts };
+      } catch (error) {
+        console.error('Sinkronisasi antrean offline gagal.', error);
+        setPendingSyncCount(getOfflineQueueStats(storeCode).count);
+        setCloudError(error?.message || 'Pembaruan lokal belum berhasil dikirim ke Firebase. Aplikasi tetap dapat digunakan.');
+        throw error;
+      } finally {
+        setCloudSaving(false);
+      }
+    };
+    writeChainRef.current = writeChainRef.current.then(run, run);
+    return writeChainRef.current;
+  }, [deviceSettings.deviceId, storeCode]);
+
+  const overlayPendingOnRemote = useCallback(baseDb => {
+    let merged = clone(baseDb);
+    for (const mutation of readPendingMutations(storeCode)) {
+      const rebased = rebaseOperationsAgainstRemote(mutation.operations, merged);
+      merged = applyOperationsToDb(merged, rebased);
+    }
+    return merged;
+  }, [storeCode]);
+
+  const startCloudSubscription = useCallback(async profile => {
+    if (!profile) return;
+    const hasLocal = localReady || await hydrateLocal(profile);
+    if (!navigator.onLine || !firebaseConfigured) {
+      setCloudReady(false);
+      setLocalReady(hasLocal);
+      return;
+    }
+    setCloudLoading(!hasLocal);
+    setCloudError('');
+    cloudUnsubscribeRef.current?.();
+    try {
+      try {
+        await flushPendingMutations(profile);
+      } catch (syncError) {
+        console.warn('Antrean belum seluruhnya tersinkron; realtime tetap dilanjutkan.', syncError);
+      }
+      const loaded = await loadCloudDb(seedRef.current, profile, profile.storeId || STORE_ID);
+      const localView = overlayPendingOnRemote(loaded);
+      dbRef.current = localView;
+      setDb(localView);
+      setLocalReady(true);
+      setCloudReady(true);
+      await saveCachedDb(storeCode, localView, profile);
+      cloudUnsubscribeRef.current = subscribeCloudDb(
+        loaded,
+        profile,
+        remoteDb => {
+          const merged = overlayPendingOnRemote(remoteDb);
+          dbRef.current = merged;
+          setDb(merged);
+          setLocalReady(true);
+          setCloudReady(true);
+          setCloudLoading(false);
+          setPendingSyncCount(getOfflineQueueStats(storeCode).count);
+          void saveCachedDb(storeCode, merged, profile).catch(error => console.warn('Snapshot realtime gagal disimpan lokal.', error));
+        },
+        error => {
+          console.error('Realtime Firestore gagal.', error);
+          setCloudError(error?.message || 'Realtime cloud terputus; data lokal tetap aktif.');
+          setCloudReady(false);
+          setCloudLoading(false);
+        },
+        profile.storeId || STORE_ID
+      );
+    } catch (error) {
+      console.error('Cloud load/sync failed.', error);
+      setCloudError(error?.message || 'Cloud belum dapat dijangkau; aplikasi memakai data lokal.');
+      setCloudReady(false);
+      if (!hasLocal) setLocalReady(false);
+    } finally {
+      setCloudLoading(false);
+    }
+  }, [flushPendingMutations, hydrateLocal, localReady, overlayPendingOnRemote, storeCode]);
+
+  useEffect(() => {
+    if (currentUser) void startCloudSubscription(currentUser);
+  }, [currentUser, online, startCloudSubscription]);
+
+  useEffect(() => {
+    if (!currentUser || !online || !firebaseConfigured) return undefined;
+    const retrySync = () => {
+      if (document.visibilityState === 'hidden') return;
+      void flushPendingMutations(currentUser)
+        .then(() => {
+          if (!cloudReady) return startCloudSubscription(currentUser);
+          return null;
+        })
+        .catch(error => console.warn('Retry sinkronisasi otomatis belum berhasil.', error));
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') retrySync(); };
+    const timer = window.setInterval(retrySync, 30000);
+    window.addEventListener('focus', retrySync);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', retrySync);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [currentUser, online, cloudReady, flushPendingMutations, startCloudSubscription]);
+
+  const branchId = (
+    currentUser?.role === 'owner'
+      ? deviceSettings.activeBranchId
+      : currentUser?.branchId
+  ) || db.configs.activeBranchId || MAIN_BRANCH_ID;
+  const branch = db.branches.find(item => item.id === branchId) || db.branches[0];
+
+  useEffect(() => {
+    if (!currentUser || !db.branches.length) return;
+    const allowedBranchId = currentUser.role === 'owner'
+      ? (db.branches.some(item => item.id === branchId) ? branchId : db.branches[0].id)
+      : currentUser.branchId;
+    if (allowedBranchId && deviceSettings.activeBranchId !== allowedBranchId) {
+      setDeviceSettingsState(previous => ({ ...previous, activeBranchId: allowedBranchId }));
+    }
+  }, [currentUser, db.branches, branchId, deviceSettings.activeBranchId]);
+
+  const commit = useCallback((action, details, mutator, options = {}) => {
+    if (!currentUserRef.current) throw new Error('Sesi pengguna belum aktif.');
+    const requiredPermission = ACTION_PERMISSIONS[action];
+    if (!requiredPermission || !can(currentUserRef.current, requiredPermission)) {
+      throw new Error(`Hak akses ${requiredPermission || action} tidak tersedia untuk akun ini.`);
+    }
+    if (!navigator.onLine && currentUserRef.current.role === 'kasir' && ['SALE_REFUND', 'SALE_VOID'].includes(action)) {
+      throw new Error('Refund/void oleh Kasir memerlukan koneksi internet untuk approval Manager yang aman. Transaksi lain tetap dapat berjalan offline.');
+    }
+    const before = clone(dbRef.current);
+    const next = clone(before);
+    const result = mutator(next);
+    const operations = buildDiffOperations(before, next);
+    if (!operations.length) return result;
+    const mutationBaseId = generateId('SYNC');
+    const createdAt = nowISO();
+    const operationChunks = [];
+    for (let index = 0; index < operations.length; index += 200) operationChunks.push(operations.slice(index, index + 200));
+    const mutations = operationChunks.map((chunk, index) => ({
+      id: operationChunks.length === 1 ? mutationBaseId : `${mutationBaseId}-${String(index + 1).padStart(3, '0')}`,
+      parentMutationId: mutationBaseId,
+      chunkIndex: index,
+      chunkCount: operationChunks.length,
+      storeCode,
+      storeId: currentUserRef.current.storeId || STORE_ID,
+      userId: currentUserRef.current.id,
+      userName: currentUserRef.current.name,
+      userRole: currentUserRef.current.role,
+      action,
+      details: String(details || '').slice(0, 500),
+      approvalToken: options.approvalToken || '',
+      createdAt,
+      operations: chunk
+    }));
+    const count = mutations.length === 1
+      ? enqueuePendingMutation(storeCode, mutations[0])
+      : enqueuePendingMutations(storeCode, mutations);
+    dbRef.current = next;
+    setDb(next);
+    setLocalReady(true);
+    setPendingSyncCount(count);
+    void saveLocalSnapshot(next, currentUserRef.current);
+    if (navigator.onLine && firebaseConfigured) {
+      void flushPendingMutations(currentUserRef.current).catch(() => {});
+    }
+    return result;
+  }, [flushPendingMutations, saveLocalSnapshot, storeCode]);
+
+  const login = useCallback(async pin => {
+    const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
+    if (navigator.onLine && firebaseConfigured) {
+      try {
+        const profile = await loginWithCloudPin(pin, key, {
+          platform: navigator.userAgent,
+          appVersion: APP_VERSION
+        });
+        await cacheOfflineCredential(key, pin, profile);
+        setCurrentUser(profile);
+        return { success: true, user: profile, mode: 'online' };
+      } catch (error) {
+        const cachedProfile = await verifyOfflinePin(key, pin).catch(() => null);
+        if (cachedProfile) {
+          const hydrated = await hydrateLocal(cachedProfile);
+          if (hydrated) {
+            setCurrentUser(cachedProfile);
+            setCloudError('Firebase belum dapat dijangkau. Masuk menggunakan kredensial aman yang tersimpan di perangkat.');
+            return { success: true, user: cachedProfile, mode: 'offline-fallback' };
+          }
+        }
+        return { success: false, message: error?.message || 'PIN tidak dikenali.' };
       }
     }
-    return { success: false, message: 'PIN tidak dikenali.' };
-  }, [db.users, branchId]);
+    const profile = await verifyOfflinePin(key, pin).catch(() => null);
+    if (!profile) return { success: false, message: 'PIN offline belum tersedia. Sambungkan internet dan login sekali pada perangkat ini.' };
+    const hydrated = await hydrateLocal(profile);
+    if (!hydrated) return { success: false, message: 'Data offline belum tersedia. Sambungkan internet untuk mengambil database toko terlebih dahulu.' };
+    setCurrentUser(profile);
+    return { success: true, user: profile, mode: 'offline' };
+  }, [deviceSettings.storeCode, hydrateLocal]);
 
-  const loginWithBiometric = useCallback(userId => {
-    const user = db.users.find(item => item.id === userId && item.active !== false);
-    if (!user) return { success: false, message: 'Akun biometrik tidak tersedia atau sudah dinonaktifkan.' };
-    setCurrentUser(user);
-    if (user.role !== 'owner' && user.branchId && user.branchId !== branchId) {
-      setDb(previous => ({ ...previous, configs: { ...previous.configs, activeBranchId: user.branchId } }));
+  const loginWithBiometric = useCallback(async userId => {
+    const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
+    if (navigator.onLine && firebaseConfigured) {
+      try {
+        const profile = await getCloudSessionProfile();
+        if (profile && profile.id === userId) {
+          setCurrentUser(profile);
+          return { success: true, user: profile, mode: 'online' };
+        }
+      } catch (error) {
+        console.warn('Sesi biometrik cloud tidak tersedia; mencoba cache lokal.', error);
+      }
     }
-    return { success: true, user };
-  }, [db.users, branchId]);
+    const profile = await getCachedOfflineProfile(key, userId);
+    if (!profile) return { success: false, message: 'Sesi biometrik belum tersimpan. Masuk sekali menggunakan PIN.' };
+    const hydrated = await hydrateLocal(profile);
+    if (!hydrated) return { success: false, message: 'Data offline belum tersedia pada perangkat ini.' };
+    setCurrentUser(profile);
+    return { success: true, user: profile, mode: 'offline' };
+  }, [deviceSettings.storeCode, hydrateLocal]);
 
   const updateDeviceSettings = useCallback(patch => {
     setDeviceSettingsState(previous => ({ ...previous, ...patch }));
   }, []);
 
-  const logout = () => setCurrentUser(null);
+  const logout = () => {
+    cloudUnsubscribeRef.current?.();
+    cloudUnsubscribeRef.current = null;
+    setCurrentUser(null);
+    setCloudReady(false);
+  };
+
+  const signOutAccount = async () => {
+    const pending = getOfflineQueueStats(storeCode).count;
+    if (pending > 0) throw new Error(`Masih ada ${pending} pembaruan offline yang belum tersinkron. Sambungkan internet sebelum keluar penuh.`);
+    logout();
+    await Promise.all([signOutCloudAccount(), clearOfflineIdentity(storeCode)]);
+  };
+
+  const bootstrapStore = async payload => {
+    if (!navigator.onLine) throw new Error('Setup toko pertama memerlukan koneksi internet.');
+    const result = await bootstrapCloudStore(payload);
+    if (result.requiresSeed) {
+      const cloudSeed = clone(seedRef.current);
+      cloudSeed.users = [];
+      cloudSeed.shifts = [];
+      cloudSeed.cashMovements = [];
+      cloudSeed.auditLogs = [];
+      cloudSeed.configs = {
+        ...cloudSeed.configs,
+        companyName: String(payload.businessName || cloudSeed.configs.companyName || 'BUMI MAKMUR').trim(),
+        activeBranchId: MAIN_BRANCH_ID
+      };
+      cloudSeed.branches = (cloudSeed.branches || []).map((item, index) => index === 0 ? {
+        ...item,
+        id: MAIN_BRANCH_ID,
+        name: String(payload.branchName || item.name || 'Bumi Makmur Pusat').trim(),
+        address: String(payload.branchAddress || item.address || '').trim(),
+        phone: String(payload.branchPhone || item.phone || '').trim()
+      } : item);
+      await seedCloudDb(cloudSeed, result.profile.storeId || STORE_ID);
+      await saveCachedDb(payload.storeCode || storeCode, cloudSeed, result.profile);
+    }
+    setDeviceSettingsState(previous => ({ ...previous, storeCode: payload.storeCode || previous.storeCode }));
+    await cacheOfflineCredential(payload.storeCode || storeCode, payload.ownerPin, result.profile);
+    setCurrentUser(result.profile);
+    return result;
+  };
+
   const hasPermission = permission => can(currentUser, permission);
 
-  const setConfig = (patch) => commit('SETTING_UPDATE', Object.keys(patch).join(', '), next => {
+  const setConfig = (patch) => {
+    if (!can(currentUserRef.current, 'settings.manage')) throw new Error('Anda tidak memiliki izin mengubah pengaturan toko.');
+    return commit('SETTING_UPDATE', Object.keys(patch).join(', '), next => {
     next.configs = { ...next.configs, ...patch };
     return next.configs;
-  });
+    });
+  };
 
   const setActiveBranch = id => {
+    if (currentUser?.role !== 'owner') return;
     if (!db.branches.some(item => item.id === id)) return;
-    commit('BRANCH_SWITCH', id, next => {
-      next.configs.activeBranchId = id;
-      return { id };
-    }, { sync: false });
+    setDeviceSettingsState(previous => ({ ...previous, activeBranchId: id }));
   };
 
   const addBranch = data => commit('BRANCH_CREATE', data.name, next => {
-    const item = { id: generateId('BR'), name: data.name, address: data.address || '', phone: data.phone || '', status: 'Online', active: true };
+    const name = String(data.name || '').trim();
+    if (!name) throw new Error('Nama cabang wajib diisi.');
+    if (next.branches.some(item => item.active !== false && String(item.name || '').trim().toLowerCase() === name.toLowerCase())) throw new Error(`Cabang ${name} sudah terdaftar.`);
+    const item = { id: generateId('BR'), name, address: String(data.address || '').trim(), phone: String(data.phone || '').trim(), status: 'Online', active: true };
     next.branches.push(item);
     const general = { id: generateId('CUS'), branchId: item.id, name: 'Umum (Non-Member)', phone: '-', email: '', type: 'Reguler', priceTier: 'retail', creditLimit: 0, points: 0, address: '', project: '', notes: '', active: true };
     next.customers.push(general);
@@ -189,10 +487,10 @@ export function PosProvider({ children }) {
     const productName = String(data.name || '').trim();
     if (!productName) throw new Error('Nama produk wajib diisi.');
     const existing = next.products.find(product => product.id === data.id);
-    const targetBranchId = data.branchId || next.configs.activeBranchId;
+    const targetBranchId = data.branchId || branchId;
     const sku = String(data.sku || generateId('SKU')).trim();
     const barcode = String(data.barcode || '').trim();
-    const duplicateSku = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && product.sku.toLowerCase() === sku.toLowerCase());
+    const duplicateSku = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && String(product.sku || '').toLowerCase() === sku.toLowerCase());
     if (duplicateSku) throw new Error(`SKU ${sku} sudah dipakai oleh produk ${duplicateSku.name}.`);
     if (barcode) {
       const duplicateBarcode = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && String(product.barcode || '') === barcode);
@@ -201,8 +499,8 @@ export function PosProvider({ children }) {
     const item = {
       id: data.id || generateId('PRD'), branchId: targetBranchId,
       name: productName, category: data.category || 'Lainnya', sku,
-      barcode, baseUnit: data.baseUnit || 'pcs', stock: existing?.stock ?? money(data.stock),
-      minStock: money(data.minStock || 0), rack: data.rack || '-', modalPrice: money(data.modalPrice),
+      barcode, baseUnit: data.baseUnit || 'pcs', stock: existing?.stock ?? quantity(data.stock),
+      minStock: quantity(data.minStock || 0), rack: data.rack || '-', modalPrice: money(data.modalPrice),
       initialModalPrice: existing?.initialModalPrice ?? money(data.modalPrice),
       prices: {
         retail: money(data.prices?.retail ?? data.price),
@@ -236,9 +534,12 @@ export function PosProvider({ children }) {
   });
 
   const savePromotion = data => commit(data.id ? 'PROMOTION_UPDATE' : 'PROMOTION_CREATE', data.name, next => {
+    const name = String(data.name || '').trim();
+    if (!name) throw new Error('Nama promo wajib diisi.');
+    if (data.startDate && data.endDate && data.startDate > data.endDate) throw new Error('Tanggal akhir promo tidak boleh sebelum tanggal mulai.');
     const item = {
-      id: data.id || generateId('PROMO'), branchId: data.branchId || next.configs.activeBranchId,
-      name: data.name, type: data.type || 'percent', value: money(data.value), minPurchase: money(data.minPurchase),
+      id: data.id || generateId('PROMO'), branchId: data.branchId || branchId,
+      name, type: data.type || 'percent', value: money(data.value), minPurchase: money(data.minPurchase),
       maxDiscount: money(data.maxDiscount), category: data.category || '', productId: data.productId || '',
       active: data.active !== false, startDate: data.startDate || '', endDate: data.endDate || ''
     };
@@ -248,19 +549,30 @@ export function PosProvider({ children }) {
   });
 
   const saveSupplier = data => commit(data.id ? 'SUPPLIER_UPDATE' : 'SUPPLIER_CREATE', data.name, next => {
-    const item = { id: data.id || generateId('SUP'), branchId: data.branchId || next.configs.activeBranchId, active: true, ...data };
+    const name = String(data.name || '').trim();
+    if (!name) throw new Error('Nama pemasok wajib diisi.');
+    const targetBranchId = data.branchId || branchId;
+    const duplicate = next.suppliers.find(item => item.id !== data.id && item.branchId === targetBranchId && item.active !== false && String(item.name || '').trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) throw new Error(`Pemasok ${name} sudah terdaftar.`);
+    const item = { ...data, id: data.id || generateId('SUP'), branchId: targetBranchId, name, active: data.active !== false };
     const index = next.suppliers.findIndex(row => row.id === item.id);
     if (index >= 0) next.suppliers[index] = item; else next.suppliers.unshift(item);
     return item;
   });
 
   const saveCustomer = data => commit(data.id ? 'CUSTOMER_UPDATE' : 'CUSTOMER_CREATE', data.name, next => {
+    const name = String(data.name || '').trim();
+    if (!name) throw new Error('Nama pelanggan wajib diisi.');
     const existing = next.customers.find(customer => customer.id === data.id);
+    const isCashier = currentUserRef.current?.role === 'kasir';
     const item = {
-      id: data.id || generateId('CUS'), branchId: data.branchId || next.configs.activeBranchId,
-      name: data.name, phone: data.phone || '-', email: data.email || '', type: data.type || 'Reguler',
-      priceTier: data.priceTier || 'retail', creditLimit: money(data.creditLimit), points: existing?.points ?? money(data.points),
-      address: data.address || '', project: data.project || '', notes: data.notes || '', active: data.active !== false
+      id: data.id || generateId('CUS'), branchId: existing?.branchId || data.branchId || branchId,
+      name, phone: data.phone || '-', email: data.email || '', type: data.type || 'Reguler',
+      priceTier: isCashier ? (existing?.priceTier || 'retail') : (data.priceTier || 'retail'),
+      creditLimit: isCashier ? money(existing?.creditLimit) : money(data.creditLimit),
+      points: existing?.points ?? 0,
+      address: data.address || '', project: data.project || '', notes: data.notes || '',
+      active: isCashier ? (existing?.active !== false) : data.active !== false
     };
     const index = next.customers.findIndex(row => row.id === item.id);
     if (index >= 0) next.customers[index] = item; else next.customers.unshift(item);
@@ -268,35 +580,33 @@ export function PosProvider({ children }) {
   });
 
   const saveEmployee = async data => {
-    const employeeName = String(data.name || '').trim();
-    if (!employeeName) throw new Error('Nama karyawan wajib diisi.');
-    if (!data.id && !data.pin) throw new Error('PIN 4 digit wajib diisi untuk karyawan baru.');
-    if (data.pin) {
-      for (const user of db.users.filter(user => user.id !== data.id && user.active !== false)) {
-        if (await verifyPinCredential(data.pin, user)) throw new Error(`PIN sudah digunakan oleh ${user.name}. Gunakan PIN lain.`);
-      }
-    }
-    const credential = data.pin ? await createPinCredential(data.pin) : null;
-    return commit(data.id ? 'EMPLOYEE_UPDATE' : 'EMPLOYEE_CREATE', employeeName, next => {
-      const existing = next.users.find(user => user.id === data.id);
-      const item = {
-        ...(existing || {}), id: data.id || generateId('USR'), name: employeeName, role: data.role,
-        branchId: data.branchId || next.configs.activeBranchId, active: data.active !== false,
-        permissions: data.permissions || [], ...(credential || {})
-      };
-      delete item.pin;
-      const index = next.users.findIndex(row => row.id === item.id);
-      if (index >= 0) next.users[index] = item; else next.users.unshift(item);
-      return item;
+    if (!currentUser) throw new Error('Sesi pengguna belum aktif.');
+    if (!navigator.onLine) throw new Error('Pembuatan atau perubahan PIN karyawan memerlukan internet agar kredensial tetap aman.');
+    const profile = await upsertCloudEmployee({
+      ...data,
+      branchId: data.branchId || branchId
     });
+    if (profile) {
+      setDb(previous => {
+        const exists = previous.users.some(user => user.id === profile.id);
+        const users = exists
+          ? previous.users.map(user => user.id === profile.id ? profile : user)
+          : [profile, ...previous.users];
+        const next = { ...previous, users };
+        dbRef.current = next;
+        void saveLocalSnapshot(next, currentUser);
+        return next;
+      });
+    }
+    return profile;
   };
 
   const findOpenShift = (targetBranchId = branchId) => db.shifts.find(item => item.branchId === targetBranchId && item.status === 'OPEN');
 
   const startShift = ({ startingCash, notes }) => commit('SHIFT_START', String(startingCash), next => {
-    if (next.shifts.some(item => item.branchId === next.configs.activeBranchId && item.status === 'OPEN')) throw new Error('Masih ada shift aktif.');
+    if (next.shifts.some(item => item.branchId === branchId && item.status === 'OPEN')) throw new Error('Masih ada shift aktif.');
     const shift = {
-      id: generateId('SHIFT'), branchId: next.configs.activeBranchId, userId: currentUser.id, userName: currentUser.name,
+      id: generateId('SHIFT'), branchId: branchId, userId: currentUser.id, userName: currentUser.name,
       startAt: nowISO(), endAt: null, startingCash: money(startingCash), actualEndingCash: null,
       expectedEndingCash: null, difference: null, status: 'OPEN', notes: notes || ''
     };
@@ -306,7 +616,7 @@ export function PosProvider({ children }) {
   });
 
   const addCashMovement = ({ type, amount, note }) => commit('CASH_MOVEMENT', `${type}:${amount}`, next => {
-    const shift = next.shifts.find(item => item.branchId === next.configs.activeBranchId && item.status === 'OPEN');
+    const shift = next.shifts.find(item => item.branchId === branchId && item.status === 'OPEN');
     if (!shift) throw new Error('Tidak ada shift aktif.');
     const safeAmount = money(amount);
     if (safeAmount <= 0) throw new Error('Nominal kas harus lebih dari Rp 0.');
@@ -316,7 +626,7 @@ export function PosProvider({ children }) {
   });
 
   const endShift = ({ actualEndingCash, notes }) => commit('SHIFT_END', String(actualEndingCash), next => {
-    const shift = next.shifts.find(item => item.branchId === next.configs.activeBranchId && item.status === 'OPEN');
+    const shift = next.shifts.find(item => item.branchId === branchId && item.status === 'OPEN');
     if (!shift) throw new Error('Tidak ada shift aktif.');
     const movements = next.cashMovements.filter(item => item.shiftId === shift.id);
     const expected = movements.reduce((sum, item) => {
@@ -330,11 +640,12 @@ export function PosProvider({ children }) {
   });
 
   const resolveProductStockRows = (next, cartItem) => {
-    const product = next.products.find(row => row.id === cartItem.productId && row.branchId === next.configs.activeBranchId);
+    const product = next.products.find(row => row.id === cartItem.productId && row.branchId === branchId);
+    if (!product && String(cartItem.productId || '').startsWith('CUSTOM-')) return [];
     if (!product) throw new Error(`Produk ${cartItem.name} tidak ditemukan.`);
     if (product.bundleItems?.length) {
       return product.bundleItems.map(component => {
-        const componentProduct = next.products.find(row => row.id === component.productId && row.branchId === next.configs.activeBranchId);
+        const componentProduct = next.products.find(row => row.id === component.productId && row.branchId === branchId);
         if (!componentProduct) throw new Error(`Komponen paket ${component.productId} tidak ditemukan.`);
         return { product: componentProduct, qty: component.qty * cartItem.qty, sourceName: product.name };
       });
@@ -343,7 +654,7 @@ export function PosProvider({ children }) {
   };
 
   const holdSale = payload => commit('BILL_HOLD', payload.name || 'Open Bill', next => {
-    const item = { id: payload.id || generateId('BILL'), branchId: next.configs.activeBranchId, createdAt: nowISO(), updatedAt: nowISO(), ...payload };
+    const item = { id: payload.id || generateId('BILL'), branchId: branchId, createdAt: nowISO(), updatedAt: nowISO(), ...payload };
     const index = next.heldSales.findIndex(row => row.id === item.id);
     if (index >= 0) next.heldSales[index] = item; else next.heldSales.unshift(item);
     return item;
@@ -358,7 +669,7 @@ export function PosProvider({ children }) {
     if (!payload.items?.length) throw new Error('Keranjang kosong.');
     if (payload.items.some(item => Number(item.qty || 0) <= 0 || money(item.price) < 0)) throw new Error('Jumlah atau harga item transaksi tidak valid.');
     if (payload.id && next.sales.some(sale => sale.id === payload.id)) throw new Error('Transaksi ini sudah tersimpan. Hindari menekan tombol bayar dua kali.');
-    const activeShift = next.shifts.find(item => item.branchId === next.configs.activeBranchId && item.status === 'OPEN');
+    const activeShift = next.shifts.find(item => item.branchId === branchId && item.status === 'OPEN');
     const cashTotal = (payload.payments || []).filter(payment => payment.type === 'cash').reduce((sum, payment) => sum + money(payment.amount), 0);
     if (next.configs.requireShiftForCash && cashTotal > 0 && !activeShift) throw new Error('Mulai shift sebelum menerima pembayaran tunai.');
     const creditTotal = (payload.payments || []).filter(payment => payment.type === 'credit').reduce((sum, payment) => sum + money(payment.amount), 0);
@@ -371,14 +682,52 @@ export function PosProvider({ children }) {
       }
     }
 
+    const normalizedItems = payload.items.map(item => {
+      const qty = Number(item.qty || 0);
+      const price = money(item.price);
+      const itemDiscount = money(item.itemDiscount);
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error(`Jumlah ${item.name || 'item'} tidak valid.`);
+      if (itemDiscount > price * qty) throw new Error(`Diskon item ${item.name || 'item'} melebihi subtotal.`);
+      return { ...item, qty, price, itemDiscount, netUnitPrice: Math.max(0, price - itemDiscount / qty) };
+    });
+    const recalculatedSubtotal = Math.round(normalizedItems.reduce((sum, item) => sum + item.price * item.qty - item.itemDiscount, 0));
+    const safeGlobalDiscount = Math.min(recalculatedSubtotal, money(payload.globalDiscount));
+    const activePromo = (payload.appliedPromos || []).map(item => next.promotions.find(promo => promo.id === item.id && promo.active !== false)).find(Boolean);
+    let safePromoDiscount = 0;
+    if (activePromo) {
+      const today = localDateKey();
+      const validDate = (!activePromo.startDate || activePromo.startDate <= today) && (!activePromo.endDate || activePromo.endDate >= today);
+      const eligibleBase = activePromo.productId
+        ? normalizedItems.filter(item => item.productId === activePromo.productId).reduce((sum, item) => sum + item.price * item.qty - item.itemDiscount, 0)
+        : activePromo.category
+          ? normalizedItems.filter(item => item.category === activePromo.category).reduce((sum, item) => sum + item.price * item.qty - item.itemDiscount, 0)
+          : recalculatedSubtotal;
+      if (validDate && recalculatedSubtotal >= money(activePromo.minPurchase)) {
+        safePromoDiscount = activePromo.type === 'percent' ? Math.round(eligibleBase * Math.max(0, Number(activePromo.value || 0)) / 100) : money(activePromo.value);
+        if (money(activePromo.maxDiscount) > 0) safePromoDiscount = Math.min(safePromoDiscount, money(activePromo.maxDiscount));
+      }
+    }
+    safePromoDiscount = Math.min(Math.max(0, recalculatedSubtotal - safeGlobalDiscount), safePromoDiscount);
+    const safePointsRedeemed = money(payload.pointsRedeemed);
+    const safeLoyaltyDiscount = Math.min(
+      Math.max(0, recalculatedSubtotal - safeGlobalDiscount - safePromoDiscount),
+      safePointsRedeemed * money(next.configs.pointValue)
+    );
+    const afterDiscount = Math.max(0, recalculatedSubtotal - safeGlobalDiscount - safePromoDiscount - safeLoyaltyDiscount);
+    const safeTax = next.configs.taxEnabled ? Math.round(afterDiscount * Math.max(0, Number(next.configs.taxRate || 0)) / 100) : 0;
+    const safeService = next.configs.serviceEnabled ? Math.round(afterDiscount * Math.max(0, Number(next.configs.serviceRate || 0)) / 100) : 0;
+    const rawTotal = afterDiscount + safeTax + safeService;
+    const roundingStep = money(next.configs.roundingStep);
+    const recalculatedTotal = roundingStep > 0 ? Math.round(rawTotal / roundingStep) * roundingStep : Math.round(rawTotal);
+
     const paymentTotal = (payload.payments || []).reduce((sum, payment) => sum + money(payment.amount), 0);
-    if (paymentTotal < money(payload.total)) throw new Error('Jumlah pembayaran belum mencukupi total tagihan.');
+    if (paymentTotal < recalculatedTotal) throw new Error('Jumlah pembayaran belum mencukupi total tagihan.');
     const creditPayments = (payload.payments || []).filter(payment => payment.type === 'credit' && money(payment.amount) > 0);
     if (creditPayments.some(payment => !payment.dueDate)) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
-    const overpayment = paymentTotal - money(payload.total);
+    const overpayment = paymentTotal - recalculatedTotal;
     if (overpayment > cashTotal) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan. Kelebihan hanya boleh berasal dari pembayaran tunai sebagai kembalian.');
 
-    const rawStockRows = payload.items.flatMap(item => resolveProductStockRows(next, item));
+    const rawStockRows = normalizedItems.flatMap(item => resolveProductStockRows(next, item));
     const stockMap = new Map();
     for (const row of rawStockRows) {
       const previous = stockMap.get(row.product.id);
@@ -397,13 +746,16 @@ export function PosProvider({ children }) {
     for (const row of stockRows) {
       if (row.product.trackStock !== false) row.product.stock -= row.qty;
       next.stockMovements.unshift({
-        id: generateId('MOV'), branchId: next.configs.activeBranchId, productId: row.product.id, productName: row.product.name,
+        id: generateId('MOV'), branchId: branchId, productId: row.product.id, productName: row.product.name,
         type: 'SALE', qtyChange: -row.qty, refId: saleId, note: [...row.sourceNames].join(', '), createdAt: nowISO(), userId: currentUser.id
       });
     }
     const sale = {
-      ...payload, id: saleId, branchId: next.configs.activeBranchId, createdAt: nowISO(), status: 'COMPLETED',
-      refundedTotal: 0, syncStatus: 'PENDING', createdBy: currentUser.id
+      ...payload, items: normalizedItems, id: saleId, branchId: branchId, createdAt: nowISO(), status: 'COMPLETED',
+      globalDiscount: safeGlobalDiscount, promoDiscount: safePromoDiscount, loyaltyDiscount: safeLoyaltyDiscount,
+      subtotal: recalculatedSubtotal, tax: safeTax, service: safeService, rounding: recalculatedTotal - rawTotal,
+      total: recalculatedTotal, change: overpayment, pointsRedeemed: safePointsRedeemed,
+      refundedTotal: 0, syncStatus: navigator.onLine ? 'QUEUED' : 'OFFLINE_QUEUED', createdBy: currentUser.id
     };
     next.sales.unshift(sale);
     if (payload.heldSaleId) next.heldSales = next.heldSales.filter(row => row.id !== payload.heldSaleId);
@@ -423,20 +775,19 @@ export function PosProvider({ children }) {
     }
     const customer = next.customers.find(item => item.id === payload.customerId);
     if (customer && next.configs.loyaltyEnabled && customer.name !== 'Umum (Non-Member)') {
-      const redeemed = money(payload.pointsRedeemed);
+      const redeemed = safePointsRedeemed;
       if (redeemed > money(customer.points)) throw new Error('Poin yang ditukar melebihi saldo poin pelanggan.');
-      const earned = Math.floor(money(payload.total) / Math.max(1, money(next.configs.pointRate)));
+      const earned = Math.floor(recalculatedTotal / Math.max(1, money(next.configs.pointRate)));
       customer.points = money(customer.points) - redeemed + earned;
       sale.pointsEarned = earned;
     }
     return sale;
   });
 
-  const authorizeManagerPin = async pin => {
-    for (const user of db.users.filter(item => item.active !== false && ['owner', 'manager'].includes(item.role))) {
-      if (await verifyPinCredential(pin, user)) return user;
-    }
-    return null;
+  const authorizeManagerPin = async (pin, purpose = 'GENERAL') => {
+    if (!navigator.onLine) throw new Error('Approval Manager untuk refund/void memerlukan koneksi internet.');
+    const result = await verifyCloudManagerPin(pin, purpose);
+    return result?.success ? result : null;
   };
 
   const refundSale = async payload => {
@@ -465,10 +816,11 @@ export function PosProvider({ children }) {
     const amount = Math.min(Math.max(0, money(sale.total) - money(sale.refundedTotal)), calculatedRefund);
     if (amount <= 0) throw new Error('Nilai refund tidak valid atau transaksi sudah direfund penuh.');
     if (currentUser.role === 'kasir' || amount >= money(db.configs.refundApprovalLimit)) {
-      const approver = await authorizeManagerPin(payload.managerPin);
-      if (!approver) throw new Error('PIN Manager/Owner tidak valid.');
-      payload.approvedBy = approver.id;
-      payload.approvedByName = approver.name;
+      const approval = await authorizeManagerPin(payload.managerPin, payload.voidAll ? 'SALE_VOID' : 'SALE_REFUND');
+      if (!approval) throw new Error('PIN Manager/Owner tidak valid.');
+      payload.approvedBy = approval.user.id;
+      payload.approvedByName = approval.user.name;
+      payload.approvalToken = approval.approvalToken;
     }
     return commit(payload.voidAll ? 'SALE_VOID' : 'SALE_REFUND', `${payload.saleId}:${amount}`, next => {
       const target = next.sales.find(item => item.id === payload.saleId);
@@ -501,7 +853,7 @@ export function PosProvider({ children }) {
       const activeShift = next.shifts.find(item => item.branchId === target.branchId && item.status === 'OPEN');
       if (activeShift && refund.method === 'Tunai') next.cashMovements.unshift({ id: generateId('CASH'), branchId: target.branchId, shiftId: activeShift.id, type: 'REFUND', amount, note: refund.id, createdAt: refund.createdAt, userId: currentUser.id });
       return refund;
-    });
+    }, { approvalToken: payload.approvalToken || '' });
   };
 
   const savePurchase = payload => commit(payload.id ? 'PURCHASE_UPDATE' : 'PURCHASE_CREATE', payload.invoiceNo || '', next => {
@@ -511,7 +863,7 @@ export function PosProvider({ children }) {
     const status = payload.status || 'DRAFT';
     if (!['DRAFT', 'ORDERED', 'RECEIVED', 'CANCELLED'].includes(status)) throw new Error('Status pembelian tidak valid.');
     const invoiceNo = String(payload.invoiceNo || '').trim() || generateId('PO');
-    const duplicateInvoice = next.purchases.find(item => item.id !== payload.id && item.branchId === next.configs.activeBranchId && String(item.invoiceNo || '').trim().toLowerCase() === invoiceNo.toLowerCase());
+    const duplicateInvoice = next.purchases.find(item => item.id !== payload.id && item.branchId === branchId && String(item.invoiceNo || '').trim().toLowerCase() === invoiceNo.toLowerCase());
     if (duplicateInvoice) throw new Error(`Nomor faktur ${invoiceNo} sudah digunakan.`);
     if (status !== 'DRAFT' && !payload.supplierId) throw new Error('Pemasok wajib dipilih.');
     if (status !== 'DRAFT' && !payload.items?.length) throw new Error('Tambahkan minimal satu barang.');
@@ -535,7 +887,7 @@ export function PosProvider({ children }) {
 
     const purchase = {
       ...(existing || {}), ...payload, invoiceNo, status, items, subtotal, additional, discount, total, paid,
-      id: payload.id || generateId('BUY'), branchId: next.configs.activeBranchId,
+      id: payload.id || generateId('BUY'), branchId: branchId,
       createdAt: existing?.createdAt || nowISO(), updatedAt: nowISO(), inventoryApplied: false
     };
     if (purchase.status === 'RECEIVED') {
@@ -564,6 +916,8 @@ export function PosProvider({ children }) {
     if (!purchase) throw new Error('Pembelian tidak ditemukan.');
     if (!purchase.inventoryApplied || purchase.status !== 'RECEIVED') throw new Error('Hanya pembelian yang sudah diterima yang dapat diretur.');
     let total = 0;
+    const purchaseGross = purchase.items.reduce((sum, row) => sum + quantity(row.qty) * money(row.price), 0);
+    const purchaseAllocationRatio = purchaseGross > 0 ? money(purchase.total) / purchaseGross : 0;
     for (const item of payload.items) {
       const original = purchase.items.find(row => row.id === item.id || row.productId === item.productId);
       if (!original) throw new Error(`Item ${item.name || item.productId} tidak ditemukan pada pembelian.`);
@@ -571,10 +925,11 @@ export function PosProvider({ children }) {
       const remaining = Math.max(0, Number(original.qty || 0) - alreadyReturned);
       if (Number(item.qty || 0) <= 0 || Number(item.qty) > remaining) throw new Error(`Jumlah retur ${original.name} melebihi sisa yang dapat diretur (${remaining}).`);
       const product = next.products.find(row => row.id === item.productId && row.branchId === purchase.branchId);
-      if (!product || product.stock < item.qty) throw new Error(`Stok ${item.name} tidak cukup untuk retur.`);
-      product.stock -= money(item.qty);
-      total += money(item.qty) * money(original.price);
-      next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE_RETURN', qtyChange: -money(item.qty), refId: purchase.id, note: payload.reason, createdAt: nowISO(), userId: currentUser.id });
+      const returnQty = quantity(item.qty);
+      if (!product || product.stock < returnQty) throw new Error(`Stok ${item.name} tidak cukup untuk retur.`);
+      product.stock -= returnQty;
+      total += Math.round(returnQty * money(original.price) * purchaseAllocationRatio);
+      next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE_RETURN', qtyChange: -returnQty, refId: purchase.id, note: payload.reason, createdAt: nowISO(), userId: currentUser.id });
     }
     purchase.returns = [...(purchase.returns || []), { id: generateId('PRET'), items: payload.items, total, reason: payload.reason, createdAt: nowISO() }];
     const payable = next.payables.find(item => item.purchaseId === purchase.id && item.status === 'OPEN');
@@ -610,7 +965,7 @@ export function PosProvider({ children }) {
 
   const addExpense = data => commit('EXPENSE_CREATE', data.note, next => {
     if (money(data.amount) <= 0) throw new Error('Nominal pengeluaran harus lebih dari Rp 0.');
-    const item = { id: generateId('EXP'), branchId: next.configs.activeBranchId, category: data.category || 'Operasional', amount: money(data.amount), note: data.note || '', method: data.method || 'Tunai', createdAt: nowISO(), userId: currentUser.id };
+    const item = { id: generateId('EXP'), branchId: branchId, category: data.category || 'Operasional', amount: money(data.amount), note: data.note || '', method: data.method || 'Tunai', createdAt: nowISO(), userId: currentUser.id };
     next.expenses.unshift(item);
     const activeShift = next.shifts.find(row => row.branchId === item.branchId && row.status === 'OPEN');
     if (activeShift && item.method === 'Tunai') next.cashMovements.unshift({ id: generateId('CASH'), branchId: item.branchId, shiftId: activeShift.id, type: 'EXPENSE', amount: item.amount, note: item.note, createdAt: item.createdAt, userId: currentUser.id });
@@ -618,7 +973,7 @@ export function PosProvider({ children }) {
   });
 
   const adjustStock = data => commit('STOCK_ADJUST', data.reason, next => {
-    const product = next.products.find(item => item.id === data.productId && item.branchId === next.configs.activeBranchId);
+    const product = next.products.find(item => item.id === data.productId && item.branchId === branchId);
     if (!product) throw new Error('Produk tidak ditemukan.');
     const change = Number(data.qtyChange) || 0;
     if (change === 0) throw new Error('Perubahan stok tidak boleh 0.');
@@ -632,9 +987,9 @@ export function PosProvider({ children }) {
 
   const stockOpname = ({ counts, notes }) => commit('STOCK_OPNAME', notes, next => {
     if (!Array.isArray(counts) || counts.length === 0) throw new Error('Data stok opname masih kosong.');
-    const opname = { id: generateId('OPN'), branchId: next.configs.activeBranchId, createdAt: nowISO(), userId: currentUser.id, notes: notes || '', items: [] };
+    const opname = { id: generateId('OPN'), branchId: branchId, createdAt: nowISO(), userId: currentUser.id, notes: notes || '', items: [] };
     for (const count of counts) {
-      const product = next.products.find(item => item.id === count.productId && item.branchId === next.configs.activeBranchId);
+      const product = next.products.find(item => item.id === count.productId && item.branchId === branchId);
       if (!product) continue;
       const actual = Number(count.actual);
       if (!Number.isFinite(actual) || actual < 0) throw new Error(`Stok fisik ${product.name} tidak valid.`);
@@ -650,10 +1005,10 @@ export function PosProvider({ children }) {
   });
 
   const transferStock = ({ productId, destinationBranchId, qty, notes }) => commit('STOCK_TRANSFER', `${productId}:${qty}`, next => {
-    const transferQty = money(qty);
+    const transferQty = quantity(qty);
     if (transferQty <= 0) throw new Error('Jumlah transfer harus lebih dari 0.');
-    if (!destinationBranchId || destinationBranchId === next.configs.activeBranchId) throw new Error('Pilih cabang tujuan yang berbeda.');
-    const source = next.products.find(item => item.id === productId && item.branchId === next.configs.activeBranchId);
+    if (!destinationBranchId || destinationBranchId === branchId) throw new Error('Pilih cabang tujuan yang berbeda.');
+    const source = next.products.find(item => item.id === productId && item.branchId === branchId);
     if (!source || source.stock < transferQty) throw new Error('Stok sumber tidak cukup.');
     let destination = next.products.find(item => item.sku === source.sku && item.branchId === destinationBranchId);
     if (!destination) {
@@ -669,7 +1024,9 @@ export function PosProvider({ children }) {
   });
 
   const saveOnlineOrder = data => commit(data.id ? 'ORDER_UPDATE' : 'ORDER_CREATE', data.channel, next => {
-    const item = { id: data.id || generateId('ORD'), branchId: data.branchId || next.configs.activeBranchId, createdAt: data.createdAt || nowISO(), status: data.status || 'NEW', ...data };
+    const channel = String(data.channel || '').trim();
+    if (!channel) throw new Error('Sumber/channel pesanan wajib diisi.');
+    const item = { ...data, id: data.id || generateId('ORD'), branchId: data.branchId || branchId, channel, createdAt: data.createdAt || nowISO(), status: data.status || 'NEW' };
     const index = next.onlineOrders.findIndex(row => row.id === item.id);
     if (index >= 0) next.onlineOrders[index] = item; else next.onlineOrders.unshift(item);
     return item;
@@ -683,57 +1040,103 @@ export function PosProvider({ children }) {
     return bill;
   });
 
-  const savePrinterProfile = data => commit(data.id ? 'PRINTER_UPDATE' : 'PRINTER_CREATE', data.name, next => {
-    const item = { id: data.id || generateId('PRN'), active: true, ...data };
+  const savePrinterProfile = data => {
+    if (!can(currentUserRef.current, 'devices.manage')) throw new Error('Anda tidak memiliki izin mengubah profil printer.');
+    return commit(data.id ? 'PRINTER_UPDATE' : 'PRINTER_CREATE', data.name, next => {
+    const name = String(data.name || '').trim();
+    if (!name) throw new Error('Nama profil printer wajib diisi.');
+    const item = { ...data, id: data.id || generateId('PRN'), name, active: data.active !== false };
     if (item.active) next.printerProfiles.forEach(profile => { profile.active = false; });
     const index = next.printerProfiles.findIndex(row => row.id === item.id);
     if (index >= 0) next.printerProfiles[index] = item; else next.printerProfiles.unshift(item);
     return item;
-  });
+    });
+  };
 
-  const saveCampaign = data => commit(data.id ? 'CAMPAIGN_UPDATE' : 'CAMPAIGN_CREATE', data.title, next => {
-    const item = { id: data.id || generateId('CMP'), active: true, ...data };
+  const saveCampaign = data => {
+    if (!can(currentUserRef.current, 'display.manage')) throw new Error('Anda tidak memiliki izin mengubah kampanye layar pelanggan.');
+    return commit(data.id ? 'CAMPAIGN_UPDATE' : 'CAMPAIGN_CREATE', data.title, next => {
+    const title = String(data.title || '').trim();
+    if (!title) throw new Error('Judul kampanye wajib diisi.');
+    const item = { ...data, id: data.id || generateId('CMP'), title, active: data.active !== false };
     const index = next.campaigns.findIndex(row => row.id === item.id);
     if (index >= 0) next.campaigns[index] = item; else next.campaigns.unshift(item);
     return item;
-  });
+    });
+  };
 
   const saveFeedback = data => commit('FEEDBACK_CREATE', String(data.rating), next => {
-    const item = { id: generateId('FDB'), branchId: next.configs.activeBranchId, createdAt: nowISO(), ...data };
+    const rating = Number(data.rating);
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) throw new Error('Rating harus antara 1 sampai 5.');
+    const item = { ...data, id: generateId('FDB'), branchId: branchId, rating, createdAt: nowISO() };
     next.feedback.unshift(item);
     return item;
   });
 
   const redeemPoints = ({ customerId, points }) => commit('LOYALTY_REDEEM', `${customerId}:${points}`, next => {
+    const safePoints = money(points);
+    if (safePoints <= 0) throw new Error('Jumlah poin yang ditukar harus lebih dari 0.');
     const customer = next.customers.find(item => item.id === customerId);
-    if (!customer || customer.points < points) throw new Error('Poin tidak cukup.');
-    customer.points -= money(points);
-    return { id: customer.id, discount: money(points) * money(next.configs.pointValue) };
+    if (!customer || money(customer.points) < safePoints) throw new Error('Poin tidak cukup.');
+    customer.points -= safePoints;
+    return { id: customer.id, discount: safePoints * money(next.configs.pointValue) };
   });
 
   const exportBackup = () => {
     const snapshot = { ...db, meta: { ...db.meta, exportedAt: nowISO(), version: APP_VERSION } };
     downloadFile(`Bumi-Makmur-POS-backup-${localDateKey()}.json`, JSON.stringify(snapshot, null, 2));
-    setDb(previous => ({ ...previous, meta: { ...previous.meta, lastBackupAt: nowISO() } }));
+    const next = { ...dbRef.current, meta: { ...dbRef.current.meta, lastBackupAt: nowISO() } };
+    dbRef.current = next;
+    setDb(next);
+    void saveLocalSnapshot(next, currentUserRef.current);
   };
 
   const importBackup = async file => {
+    if (currentUser?.role !== 'owner') throw new Error('Hanya Owner yang boleh memulihkan backup cloud.');
+    if (!navigator.onLine) throw new Error('Restore database memerlukan koneksi internet.');
+    if (getOfflineQueueStats(storeCode).count > 0) throw new Error('Sinkronkan seluruh pembaruan offline sebelum melakukan restore.');
     const text = await file.text();
     const parsed = JSON.parse(text);
     if (!parsed?.meta || !Array.isArray(parsed.products) || !Array.isArray(parsed.sales)) throw new Error('File backup tidak valid.');
-    setDb({ ...parsed, meta: { ...parsed.meta, version: APP_VERSION, restoredAt: nowISO() } });
+    const restored = { ...parsed, meta: { ...parsed.meta, version: APP_VERSION, restoredAt: nowISO(), updatedAt: nowISO() } };
+    setCloudSaving(true);
+    try {
+      await replaceCloudDb(dbRef.current, restored, currentUser.storeId || STORE_ID);
+      dbRef.current = restored;
+      setDb(restored);
+      setLocalReady(true);
+      setCloudReady(true);
+      await saveCachedDb(storeCode, restored, currentUser);
+    } finally {
+      setCloudSaving(false);
+    }
   };
 
-  const syncNow = () => commit('SYNC_MANUAL', 'Tandai antrean tersinkron', next => {
-    const timestamp = nowISO();
-    next.syncQueue = next.syncQueue.map(item => ({ ...item, status: 'SYNCED', syncedAt: timestamp }));
-    next.meta.lastSyncAt = timestamp;
-    return { id: 'SYNC', count: next.syncQueue.length };
-  }, { sync: false });
+  const syncNow = async () => {
+    if (!currentUser) throw new Error('Sesi pengguna belum aktif.');
+    if (!navigator.onLine) throw new Error(`Perangkat sedang offline. ${getOfflineQueueStats(storeCode).count} pembaruan tetap aman di perangkat.`);
+    const result = await flushPendingMutations(currentUser);
+    await startCloudSubscription(currentUser);
+    return { id: 'HYBRID_SYNC', count: result.synced || 0, pending: result.pending || 0, conflicts: result.conflicts || 0 };
+  };
 
-  const resetDemo = () => {
+  const resetDemo = async () => {
+    if (currentUser?.role !== 'owner') throw new Error('Hanya Owner yang boleh mereset database.');
+    if (!navigator.onLine) throw new Error('Reset database memerlukan koneksi internet.');
+    if (getOfflineQueueStats(storeCode).count > 0) throw new Error('Sinkronkan seluruh pembaruan offline sebelum reset database.');
     const seed = createSeedDb();
-    setDb(seed); setCurrentUser(null); localStorage.setItem(DB_KEY, JSON.stringify(seed));
+    seed.users = db.users;
+    seed.branches = db.branches.length ? db.branches : seed.branches;
+    seed.shifts = [];
+    seed.cashMovements = [];
+    seed.auditLogs = [];
+    seed.configs = { ...seed.configs, companyName: db.configs.companyName, activeBranchId: db.configs.activeBranchId || MAIN_BRANCH_ID };
+    await replaceCloudDb(dbRef.current, seed, currentUser.storeId || STORE_ID);
+    dbRef.current = seed;
+    setDb(seed);
+    setLocalReady(true);
+    setCloudReady(true);
+    await saveCachedDb(storeCode, seed, currentUser);
   };
 
   const scoped = useMemo(() => ({
@@ -759,8 +1162,11 @@ export function PosProvider({ children }) {
   }), [db, branchId]);
 
   const value = {
-    db, scoped, currentUser, online, branchId, branch, customerDisplay, setCustomerDisplay,
-    deviceSettings, updateDeviceSettings, login, loginWithBiometric, logout, hasPermission, setConfig, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
+    db, scoped, currentUser, online, cloudConfigured, localReady, dataReady: localReady || cloudReady,
+    cloudReady, cloudLoading, cloudSaving, cloudError, pendingSyncCount, syncConflictCount, lastSyncAttemptAt,
+    branchId, branch, customerDisplay, setCustomerDisplay,
+    deviceSettings, updateDeviceSettings, login, loginWithBiometric, logout, signOutAccount, bootstrapStore,
+    hasPermission, setConfig, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,

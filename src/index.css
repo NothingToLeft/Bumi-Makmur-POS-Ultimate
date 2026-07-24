@@ -58,7 +58,7 @@ body {
     .print-controls { display: none !important; }
   }
 
-/* v3.3 Premium visual system */
+/* v4.0 Cloud Enterprise premium visual system */
 :root {
   --bm-emerald-950: #052e26;
   --bm-emerald-900: #064e3b;
@@ -104,3 +104,5 @@ body {
 .premium-page-header { background: linear-gradient(120deg, rgba(255,255,255,.98), rgba(236,253,245,.72)); position: relative; overflow: hidden; }
 .premium-page-header::after { content: ''; position: absolute; width: 180px; height: 180px; border-radius: 999px; right: -80px; top: -120px; background: rgba(16,185,129,.08); pointer-events: none; }
 .theme-dark .premium-page-header { background: linear-gradient(120deg,#1f2937,#172033) !important; }
+.setup-input { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid #e5e7eb; background: #f9fafb; outline: none; font-weight: 700; }
+.setup-input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.12); }

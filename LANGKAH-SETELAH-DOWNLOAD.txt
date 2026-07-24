@@ -1,16 +1,17 @@
-BUMI MAKMUR POS v3.3 — LANGKAH SETELAH DOWNLOAD
+BUMI MAKMUR POS HYBRID ENTERPRISE v4.1
 
-1. Backup JSON dari APK lama jika sudah ada data penting.
-2. Ekstrak ZIP v3.3.
-3. Upload seluruh isi folder ke repository Bumi-Makmur-POS-Ultimate.
-4. Commit dengan pesan:
-   Add premium e-wallet payments, WhatsApp receipt, and receipt customization v3.3
-5. Jika signing key dan GitHub Actions Secrets dari v3.2 sudah ada, JANGAN membuat key baru.
-6. Langsung jalankan Build Signed Android Release.
-7. Hanya bila belum pernah setup signing: jalankan Generate Android Signing Key sekali, simpan .jks, lalu masukkan empat secret.
-8. Tunggu Build Signed Android Release selesai.
-9. Download artifact Bumi-Makmur-POS-signed-release.
-10. Backup data, hapus APK debug lama hanya jika Android menolak update, lalu instal APK signed v3.3 dan Restore JSON.
-11. Setelah login PIN, buka Pengaturan > Keamanan untuk mengaktifkan sidik jari/pengenalan wajah.
+1. Backup JSON dari APK lama bila sudah memiliki data penting.
+2. Ekstrak ZIP project v4.1.
+3. Upload seluruh isi project ke repository GitHub Bumi Makmur POS dan timpa file versi lama.
+4. Pastikan folder .github/workflows ikut terunggah.
+5. Pertahankan Android signing secrets lama; jangan membuat signing key baru.
+6. Tambahkan Firebase build secrets dan FIREBASE_SERVICE_ACCOUNT_JSON sesuai FIREBASE-CLOUD-SETUP.md.
+7. Jalankan GitHub Actions: Deploy Firebase Cloud Backend.
+8. Lakukan setup toko pertama atau restore backup bila database belum dibuat.
+9. Jalankan GitHub Actions: Build Signed Android Hybrid Release.
+10. Download artifact Bumi-Makmur-POS-Hybrid-signed-release dan instal APK.
+11. Uji online, putuskan internet, lakukan transaksi offline, lalu sambungkan internet dan pastikan antrean tersinkron otomatis.
+12. Uji login multi-role, stok, pembelian, hutang/piutang, shift, laporan, kamera, biometrik, QRIS, printer, dan nota WhatsApp.
 
-JANGAN membuat keystore baru untuk update berikutnya.
+Commit yang disarankan:
+Migrate Bumi Makmur POS to Hybrid Offline Auto-Sync Enterprise v4.1

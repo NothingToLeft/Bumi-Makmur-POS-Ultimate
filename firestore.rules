@@ -1,0 +1,167 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function sameStore(storeId) { return signedIn() && request.auth.token.storeId == storeId; }
+    function owner() { return signedIn() && request.auth.token.role == 'owner'; }
+    function manager() { return signedIn() && request.auth.token.role == 'manager'; }
+    function cashier() { return signedIn() && request.auth.token.role == 'kasir'; }
+    function ownerOrManager() { return owner() || manager(); }
+    function sameBranch() { return owner() || resource.data.branchId == request.auth.token.branchId; }
+
+    match /storeCodes/{code} {
+      allow read, write: if false;
+    }
+
+    match /publicReceipts/{token} {
+      allow read: if resource.data.active == true && request.time < resource.data.expiresAt;
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/system/settings {
+      allow read: if sameStore(storeId);
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/privateCredentials/{uid} {
+      allow read, write: if false;
+    }
+
+    match /stores/{storeId}/approvals/{token} {
+      allow read, write: if false;
+    }
+
+    match /stores/{storeId}/mutationReceipts/{mutationId} {
+      allow read, write: if false;
+    }
+
+    match /stores/{storeId}/devices/{deviceId} {
+      allow read: if sameStore(storeId) && ownerOrManager();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/users/{uid} {
+      allow read: if sameStore(storeId);
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/branches/{id} {
+      allow read: if sameStore(storeId);
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/products/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/promotions/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/suppliers/{id} {
+      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/customers/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/sales/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/heldSales/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/purchases/{id} {
+      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/stockMovements/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/stockAdjustments/{id} {
+      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/stockOpnames/{id} {
+      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/stockTransfers/{id} {
+      allow read: if sameStore(storeId) && (
+        owner() ||
+        resource.data.sourceBranchId == request.auth.token.branchId ||
+        resource.data.destinationBranchId == request.auth.token.branchId
+      );
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/expenses/{id} {
+      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/receivables/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/payables/{id} {
+      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/refunds/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/shifts/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/cashMovements/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/onlineOrders/{id} {
+      allow read: if sameStore(storeId) && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/printerProfiles/{id} {
+      allow read: if sameStore(storeId);
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/campaigns/{id} {
+      allow read: if sameStore(storeId);
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/feedback/{id} {
+      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
+      allow write: if false;
+    }
+
+    match /stores/{storeId}/auditLogs/{id} {
+      allow read: if sameStore(storeId) && ownerOrManager();
+      allow write: if false;
+    }
+  }
+}

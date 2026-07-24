@@ -4,8 +4,8 @@ import {
   MonitorSmartphone, Settings, ListChecks, Tags
 } from 'lucide-react';
 
-export const APP_VERSION = '3.3.0';
-export const DB_KEY = 'bm_pos_ultimate_v3';
+export const APP_VERSION = '4.1.0';
+export const DB_KEY = 'bm_pos_hybrid_v4_1';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
 export const MODULES = [
@@ -37,7 +37,7 @@ export const ROLE_PERMISSIONS = {
     'products.view', 'products.manage', 'promotions.view', 'promotions.manage', 'inventory.view', 'inventory.manage', 'purchases.view',
     'purchases.manage', 'suppliers.view', 'suppliers.manage', 'customers.view', 'customers.manage',
     'shifts.view', 'shifts.manage', 'finance.view', 'finance.manage', 'reports.view', 'orders.view',
-    'orders.manage', 'devices.view', 'display.view', 'settings.view'
+    'orders.manage', 'devices.view', 'devices.manage', 'display.view', 'display.manage', 'settings.view', 'settings.manage'
   ],
   kasir: [
     'pos.use', 'transactions.view', 'products.view', 'customers.view', 'customers.manage',
@@ -126,7 +126,7 @@ const defaultProducts = [
 const now = new Date().toISOString();
 
 export const createSeedDb = () => ({
-  meta: { version: APP_VERSION, createdAt: now, updatedAt: now, lastBackupAt: null, lastSyncAt: null },
+  meta: { version: APP_VERSION, createdAt: now, updatedAt: now, lastBackupAt: null, lastSyncAt: null, hybridMode: true },
   configs: {
     companyName: 'BUMI MAKMUR', address: 'Jl. Pembangunan No. 88, Surabaya', phone: '031-0000000',
     activeBranchId: MAIN_BRANCH_ID, darkMode: false, printAuto: false, taxEnabled: false, taxRate: 11,
@@ -182,5 +182,5 @@ export const createSeedDb = () => ({
     { id: 'PRN-001', name: 'Printer Kasir Utama', type: 'browser', paperWidth: 80, address: '', encoding: 'CP437', autoCut: true, cashDrawer: false, active: true }
   ],
   campaigns: [{ id: 'CMP-001', title: 'Promo Bumi Makmur', message: 'Harga terbaik untuk kebutuhan bangunan, listrik, dan air.', active: true }],
-  feedback: [], auditLogs: [], syncQueue: []
+  feedback: [], auditLogs: []
 });

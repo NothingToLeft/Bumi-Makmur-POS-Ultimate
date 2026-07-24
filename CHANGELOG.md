@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.1.0 — Hybrid Offline + Firebase Auto-Sync
+
+- Mengaktifkan operasional offline melalui IndexedDB dan app shell service worker.
+- Menambahkan queue mutasi persisten, mirror cadangan, auto-sync saat internet kembali, manual sync, dan status antrean.
+- Menambahkan login PIN offline PBKDF2 dengan masa berlaku 30 hari setelah verifikasi online.
+- Menambahkan idempotency receipt, conflict rebase, merge riwayat pembayaran/retur, dan chunk mutasi besar.
+- Mempertahankan seluruh fitur kasir, stok, pembelian, pembayaran digital, nota WhatsApp, multi-cabang, laporan, kamera, biometrik, dan signed release.
+- Memperbaiki double-apply antrean saat restart, stale queue recovery, custom item POS, perhitungan total domain, SKU kosong, stok pecahan, dan validasi data master.
+- Memperketat hak Kasir pada data pelanggan: hanya data kontak; tingkat harga, batas kredit, poin, cabang, dan status divalidasi ulang oleh domain logic serta Cloud Functions.
+- Menambahkan audit retensi fitur dan keamanan; 34 pengujian otomatis lulus.
+
 ## 3.0.0 — Ultimate All Features
 
 - Fondasi data local-first tunggal dengan migrasi data lama, audit log, dan sync queue.
@@ -54,3 +65,21 @@ Catatan: implementasi ini menggunakan pola fitur POS umum. Source, aset, identit
 - Menambahkan migrasi metode pembayaran agar data lama tidak hilang saat e-wallet baru ditambahkan.
 - Memperbarui tampilan global menjadi lebih premium dengan sidebar gradasi, header lembut, kartu pembayaran bermerek, dan nota modern.
 - Menambahkan pengujian nota digital dan metode pembayaran; total 18 pengujian otomatis lulus.
+
+## 4.0.0 — Firebase Cloud Enterprise
+
+- Mengubah sumber data operasional dari local-first menjadi Firebase Cloud online-only.
+- Menghapus service worker offline dan antrean sinkronisasi transaksi lokal.
+- Menambahkan Firebase Authentication custom-token dengan login PIN melalui Cloud Functions.
+- Menambahkan PIN lookup HMAC dan scrypt hash pada koleksi privat yang tidak dapat dibaca klien.
+- Menambahkan Firestore realtime untuk produk, stok, penjualan, pembelian, partner, shift, laporan, dan seluruh cabang.
+- Menambahkan transaksi Firestore atomik dengan optimistic concurrency untuk mencegah stok/data antarperangkat saling menimpa.
+- Menambahkan approval refund/void satu kali dan audit log yang dibuat server-side.
+- Menambahkan role/cabang melalui Firebase custom claims dan Firestore Security Rules.
+- Menambahkan bootstrap toko pertama: store code, Owner, cabang utama, database, dan seed data.
+- Menambahkan pembuatan karyawan serta approval Manager/Owner melalui callable Cloud Functions.
+- Menambahkan Firebase Storage untuk logo, QRIS, dan aset toko.
+- Menambahkan Firebase Hosting serta nota online publik untuk WhatsApp.
+- Menambahkan audit log cloud, backup/restore Firestore, status cloud, dan full Firebase sign-out.
+- Menambahkan workflow deploy Firebase dan build APK/AAB Cloud bertanda tangan.
+- Mempertahankan seluruh modul premium v3.3 tanpa pengurangan fitur.

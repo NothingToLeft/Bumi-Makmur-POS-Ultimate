@@ -46,7 +46,7 @@ export default function POSScreen() {
     const term = search.toLowerCase();
     return product.active !== false && product.available !== false &&
       (category === 'Semua' || product.category === category) && (!favoritesOnly || product.favorite) &&
-      (!term || product.name.toLowerCase().includes(term) || product.sku.toLowerCase().includes(term) || String(product.barcode || '').includes(term));
+      (!term || product.name.toLowerCase().includes(term) || String(product.sku || '').toLowerCase().includes(term) || String(product.barcode || '').includes(term));
   }), [scoped.products, search, category, favoritesOnly]);
 
   const customer = scoped.customers.find(item => item.id === customerId) || scoped.customers[0];
@@ -466,7 +466,7 @@ function ReceiptModal({ sale, configs, onClose }) {
   const [notice, setNotice] = useState('');
   const print = () => window.print();
   const copy = async () => { try { await copyReceiptText(sale, configs); setNotice('Nota berhasil disalin.'); } catch { setNotice('Gagal menyalin nota.'); } };
-  const whatsapp = () => { openWhatsappReceipt(sale, configs, phone); setNotice('WhatsApp dibuka dengan isi nota.'); };
+  const whatsapp = async () => { try { const result=await openWhatsappReceipt(sale, configs, phone); setNotice(result.onlineReceiptUrl?'WhatsApp dibuka dengan link nota online.':'WhatsApp dibuka dengan nota teks.'); } catch { setNotice('Gagal membuka WhatsApp.'); } };
   const share = async () => { try { const native = await shareReceipt(sale, configs); setNotice(native ? 'Menu berbagi dibuka.' : 'Nota disalin karena menu berbagi tidak tersedia.'); } catch (error) { if (error?.name !== 'AbortError') setNotice('Gagal membuka menu berbagi.'); } };
   return (
     <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 md:p-4 receipt-overlay">
