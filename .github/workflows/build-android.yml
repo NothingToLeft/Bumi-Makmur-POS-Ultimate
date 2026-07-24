@@ -10,6 +10,7 @@ jobs:
   build-release:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,18 +41,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           required=(
-            VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID
-            VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID
-            VITE_FIREBASE_APP_ID VITE_FIREBASE_STORE_ID VITE_FIREBASE_STORE_CODE
-            VITE_FIREBASE_FUNCTIONS_REGION VITE_PUBLIC_APP_URL
+            VITE_FIREBASE_API_KEY
+            VITE_FIREBASE_AUTH_DOMAIN
+            VITE_FIREBASE_PROJECT_ID
+            VITE_FIREBASE_STORAGE_BUCKET
+            VITE_FIREBASE_MESSAGING_SENDER_ID
+            VITE_FIREBASE_APP_ID
+            VITE_FIREBASE_STORE_ID
+            VITE_FIREBASE_STORE_CODE
+            VITE_FIREBASE_FUNCTIONS_REGION
+            VITE_PUBLIC_APP_URL
           )
+
           for key in "${required[@]}"; do
             if [ -z "${!key:-}" ]; then
               echo "::error::$key belum diisi pada Settings > Secrets and variables > Actions."
               exit 1
             fi
           done
+
           cat > .env.production <<ENVFILE
           VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
           VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
@@ -88,12 +98,18 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
-            echo "::error::Android signing secrets belum lengkap. Gunakan release keystore yang sama dengan versi sebelumnya."
+
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || \
+             [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || \
+             [ -z "$ANDROID_KEY_ALIAS" ] || \
+             [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::Android signing secrets belum lengkap."
             exit 1
           fi
+
           KEYSTORE_PATH="$RUNNER_TEMP/bumi-makmur-upload.jks"
           export KEYSTORE_PATH
+
           python3 - <<'PYCODE'
           import base64
           import os
@@ -101,33 +117,88 @@ jobs:
           import sys
           from pathlib import Path
 
-          raw = os.environ.get("ANDROID_KEYSTORE_BASE64", "").strip().replace("\ufeff", "")
+          raw = os.environ.get(
+              "ANDROID_KEYSTORE_BASE64",
+              ""
+          ).strip().replace("\ufeff", "")
 
-          # Terima nilai murni, seluruh baris ANDROID_KEYSTORE_BASE64=...,
-          # atau nilai yang tidak sengaja diberi tanda petik/spasi/baris baru.
-          match = re.search(r"ANDROID_KEYSTORE_BASE64\s*=\s*([A-Za-z0-9+/=_-]+)", raw)
-          if match:
-              raw = match.group(1)
+          compact = re.sub(
+              r"\s+",
+              "",
+              raw.strip().strip('"').strip("'")
+          )
 
-          raw = raw.strip().strip('"').strip("'")
-          raw = re.sub(r"\s+", "", raw)
-          raw += "=" * (-len(raw) % 4)
+          # Awalan Base64 file JKS Bumi Makmur.
+          jks_prefix = "/u3+7Q"
+          start = compact.find(jks_prefix)
+
+          if start < 0:
+              print(
+                  "::error::Awalan file JKS tidak ditemukan "
+                  "pada ANDROID_KEYSTORE_BASE64."
+              )
+              sys.exit(1)
+
+          # Base64 valid yang dibuat langsung dari
+          # bumi-makmur-upload.jks memiliki panjang 5308 karakter.
+          expected_length = 5308
+          payload = compact[start:start + expected_length]
+
+          if len(payload) != expected_length:
+              print(
+                  f"::error::Payload Base64 terpotong. "
+                  f"Ditemukan {len(payload)}, "
+                  f"seharusnya {expected_length} karakter."
+              )
+              sys.exit(1)
 
           try:
-              decoded = base64.b64decode(raw, altchars=b"-_", validate=True)
+              decoded = base64.b64decode(
+                  payload,
+                  validate=True
+              )
           except Exception as exc:
-              print(f"::error::ANDROID_KEYSTORE_BASE64 masih tidak valid: {exc}")
-              print("::error::Salin hanya nilai Base64 dari file .jks atau SIGNING-SECRETS.txt, tanpa nama variabel.")
+              print(
+                  f"::error::Payload Base64 JKS "
+                  f"tidak valid: {exc}"
+              )
+              sys.exit(1)
+
+          # Magic bytes file Java KeyStore:
+          # FE ED FE ED
+          if not decoded.startswith(
+              bytes.fromhex("feedfeed")
+          ):
+              print(
+                  "::error::Hasil decode bukan file "
+                  "Java KeyStore yang valid."
+              )
               sys.exit(1)
 
           if len(decoded) < 256:
-              print("::error::Hasil decode keystore terlalu kecil; secret kemungkinan terpotong.")
+              print(
+                  "::error::Ukuran keystore terlalu kecil. "
+                  "Secret kemungkinan terpotong."
+              )
               sys.exit(1)
 
-          Path(os.environ["KEYSTORE_PATH"]).write_bytes(decoded)
-          print(f"Keystore berhasil didekode ({len(decoded)} byte).")
+          Path(
+              os.environ["KEYSTORE_PATH"]
+          ).write_bytes(decoded)
+
+          print(
+              f"Keystore JKS berhasil didekode "
+              f"({len(decoded)} byte, "
+              f"Base64 {expected_length} karakter)."
+          )
           PYCODE
-          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
+
+          keytool -list \
+            -keystore "$KEYSTORE_PATH" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" \
+            >/dev/null
+
           echo "BM_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
           echo "BM_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "BM_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
@@ -141,9 +212,23 @@ jobs:
 
       - name: Verify APK signature
         run: |
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-          test -n "$APKSIGNER" || { echo "::error::apksigner tidak ditemukan."; exit 1; }
-          "$APKSIGNER" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk
+          APKSIGNER=$(
+            find "$ANDROID_HOME/build-tools" \
+              -name apksigner \
+              -type f |
+            sort -V |
+            tail -1
+          )
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner tidak ditemukan."
+            exit 1
+          fi
+
+          "$APKSIGNER" verify \
+            --verbose \
+            --print-certs \
+            android/app/build/outputs/apk/release/app-release.apk
 
       - name: Package release artifacts
         env:
@@ -151,13 +236,34 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
+
           VERSION=$(tr -d '\r\n' < VERSION.txt)
+
           mkdir -p release-package
-          cp android/app/build/outputs/apk/release/app-release.apk "release-package/Bumi-Makmur-POS-Hybrid-v${VERSION}-signed.apk"
-          cp android/app/build/outputs/bundle/release/app-release.aab "release-package/Bumi-Makmur-POS-Hybrid-v${VERSION}-signed.aab"
-          sha256sum release-package/* > release-package/SHA256SUMS.txt
-          keytool -list -v -keystore "$BM_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" > release-package/SIGNING-CERTIFICATE.txt
-          printf 'Versi: %s\nPackage ID: app.bumimakmur.pos\nMode: Hybrid offline + Firebase auto-sync\nGunakan release keystore yang sama untuk seluruh update berikutnya.\n' "$VERSION" > release-package/INSTALL-NOTES.txt
+
+          cp \
+            android/app/build/outputs/apk/release/app-release.apk \
+            "release-package/Bumi-Makmur-POS-Hybrid-v${VERSION}-signed.apk"
+
+          cp \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            "release-package/Bumi-Makmur-POS-Hybrid-v${VERSION}-signed.aab"
+
+          sha256sum release-package/* \
+            > release-package/SHA256SUMS.txt
+
+          keytool -list -v \
+            -keystore "$BM_KEYSTORE_PATH" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" \
+            > release-package/SIGNING-CERTIFICATE.txt
+
+          printf '%s\n' \
+            "Versi: $VERSION" \
+            "Package ID: app.bumimakmur.pos" \
+            "Mode: Hybrid offline + Firebase auto-sync" \
+            "Gunakan release keystore yang sama untuk semua pembaruan." \
+            > release-package/INSTALL-NOTES.txt
 
       - name: Upload signed release
         uses: actions/upload-artifact@v4
