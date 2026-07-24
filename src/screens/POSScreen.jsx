@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Package, Save, ReceiptText, Star, User, SlidersHorizontal, QrCode, CreditCard, Banknote, WalletCards, Printer, X } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
-import { formatRp, generateId } from '../utils/helpers.js';
-import { Badge, Button, Card, Field, Input, Modal, Select, Textarea } from '../components/ui.jsx';
+import { formatRp, generateId, localDateKey } from '../utils/helpers.js';
+import { Badge, Button, Card, Field, Input, Modal, MoneyInput, Select, Textarea } from '../components/ui.jsx';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
@@ -52,7 +52,7 @@ export default function POSScreen() {
 
   const totals = useMemo(() => {
     const subtotal = cart.reduce((sum, line) => sum + (Number(line.price) * Number(line.qty)) - Number(line.itemDiscount || 0), 0);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const promoCandidates = (scoped.promotions || []).filter(promo => promo.active !== false &&
       (!promo.startDate || promo.startDate <= today) && (!promo.endDate || promo.endDate >= today) && subtotal >= Number(promo.minPurchase || 0))
       .map(promo => {
@@ -124,7 +124,8 @@ export default function POSScreen() {
   const processPayment = async payments => {
     const paid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const credit = payments.find(item => item.type === 'credit');
-    if (!credit && paid < totals.total) throw new Error('Jumlah pembayaran belum mencukupi.');
+    if (paid < totals.total) throw new Error('Jumlah pembayaran belum mencukupi.');
+    if (credit && !credit.dueDate) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
     const sale = completeSale({
       items: cart.map(line => ({ ...line, netUnitPrice: Math.max(0, line.price - Number(line.itemDiscount || 0) / Math.max(1, line.qty)) })),
       customerId: customer?.id, customerName: customer?.name || 'Umum', saleType, notes, globalDiscount: Number(globalDiscount || 0),
@@ -147,7 +148,7 @@ export default function POSScreen() {
       </div>
       <div className="p-4 border-t border-gray-100 shadow-[0_-4px_15px_rgba(0,0,0,.04)] space-y-2 pb-safe">
         <div className="flex justify-between text-sm"><span>Subtotal</span><b>{formatRp(totals.subtotal)}</b></div>
-        <div className="flex items-center justify-between gap-2 text-sm"><span>Diskon Transaksi</span><Input type="number" min="0" max={totals.subtotal} value={globalDiscount} onChange={event => setGlobalDiscount(Number(event.target.value || 0))} className="w-28 min-h-[40px] py-1 text-right"/></div>
+        <div className="flex items-center justify-between gap-2 text-sm"><span>Diskon Transaksi</span><MoneyInput max={Math.max(0, totals.subtotal)} value={globalDiscount} onValueChange={setGlobalDiscount} className="w-32 min-h-[40px] py-1 text-right"/></div>
         {totals.promoDiscount > 0 && <div className="flex justify-between text-sm text-emerald-700"><span>Promo {totals.appliedPromo?.name}</span><b>-{formatRp(totals.promoDiscount)}</b></div>}
         {totals.loyaltyDiscount > 0 && <div className="flex justify-between text-sm text-yellow-700"><span>Reward Poin</span><b>-{formatRp(totals.loyaltyDiscount)}</b></div>}
         {totals.tax > 0 && <div className="flex justify-between text-sm"><span>Pajak {db.configs.taxRate}%</span><b>{formatRp(totals.tax)}</b></div>}
@@ -201,17 +202,43 @@ function LineEditModal({ line, product, onClose, onSave }) {
     const oldFactor = Number(form.factor || 1);
     setForm(previous => { const basePrice = Math.round(previous.basePrice / oldFactor * factor); return { ...previous, unit, factor, baseQty: previous.qty * factor, basePrice, price: basePrice + Number(previous.modifierAmount || 0), modalPrice: Math.round(previous.modalPrice / oldFactor * factor) }; });
   };
-  return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave(form)}>Simpan</Button></>}><div className="space-y-4"><div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>{(product?.conversions?.length || 0) > 0 && <Field label="Satuan"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {item.factor} {product.baseUnit}</option>)}</Select></Field>}<div className="grid grid-cols-2 gap-3"><Field label="Jumlah"><Input type="number" min="0.01" step="0.01" value={form.qty} onChange={event => setForm(previous => ({...previous, qty:Number(event.target.value), baseQty:Number(event.target.value)*previous.factor}))}/></Field><Field label="Harga per Satuan"><Input type="number" min="0" value={form.price} onChange={event => setForm(previous => ({...previous, price:Number(event.target.value)}))}/></Field></div><Field label="Diskon Item (Rp)"><Input type="number" min="0" max={form.price*form.qty} value={form.itemDiscount} onChange={event => setForm(previous => ({...previous,itemDiscount:Number(event.target.value)}))}/></Field><div className="grid grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><Input type="number" min="0" value={form.modifierAmount || 0} onChange={event => { const amount=Number(event.target.value||0); setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]})); }}/></Field></div><Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field></div></Modal>;
+  return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave(form)}>Simpan</Button></>}><div className="space-y-4"><div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>{(product?.conversions?.length || 0) > 0 && <Field label="Satuan"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {item.factor} {product.baseUnit}</option>)}</Select></Field>}<div className="grid grid-cols-2 gap-3"><Field label="Jumlah"><Input type="number" min="0.01" step="0.01" value={form.qty} onChange={event => setForm(previous => ({...previous, qty:Number(event.target.value), baseQty:Number(event.target.value)*previous.factor}))}/></Field><Field label="Harga per Satuan"><MoneyInput value={form.price} onValueChange={value => setForm(previous => ({...previous, price:value}))}/></Field></div><Field label="Diskon Item (Rp)"><MoneyInput max={Math.max(0, form.price * form.qty)} value={form.itemDiscount} onValueChange={value => setForm(previous => ({...previous,itemDiscount:value}))}/></Field><div className="grid grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><MoneyInput value={form.modifierAmount || 0} onValueChange={amount => setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]}))}/></Field></div><Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field></div></Modal>;
 }
 
 function PaymentModal({ total, methods, onClose, onConfirm }) {
-  const [payments, setPayments] = useState([{ id: generateId('PAYLINE'), methodId: methods[0]?.id || 'cash', type: methods[0]?.type || 'cash', name: methods[0]?.name || 'Tunai', amount: total, dueDate: '', reference: '' }]);
+  const firstMethod = methods[0] || { id: 'cash', type: 'cash', name: 'Tunai' };
+  const [payments, setPayments] = useState([{ id: generateId('PAYLINE'), methodId: firstMethod.id, type: firstMethod.type, name: firstMethod.name, amount: total, dueDate: '', reference: '' }]);
   const [error, setError] = useState('');
-  const paid = payments.reduce((sum,item)=>sum+Number(item.amount||0),0);
-  const add = () => { const method=methods[0]; setPayments(previous=>[...previous,{id:generateId('PAYLINE'),methodId:method.id,type:method.type,name:method.name,amount:Math.max(0,total-paid),dueDate:'',reference:''}]); };
-  const update = (id, patch) => setPayments(previous=>previous.map(item=>item.id===id?{...item,...patch}:item));
-  const submit = async () => { try { setError(''); await onConfirm(payments); } catch (err) { setError(err.message); } };
-  return <Modal title="Pembayaran & Split Payment" onClose={onClose} size="lg" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button variant="orange" onClick={submit}>Selesaikan Transaksi</Button></>}><div className="space-y-4"><Card className="p-4 bg-emerald-50 border-emerald-100 text-center"><p className="text-xs font-bold text-emerald-800">Total Tagihan</p><p className="text-3xl font-black text-emerald-700">{formatRp(total)}</p><p className={`text-sm font-bold mt-1 ${paid>=total?'text-emerald-700':'text-orange-600'}`}>Terbayar {formatRp(paid)} · Sisa {formatRp(Math.max(0,total-paid))}</p></Card>{error&&<p className="p-3 bg-red-50 text-red-700 rounded-xl text-sm font-bold">{error}</p>}<div className="space-y-3">{payments.map((payment,index)=><Card key={payment.id} className="p-3"><div className="flex gap-2 items-start"><div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2"><Select value={payment.methodId} onChange={event=>{const method=methods.find(item=>item.id===event.target.value);update(payment.id,{methodId:method.id,type:method.type,name:method.name});}}>{methods.map(method=><option key={method.id} value={method.id}>{method.name}</option>)}</Select><Input type="number" min="0" value={payment.amount} onChange={event=>update(payment.id,{amount:Number(event.target.value)})} placeholder="Nominal"/>{payment.type==='credit'&&<Input type="date" value={payment.dueDate} onChange={event=>update(payment.id,{dueDate:event.target.value})}/>} {payment.type!=='cash'&&payment.type!=='credit'&&<Input value={payment.reference} onChange={event=>update(payment.id,{reference:event.target.value})} placeholder="Nomor referensi (opsional)"/>}</div>{payments.length>1&&<button onClick={()=>setPayments(previous=>previous.filter(item=>item.id!==payment.id))} className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><X size={18}/></button>}</div></Card>)}</div><Button variant="secondary" onClick={add} className="w-full"><Plus size={18}/> Tambah Metode Pembayaran</Button>{payments.some(item=>item.type==='cash')&&paid>total&&<Card className="p-3 bg-orange-50 text-orange-700 text-center font-bold">Kembalian: {formatRp(paid-total)}</Card>}</div></Modal>;
+  const [submitting, setSubmitting] = useState(false);
+  const paid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  const add = () => {
+    const method = methods[0] || firstMethod;
+    setPayments(previous => [...previous, {
+      id: generateId('PAYLINE'), methodId: method.id, type: method.type, name: method.name,
+      amount: Math.max(0, total - paid), dueDate: '', reference: ''
+    }]);
+  };
+
+  const update = (id, patch) => setPayments(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
+
+  const submit = async () => {
+    if (submitting) return;
+    try {
+      setError('');
+      if (payments.some(payment => Number(payment.amount || 0) <= 0)) throw new Error('Semua nominal pembayaran harus lebih dari Rp 0.');
+      if (paid < total) throw new Error('Jumlah pembayaran belum mencukupi total tagihan.');
+      if (payments.some(payment => payment.type === 'credit' && !payment.dueDate)) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
+      if (paid > total && !payments.some(payment => payment.type === 'cash')) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan.');
+      setSubmitting(true);
+      await onConfirm(payments);
+    } catch (err) {
+      setError(err.message || 'Transaksi gagal diproses.');
+      setSubmitting(false);
+    }
+  };
+
+  return <Modal title="Pembayaran & Split Payment" onClose={submitting ? undefined : onClose} size="lg" footer={<><Button variant="secondary" onClick={onClose} disabled={submitting}>Batal</Button><Button variant="orange" onClick={submit} disabled={submitting}>{submitting ? 'Memproses...' : 'Selesaikan Transaksi'}</Button></>}><div className="space-y-4"><Card className="p-4 bg-emerald-50 border-emerald-100 text-center"><p className="text-xs font-bold text-emerald-800">Total Tagihan</p><p className="text-3xl font-black text-emerald-700">{formatRp(total)}</p><p className={`text-sm font-bold mt-1 ${paid>=total?'text-emerald-700':'text-orange-600'}`}>Terbayar {formatRp(paid)} · Sisa {formatRp(Math.max(0,total-paid))}</p></Card>{error&&<p className="p-3 bg-red-50 text-red-700 rounded-xl text-sm font-bold">{error}</p>}<div className="space-y-3">{payments.map(payment=><Card key={payment.id} className="p-3"><div className="flex gap-2 items-start"><div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2"><Select value={payment.methodId} onChange={event=>{const method=methods.find(item=>item.id===event.target.value);if(method)update(payment.id,{methodId:method.id,type:method.type,name:method.name,amount:Math.max(0,total-(paid-payment.amount)),dueDate:method.type==='credit'?payment.dueDate:'',reference:''});}}>{methods.map(method=><option key={method.id} value={method.id}>{method.name}</option>)}</Select><MoneyInput value={payment.amount} onValueChange={amount=>update(payment.id,{amount})} placeholder="Nominal"/>{payment.type==='credit'&&<Input type="date" value={payment.dueDate} onChange={event=>update(payment.id,{dueDate:event.target.value})}/>} {payment.type!=='cash'&&payment.type!=='credit'&&<Input value={payment.reference} onChange={event=>update(payment.id,{reference:event.target.value})} placeholder="Nomor referensi (opsional)"/>}</div>{payments.length>1&&<button onClick={()=>setPayments(previous=>previous.filter(item=>item.id!==payment.id))} disabled={submitting} className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><X size={18}/></button>}</div></Card>)}</div><Button variant="secondary" onClick={add} className="w-full" disabled={submitting}><Plus size={18}/> Tambah Metode Pembayaran</Button>{payments.some(item=>item.type==='cash')&&paid>total&&<Card className="p-3 bg-orange-50 text-orange-700 text-center font-bold">Kembalian: {formatRp(paid-total)}</Card>}</div></Modal>;
 }
 
 function SplitBillModal({ cart, onClose, onSplit }) {
@@ -223,7 +250,7 @@ function SplitBillModal({ cart, onClose, onSplit }) {
 
 function HoldModal({ defaultName, onClose, onSave }) { const [name,setName]=useState(defaultName?`Tagihan ${defaultName}`:'Tagihan Baru'); return <Modal title="Simpan Open Bill" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={()=>onSave(name)} disabled={!name.trim()}>Simpan</Button></>}><Field label="Nama Tagihan"><Input value={name} onChange={event=>setName(event.target.value)} autoFocus/></Field></Modal>; }
 
-function CustomItemModal({ onClose, onAdd }) { const [name,setName]=useState('Item Kustom'); const [price,setPrice]=useState(''); return <Modal title="Nominal / Item Kustom" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={()=>onAdd({lineId:generateId('LINE'),productId:`CUSTOM-${Date.now()}`,name,category:'Kustom',sku:'CUSTOM',barcode:'',qty:1,baseQty:1,unit:'item',factor:1,price:Number(price),modalPrice:0,itemDiscount:0,note:'',variant:'',modifiers:[],bundleItems:[]})} disabled={!name||Number(price)<=0}>Tambah</Button></>}><div className="space-y-3"><Field label="Nama"><Input value={name} onChange={event=>setName(event.target.value)}/></Field><Field label="Nominal"><Input type="number" value={price} onChange={event=>setPrice(event.target.value)} autoFocus/></Field></div></Modal>; }
+function CustomItemModal({ onClose, onAdd }) { const [name,setName]=useState('Item Kustom'); const [price,setPrice]=useState(0); return <Modal title="Nominal / Item Kustom" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={()=>onAdd({lineId:generateId('LINE'),productId:`CUSTOM-${Date.now()}`,name,category:'Kustom',sku:'CUSTOM',barcode:'',qty:1,baseQty:1,unit:'item',factor:1,price:Number(price),modalPrice:0,itemDiscount:0,note:'',variant:'',modifiers:[],bundleItems:[]})} disabled={!name||Number(price)<=0}>Tambah</Button></>}><div className="space-y-3"><Field label="Nama"><Input value={name} onChange={event=>setName(event.target.value)}/></Field><Field label="Nominal"><MoneyInput value={price} onValueChange={setPrice} autoFocus/></Field></div></Modal>; }
 
 function ScannerModal({ products, onClose, onDetected }) {
   const [code, setCode] = useState('');

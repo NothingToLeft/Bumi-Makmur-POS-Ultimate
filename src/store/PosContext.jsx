@@ -156,16 +156,30 @@ export function PosProvider({ children }) {
 
   const saveProduct = data => commit(data.id ? 'PRODUCT_UPDATE' : 'PRODUCT_CREATE', data.name, next => {
     const existing = next.products.find(product => product.id === data.id);
+    const targetBranchId = data.branchId || next.configs.activeBranchId;
+    const sku = String(data.sku || generateId('SKU')).trim();
+    const barcode = String(data.barcode || '').trim();
+    const duplicateSku = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && product.sku.toLowerCase() === sku.toLowerCase());
+    if (duplicateSku) throw new Error(`SKU ${sku} sudah dipakai oleh produk ${duplicateSku.name}.`);
+    if (barcode) {
+      const duplicateBarcode = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && String(product.barcode || '') === barcode);
+      if (duplicateBarcode) throw new Error(`Barcode ${barcode} sudah dipakai oleh produk ${duplicateBarcode.name}.`);
+    }
     const item = {
-      id: data.id || generateId('PRD'), branchId: data.branchId || next.configs.activeBranchId,
-      name: data.name.trim(), category: data.category || 'Lainnya', sku: data.sku || generateId('SKU'),
-      barcode: data.barcode || data.sku || '', baseUnit: data.baseUnit || 'pcs', stock: existing?.stock ?? money(data.stock),
+      id: data.id || generateId('PRD'), branchId: targetBranchId,
+      name: data.name.trim(), category: data.category || 'Lainnya', sku,
+      barcode, baseUnit: data.baseUnit || 'pcs', stock: existing?.stock ?? money(data.stock),
       minStock: money(data.minStock || 0), rack: data.rack || '-', modalPrice: money(data.modalPrice),
       initialModalPrice: existing?.initialModalPrice ?? money(data.modalPrice),
       prices: {
         retail: money(data.prices?.retail ?? data.price),
         wholesale: money(data.prices?.wholesale ?? data.wholesalePrice ?? data.price),
         project: money(data.prices?.project ?? data.projectPrice ?? data.price)
+      },
+      markups: {
+        retail: Math.max(0, Number(data.markups?.retail || 0)),
+        wholesale: Math.max(0, Number(data.markups?.wholesale || 0)),
+        project: Math.max(0, Number(data.markups?.project || 0))
       },
       variants: data.variants || [], conversions: data.conversions || [], bundleItems: data.bundleItems || [],
       favorite: Boolean(data.favorite), available: data.available !== false, active: data.active !== false,
@@ -312,16 +326,34 @@ export function PosProvider({ children }) {
       }
     }
 
-    const stockRows = payload.items.flatMap(item => resolveProductStockRows(next, item));
+    const paymentTotal = (payload.payments || []).reduce((sum, payment) => sum + money(payment.amount), 0);
+    if (paymentTotal < money(payload.total)) throw new Error('Jumlah pembayaran belum mencukupi total tagihan.');
+    const creditPayments = (payload.payments || []).filter(payment => payment.type === 'credit' && money(payment.amount) > 0);
+    if (creditPayments.some(payment => !payment.dueDate)) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
+    const overpayment = paymentTotal - money(payload.total);
+    if (overpayment > 0 && cashTotal <= 0) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan.');
+
+    const rawStockRows = payload.items.flatMap(item => resolveProductStockRows(next, item));
+    const stockMap = new Map();
+    for (const row of rawStockRows) {
+      const previous = stockMap.get(row.product.id);
+      if (previous) {
+        previous.qty += Number(row.qty || 0);
+        previous.sourceNames.add(row.sourceName);
+      } else {
+        stockMap.set(row.product.id, { product: row.product, qty: Number(row.qty || 0), sourceNames: new Set([row.sourceName]) });
+      }
+    }
+    const stockRows = [...stockMap.values()];
     for (const row of stockRows) {
-      if (row.product.trackStock !== false && row.product.stock < row.qty) throw new Error(`Stok ${row.product.name} tidak cukup.`);
+      if (row.product.trackStock !== false && row.product.stock < row.qty) throw new Error(`Stok ${row.product.name} tidak cukup. Tersedia ${row.product.stock}, dibutuhkan ${row.qty}.`);
     }
     const saleId = payload.id || generateId('INV');
     for (const row of stockRows) {
       if (row.product.trackStock !== false) row.product.stock -= row.qty;
       next.stockMovements.unshift({
         id: generateId('MOV'), branchId: next.configs.activeBranchId, productId: row.product.id, productName: row.product.name,
-        type: 'SALE', qtyChange: -row.qty, refId: saleId, note: row.sourceName, createdAt: nowISO(), userId: currentUser.id
+        type: 'SALE', qtyChange: -row.qty, refId: saleId, note: [...row.sourceNames].join(', '), createdAt: nowISO(), userId: currentUser.id
       });
     }
     const sale = {
@@ -362,9 +394,19 @@ export function PosProvider({ children }) {
   const refundSale = async payload => {
     const sale = db.sales.find(item => item.id === payload.saleId);
     if (!sale) throw new Error('Transaksi tidak ditemukan.');
+    if (['REFUNDED', 'VOIDED'].includes(sale.status)) throw new Error('Transaksi ini sudah selesai direfund/dibatalkan.');
+    const previousRefunds = db.refunds.filter(item => item.saleId === sale.id);
+    if (payload.voidAll && previousRefunds.length > 0) throw new Error('Transaksi yang sudah memiliki refund sebagian tidak dapat di-void penuh.');
+    for (const refundItem of payload.items) {
+      const original = sale.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
+      if (!original) throw new Error(`Item ${refundItem.name || refundItem.productId} tidak ditemukan pada transaksi.`);
+      const alreadyRefunded = previousRefunds.reduce((sum, refund) => sum + refund.items.filter(item => item.lineId === original.lineId || item.productId === original.productId).reduce((itemSum, item) => itemSum + Number(item.qty || 0), 0), 0);
+      const remaining = Math.max(0, Number(original.qty || 0) - alreadyRefunded);
+      if (Number(refundItem.qty || 0) <= 0 || Number(refundItem.qty) > remaining) throw new Error(`Jumlah refund ${original.name} melebihi sisa yang dapat direfund (${remaining}).`);
+    }
     const amount = payload.items.reduce((sum, refundItem) => {
       const original = sale.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
-      return sum + (original ? money(original.netUnitPrice ?? original.price) * money(refundItem.qty) : 0);
+      return sum + (original ? money(original.netUnitPrice ?? original.price) * Number(refundItem.qty || 0) : 0);
     }, 0);
     if (currentUser.role === 'kasir' || amount >= money(db.configs.refundApprovalLimit)) {
       const approver = await authorizeManagerPin(payload.managerPin);
@@ -383,7 +425,12 @@ export function PosProvider({ children }) {
       };
       next.refunds.unshift(refund);
       target.refundedTotal = money(target.refundedTotal) + amount;
-      if (payload.voidAll) target.status = 'VOIDED'; else if (target.refundedTotal >= target.total) target.status = 'REFUNDED'; else target.status = 'PARTIAL_REFUND';
+      const allRefunds = [...next.refunds].filter(item => item.saleId === target.id);
+      const fullyRefundedByQty = target.items.every(original => {
+        const returnedQty = allRefunds.reduce((sum, refundRow) => sum + refundRow.items.filter(item => item.lineId === original.lineId || item.productId === original.productId).reduce((itemSum, item) => itemSum + Number(item.qty || 0), 0), 0);
+        return returnedQty >= Number(original.qty || 0);
+      });
+      if (payload.voidAll) target.status = 'VOIDED'; else if (fullyRefundedByQty) target.status = 'REFUNDED'; else target.status = 'PARTIAL_REFUND';
       if (payload.restock) {
         for (const refundItem of payload.items) {
           const original = target.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
@@ -433,6 +480,11 @@ export function PosProvider({ children }) {
     if (!purchase) throw new Error('Pembelian tidak ditemukan.');
     let total = 0;
     for (const item of payload.items) {
+      const original = purchase.items.find(row => row.id === item.id || row.productId === item.productId);
+      if (!original) throw new Error(`Item ${item.name || item.productId} tidak ditemukan pada pembelian.`);
+      const alreadyReturned = (purchase.returns || []).reduce((sum, purchaseReturn) => sum + purchaseReturn.items.filter(row => row.id === original.id || row.productId === original.productId).reduce((itemSum, row) => itemSum + Number(row.qty || 0), 0), 0);
+      const remaining = Math.max(0, Number(original.qty || 0) - alreadyReturned);
+      if (Number(item.qty || 0) <= 0 || Number(item.qty) > remaining) throw new Error(`Jumlah retur ${original.name} melebihi sisa yang dapat diretur (${remaining}).`);
       const product = next.products.find(row => row.id === item.productId && row.branchId === purchase.branchId);
       if (!product || product.stock < item.qty) throw new Error(`Stok ${item.name} tidak cukup untuk retur.`);
       product.stock -= money(item.qty);

@@ -1,4 +1,4 @@
-# Bumi Makmur POS Ultimate v3.0
+# Bumi Makmur POS Ultimate v3.1
 
 POS local-first untuk toko bahan bangunan, listrik, air, perlengkapan proyek, dan toko retail teknis. Project ini dibangun dari fondasi React/Vite dan sudah disiapkan untuk Web, PWA, HP/tablet Android melalui Capacitor, serta build APK cloud lewat GitHub Actions.
 

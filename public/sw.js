@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bumi-makmur-pos-v3.0.0';
+const CACHE_NAME = 'bumi-makmur-pos-v3.1.0';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {

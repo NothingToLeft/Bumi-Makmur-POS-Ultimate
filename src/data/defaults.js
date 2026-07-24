@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Tags
 } from 'lucide-react';
 
-export const APP_VERSION = '3.0.0';
+export const APP_VERSION = '3.1.0';
 export const DB_KEY = 'bm_pos_ultimate_v3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 

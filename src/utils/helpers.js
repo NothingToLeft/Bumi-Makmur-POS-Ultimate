@@ -6,6 +6,31 @@ export const formatRp = number => {
   }).format(value);
 };
 
+export const formatMoneyInput = value => {
+  const number = Math.max(0, Math.round(Number(value) || 0));
+  return number === 0 ? '' : number.toLocaleString('id-ID');
+};
+
+export const parseMoneyInput = value => {
+  const digits = String(value ?? '').replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  if (!digits) return 0;
+  const parsed = Number(digits);
+  return Number.isSafeInteger(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+};
+
+export const calculateMarkupPrice = (cost, percent) => {
+  const base = Math.max(0, Number(cost) || 0);
+  const markup = Math.max(0, Number(percent) || 0);
+  return Math.round(base * (1 + markup / 100));
+};
+
+export const calculateMarkupPercent = (cost, sellingPrice) => {
+  const base = Math.max(0, Number(cost) || 0);
+  const price = Math.max(0, Number(sellingPrice) || 0);
+  if (base <= 0 || price <= base) return 0;
+  return Math.round(((price - base) / base) * 10000) / 100;
+};
+
 export const generateId = prefix => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `${prefix}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;

@@ -17,3 +17,15 @@
 - PWA offline shell, Capacitor Android, permission perangkat, dan workflow GitHub Actions untuk APK debug.
 
 Catatan: implementasi ini menggunakan pola fitur POS umum. Source, aset, identitas merek, dan implementasi proprietary aplikasi referensi tidak disalin.
+
+## 3.1.0
+- Memperbaiki login yang berhenti pada layar “Memeriksa PIN” setelah PIN salah.
+- Menambahkan input Rupiah dengan pemisah ribuan otomatis dan tanpa angka nol yang menempel di depan.
+- Menambahkan markup persen untuk harga eceran, grosir, dan proyek; harga jual dihitung otomatis dari harga modal.
+- Menambahkan preset markup 10%, 20%, 30%, 40%, dan 50% serta informasi laba per satuan.
+- Memvalidasi SKU dan barcode ganda pada cabang yang sama.
+- Memperketat pembayaran split/tempo, mencegah transaksi ganda, pembayaran kurang, dan kelebihan non-tunai.
+- Menggabungkan kebutuhan stok produk/bundle sebelum transaksi agar stok tidak dapat menjadi negatif dari baris ganda.
+- Membatasi refund dan retur pembelian berdasarkan sisa kuantitas yang benar-benar masih dapat dikembalikan.
+- Memperbaiki penentuan status refund penuh berdasarkan kuantitas, bukan hanya nominal.
+- Memperbaiki kalkulasi pembelian: diskon item tidak boleh melampaui subtotal dan jatuh tempo wajib untuk pembelian tempo yang diterima.

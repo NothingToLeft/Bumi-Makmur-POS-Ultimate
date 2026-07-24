@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Search, ChevronLeft, AlertCircle, CheckCircle2, Printer, Download } from 'lucide-react';
-import { formatRp } from '../utils/helpers.js';
+import { formatMoneyInput, formatRp, parseMoneyInput } from '../utils/helpers.js';
 
 export function Button({ children, className = '', variant = 'primary', size = 'md', ...props }) {
   const variants = {
@@ -21,6 +21,15 @@ export function Field({ label, hint, children, className = '' }) {
 }
 
 export function Input(props) { return <input {...props} className={`field-input ${props.className || ''}`} />; }
+
+export function MoneyInput({ value, onValueChange, className = '', max = Number.MAX_SAFE_INTEGER, ...props }) {
+  const displayValue = formatMoneyInput(value);
+  const handleChange = event => {
+    const parsed = Math.min(max, parseMoneyInput(event.target.value));
+    onValueChange?.(parsed);
+  };
+  return <input {...props} type="text" inputMode="numeric" value={displayValue} onChange={handleChange} placeholder={props.placeholder ?? '0'} className={`field-input tabular-nums ${className}`} />;
+}
 export function Select(props) { return <select {...props} className={`field-input ${props.className || ''}`} />; }
 export function Textarea(props) { return <textarea {...props} className={`field-input min-h-[96px] resize-y ${props.className || ''}`} />; }
 
