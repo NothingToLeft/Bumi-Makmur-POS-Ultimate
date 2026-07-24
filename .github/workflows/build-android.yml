@@ -110,87 +110,84 @@ jobs:
           KEYSTORE_PATH="$RUNNER_TEMP/bumi-makmur-upload.jks"
           export KEYSTORE_PATH
 
-          python3 - <<'PYCODE'
+                    python3 - <<'PYCODE'
           import base64
+          import hashlib
           import os
           import re
           import sys
           from pathlib import Path
 
-          raw = os.environ.get(
-              "ANDROID_KEYSTORE_BASE64",
-              ""
-          ).strip().replace("\ufeff", "")
+          raw = os.environ.get("ANDROID_KEYSTORE_BASE64", "")
 
-          compact = re.sub(
-              r"\s+",
-              "",
-              raw.strip().strip('"').strip("'")
-          )
+          # Hapus BOM, zero-width character, spasi, baris baru,
+          # tanda petik, nama variabel, dan karakter lain yang
+          # bukan bagian dari Base64.
+          raw = raw.replace("\ufeff", "")
+          raw = raw.replace("\u200b", "")
+          raw = raw.replace("\u200c", "")
+          raw = raw.replace("\u200d", "")
+          raw = raw.replace("\u2060", "")
 
-          # Awalan Base64 file JKS Bumi Makmur.
-          jks_prefix = "/u3+7Q"
-          start = compact.find(jks_prefix)
+          prefix = "/u3+7Q"
+          start = raw.find(prefix)
 
           if start < 0:
-              print(
-                  "::error::Awalan file JKS tidak ditemukan "
-                  "pada ANDROID_KEYSTORE_BASE64."
-              )
+              print("::error::Awalan Base64 keystore /u3+7Q tidak ditemukan.")
               sys.exit(1)
 
-          # Base64 valid yang dibuat langsung dari
-          # bumi-makmur-upload.jks memiliki panjang 5308 karakter.
+          raw = raw[start:]
+
+          # Pertahankan hanya karakter alfabet Base64.
+          cleaned = re.sub(r"[^A-Za-z0-9+/=]", "", raw)
+
           expected_length = 5308
-          payload = compact[start:start + expected_length]
 
-          if len(payload) != expected_length:
+          if len(cleaned) < expected_length:
               print(
-                  f"::error::Payload Base64 terpotong. "
-                  f"Ditemukan {len(payload)}, "
-                  f"seharusnya {expected_length} karakter."
+                  f"::error::Base64 terpotong. "
+                  f"Ditemukan {len(cleaned)} karakter, "
+                  f"seharusnya {expected_length}."
               )
               sys.exit(1)
+
+          payload = cleaned[:expected_length]
 
           try:
-              decoded = base64.b64decode(
-                  payload,
-                  validate=True
-              )
+              decoded = base64.b64decode(payload, validate=True)
           except Exception as exc:
+              print(f"::error::Base64 masih tidak valid: {exc}")
+              sys.exit(1)
+
+          if len(decoded) != 3980:
               print(
-                  f"::error::Payload Base64 JKS "
-                  f"tidak valid: {exc}"
+                  f"::error::Ukuran JKS salah. "
+                  f"Ditemukan {len(decoded)} byte, seharusnya 3980 byte."
               )
               sys.exit(1)
 
-          # Magic bytes file Java KeyStore:
-          # FE ED FE ED
-          if not decoded.startswith(
-              bytes.fromhex("feedfeed")
-          ):
-              print(
-                  "::error::Hasil decode bukan file "
-                  "Java KeyStore yang valid."
-              )
+          if not decoded.startswith(bytes.fromhex("feedfeed")):
+              print("::error::Hasil decode bukan Java KeyStore yang valid.")
               sys.exit(1)
 
-          if len(decoded) < 256:
-              print(
-                  "::error::Ukuran keystore terlalu kecil. "
-                  "Secret kemungkinan terpotong."
-              )
-              sys.exit(1)
-
-          Path(
-              os.environ["KEYSTORE_PATH"]
-          ).write_bytes(decoded)
-
-          print(
-              f"Keystore JKS berhasil didekode "
-              f"({len(decoded)} byte, "
-              f"Base64 {expected_length} karakter)."
+          expected_sha256 = (
+              "fc54097137ce8ce179d11a1cbb0002cb"
+              "8716290108701c87d76ef9d374c364ca"
           )
+
+          actual_sha256 = hashlib.sha256(decoded).hexdigest()
+
+          if actual_sha256 != expected_sha256:
+              print("::error::Isi keystore berbeda atau Base64 rusak.")
+              print(f"::error::SHA-256 terdeteksi: {actual_sha256}")
+              sys.exit(1)
+
+          output_path = Path(os.environ["KEYSTORE_PATH"])
+          output_path.write_bytes(decoded)
+
+          print("Keystore berhasil didekode dan diverifikasi.")
+          print(f"Ukuran JKS: {len(decoded)} byte.")
+          print(f"SHA-256: {actual_sha256}")
           PYCODE
 
           keytool -list \
