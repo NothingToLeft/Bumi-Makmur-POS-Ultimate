@@ -1,14 +1,15 @@
-name: Build Web and Android APK
+name: Build Signed Android Hybrid Release
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  build-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,6 +25,46 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Validate Firebase build configuration
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_STORE_ID: ${{ secrets.VITE_FIREBASE_STORE_ID }}
+          VITE_FIREBASE_STORE_CODE: ${{ secrets.VITE_FIREBASE_STORE_CODE }}
+          VITE_FIREBASE_FUNCTIONS_REGION: ${{ secrets.VITE_FIREBASE_FUNCTIONS_REGION }}
+          VITE_PUBLIC_APP_URL: ${{ secrets.VITE_PUBLIC_APP_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID
+            VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID
+            VITE_FIREBASE_APP_ID VITE_FIREBASE_STORE_ID VITE_FIREBASE_STORE_CODE
+            VITE_FIREBASE_FUNCTIONS_REGION VITE_PUBLIC_APP_URL
+          )
+          for key in "${required[@]}"; do
+            if [ -z "${!key:-}" ]; then
+              echo "::error::$key belum diisi pada Settings > Secrets and variables > Actions."
+              exit 1
+            fi
+          done
+          cat > .env.production <<ENVFILE
+          VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
+          VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
+          VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
+          VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET
+          VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
+          VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
+          VITE_FIREBASE_STORE_ID=$VITE_FIREBASE_STORE_ID
+          VITE_FIREBASE_STORE_CODE=$VITE_FIREBASE_STORE_CODE
+          VITE_FIREBASE_FUNCTIONS_REGION=$VITE_FIREBASE_FUNCTIONS_REGION
+          VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL
+          ENVFILE
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -33,28 +74,70 @@ jobs:
       - name: Build web application
         run: npm run build
 
-      - name: Upload web build
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bumi-Makmur-POS-web-dist
-          path: dist
-          if-no-files-found: error
-
       - name: Create and sync Android project
         run: |
           npx cap add android
-          npm run android:prepare
           npx cap sync android
+          npm run android:prepare
 
-      - name: Build debug APK
+      - name: Prepare release signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::Android signing secrets belum lengkap. Gunakan release keystore yang sama dengan versi sebelumnya."
+            exit 1
+          fi
+          KEYSTORE_PATH="$RUNNER_TEMP/bumi-makmur-upload.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          echo "BM_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "BM_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "BM_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "BM_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build signed APK and AAB
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew --no-daemon clean assembleRelease bundleRelease
 
-      - name: Upload APK
+      - name: Verify APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$APKSIGNER" || { echo "::error::apksigner tidak ditemukan."; exit 1; }
+          "$APKSIGNER" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Package release artifacts
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '\r\n' < VERSION.txt)
+          mkdir -p release-package
+          cp android/app/build/outputs/apk/release/app-release.apk "release-package/Bumi-Makmur-POS-Hybrid-v${VERSION}-signed.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "release-package/Bumi-Makmur-POS-Hybrid-v${VERSION}-signed.aab"
+          sha256sum release-package/* > release-package/SHA256SUMS.txt
+          keytool -list -v -keystore "$BM_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" > release-package/SIGNING-CERTIFICATE.txt
+          printf 'Versi: %s\nPackage ID: app.bumimakmur.pos\nMode: Hybrid offline + Firebase auto-sync\nGunakan release keystore yang sama untuk seluruh update berikutnya.\n' "$VERSION" > release-package/INSTALL-NOTES.txt
+
+      - name: Upload signed release
         uses: actions/upload-artifact@v4
         with:
-          name: Bumi-Makmur-POS-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Bumi-Makmur-POS-Hybrid-signed-release
+          path: release-package
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bumi-Makmur-POS-Hybrid-web-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 14
