@@ -1,4 +1,4 @@
-name: Deploy Firebase Spark Free Rules and Hosting
+name: Build Signed Android Spark Free Hybrid Release
 
 on:
   workflow_dispatch:
