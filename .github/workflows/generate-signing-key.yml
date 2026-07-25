@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -63,7 +63,7 @@ jobs:
           INFO
 
       - name: Upload signing package once
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Bumi-Makmur-POS-signing-key-KEEP-SAFE
           path: signing-key-keep-safe
