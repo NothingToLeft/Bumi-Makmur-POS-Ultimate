@@ -228,13 +228,72 @@ async function hashPin(pin, saltHex, iterations = 180000) {
   return bytesToHex(bits);
 }
 
-export async function cacheOfflineCredential(storeCode, pin, profile) {
+async function getDeviceSecret(storeKey) {
+  let secret = await cacheGet(`device-secret:${storeKey}`);
+  if (!secret) {
+    secret = randomHex(32);
+    await cachePut(`device-secret:${storeKey}`, secret);
+  }
+  return String(secret);
+}
+
+async function deriveCredentialKey(pin, saltHex, deviceSecretHex, iterations = 220000) {
+  const material = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(`${String(pin)}:${deviceSecretHex}`),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: hexToBytes(saltHex), iterations },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptCloudCredential(storeKey, pin, credential) {
+  if (!credential?.email || !credential?.password) return null;
+  const deviceSecret = await getDeviceSecret(storeKey);
+  const salt = randomHex(16);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const iterations = 220000;
+  const key = await deriveCredentialKey(pin, salt, deviceSecret, iterations);
+  const plaintext = new TextEncoder().encode(JSON.stringify({
+    email: String(credential.email).trim().toLowerCase(),
+    password: String(credential.password)
+  }));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  return { salt, iv: bytesToHex(iv), ciphertext: bytesToHex(encrypted), iterations };
+}
+
+async function decryptCloudCredential(storeKey, pin, encrypted) {
+  if (!encrypted?.salt || !encrypted?.iv || !encrypted?.ciphertext) return null;
+  try {
+    const deviceSecret = await getDeviceSecret(storeKey);
+    const key = await deriveCredentialKey(pin, encrypted.salt, deviceSecret, encrypted.iterations || 220000);
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: hexToBytes(encrypted.iv) },
+      key,
+      hexToBytes(encrypted.ciphertext)
+    );
+    const parsed = JSON.parse(new TextDecoder().decode(plaintext));
+    return parsed?.email && parsed?.password ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function cacheOfflineCredential(storeCode, pin, profile, cloudCredential = null) {
   if (!profile?.id || !/^\d{4}$/.test(String(pin || ''))) return false;
   const key = normalizeStoreKey(storeCode);
   const credentials = (await cacheGet(`credentials:${key}`)) || [];
   const salt = randomHex(16);
   const iterations = 180000;
   const pinHash = await hashPin(pin, salt, iterations);
+  const encryptedCloudCredential = await encryptCloudCredential(key, pin, cloudCredential);
   const record = {
     id: profile.id,
     profile: clone(profile),
@@ -243,7 +302,8 @@ export async function cacheOfflineCredential(storeCode, pin, profile) {
     pinIterations: iterations,
     cachedAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + OFFLINE_CREDENTIAL_TTL_MS).toISOString(),
-    active: profile.active !== false
+    active: profile.active !== false,
+    cloudCredential: encryptedCloudCredential
   };
   const next = credentials.filter(item => item.id !== profile.id);
   next.push(record);
@@ -252,7 +312,7 @@ export async function cacheOfflineCredential(storeCode, pin, profile) {
   return true;
 }
 
-export async function verifyOfflinePin(storeCode, pin) {
+export async function verifyOfflineLogin(storeCode, pin) {
   if (!/^\d{4}$/.test(String(pin || ''))) return null;
   const key = normalizeStoreKey(storeCode);
   const credentials = (await cacheGet(`credentials:${key}`)) || [];
@@ -260,9 +320,19 @@ export async function verifyOfflinePin(storeCode, pin) {
     if (!record?.active || !record?.profile?.id) continue;
     if (record.expiresAt && new Date(record.expiresAt).getTime() < Date.now()) continue;
     const candidate = await hashPin(pin, record.pinSalt, record.pinIterations || 180000);
-    if (candidate === record.pinHash) return clone(record.profile);
+    if (candidate === record.pinHash) {
+      return {
+        profile: clone(record.profile),
+        cloudCredential: await decryptCloudCredential(key, pin, record.cloudCredential)
+      };
+    }
   }
   return null;
+}
+
+export async function verifyOfflinePin(storeCode, pin) {
+  const result = await verifyOfflineLogin(storeCode, pin);
+  return result?.profile || null;
 }
 
 export async function getCachedOfflineProfile(storeCode, userId = '') {

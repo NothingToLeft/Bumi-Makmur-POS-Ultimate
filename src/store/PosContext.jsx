@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { APP_VERSION, MAIN_BRANCH_ID, can, createSeedDb } from '../data/defaults.js';
 import { generateId, safeJSONParse, downloadFile, localDateKey } from '../utils/helpers.js';
-import { firebaseConfigured, DEFAULT_STORE_CODE, STORE_ID } from '../services/firebase.js';
-import { bootstrapCloudStore, getCloudSessionProfile, loginWithCloudPin, signOutCloudAccount, upsertCloudEmployee, verifyCloudManagerPin } from '../services/cloudAuth.js';
+import { auth, firebaseConfigured, DEFAULT_STORE_CODE, STORE_ID } from '../services/firebase.js';
+import { bootstrapCloudStore, connectCloudAccount, getCloudSessionProfile, requestEmployeePasswordReset, signOutCloudAccount, upsertCloudEmployee } from '../services/cloudAuth.js';
 import {
   applyOperationsToDb,
   buildDiffOperations,
@@ -26,7 +26,8 @@ import {
   removePendingMutation,
   replacePendingMutation,
   saveCachedDb,
-  verifyOfflinePin
+  verifyOfflinePin,
+  verifyOfflineLogin
 } from '../services/offlineStore.js';
 
 const PosContext = createContext(null);
@@ -188,6 +189,9 @@ export function PosProvider({ children }) {
   const flushPendingMutations = useCallback(profile => {
     const run = async () => {
       if (!profile || !navigator.onLine || !firebaseConfigured) return { synced: 0, pending: getOfflineQueueStats(storeCode).count };
+      if (!auth?.currentUser || auth.currentUser.uid !== profile.id) {
+        throw new Error('Sesi Firebase tidak cocok dengan pengguna aktif. Hubungkan ulang akun cloud sebelum sinkronisasi.');
+      }
       const queue = readPendingMutations(storeCode);
       if (!queue.length) return { synced: 0, pending: 0, conflicts: 0 };
       setCloudSaving(true);
@@ -206,7 +210,11 @@ export function PosProvider({ children }) {
                 approvalToken: mutation.approvalToken || '',
                 mutationId: mutation.id,
                 offlineCreatedAt: mutation.createdAt,
-                deviceId: deviceSettings.deviceId || ''
+                deviceId: deviceSettings.deviceId || '',
+                branchId: mutation.branchId || profile.branchId || '',
+                userId: mutation.userId || profile.id || '',
+                userName: mutation.userName || profile.name || '',
+                userRole: mutation.userRole || profile.role || ''
               });
               removePendingMutation(storeCode, mutation.id);
               synced += 1;
@@ -402,9 +410,6 @@ export function PosProvider({ children }) {
     if (!requiredPermission || !can(currentUserRef.current, requiredPermission)) {
       throw new Error(`Hak akses ${requiredPermission || action} tidak tersedia untuk akun ini.`);
     }
-    if (!navigator.onLine && currentUserRef.current.role === 'kasir' && ['SALE_REFUND', 'SALE_VOID'].includes(action)) {
-      throw new Error('Refund/void oleh Kasir memerlukan koneksi internet untuk approval Manager yang aman. Transaksi lain tetap dapat berjalan offline.');
-    }
     const before = clone(dbRef.current);
     const next = clone(before);
     const result = mutator(next);
@@ -424,6 +429,7 @@ export function PosProvider({ children }) {
       userId: currentUserRef.current.id,
       userName: currentUserRef.current.name,
       userRole: currentUserRef.current.role,
+      branchId: currentUserRef.current.role === 'owner' ? (deviceSettings.activeBranchId || dbRef.current.configs.activeBranchId || MAIN_BRANCH_ID) : (currentUserRef.current.branchId || MAIN_BRANCH_ID),
       action,
       details: String(details || '').slice(0, 500),
       approvalToken: options.approvalToken || '',
@@ -446,47 +452,67 @@ export function PosProvider({ children }) {
 
   const login = useCallback(async pin => {
     const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
-    if (navigator.onLine && firebaseConfigured) {
-      try {
-        const profile = await loginWithCloudPin(pin, key, {
-          platform: navigator.userAgent,
-          appVersion: APP_VERSION
-        });
-        await cacheOfflineCredential(key, pin, profile);
-        const hydrated = await hydrateLocal(profile);
-        setInitializingApp(!hydrated);
-        setCurrentUser(profile);
-        return { success: true, user: profile, mode: 'online' };
-      } catch (error) {
-        const cachedProfile = await verifyOfflinePin(key, pin).catch(() => null);
-        if (cachedProfile) {
-          const hydrated = await hydrateLocal(cachedProfile);
-          if (hydrated) {
-            setInitializingApp(false);
-            setCurrentUser(cachedProfile);
-            setCloudError('Firebase belum dapat dijangkau. Masuk menggunakan kredensial aman yang tersimpan di perangkat.');
-            return { success: true, user: cachedProfile, mode: 'offline-fallback' };
-          }
-        }
-        return { success: false, message: error?.message || 'PIN tidak dikenali.' };
-      }
-    }
-    let profile = await verifyOfflinePin(key, pin).catch(() => null);
+    const offlineLogin = await verifyOfflineLogin(key, pin).catch(() => null);
+    let profile = offlineLogin?.profile || null;
+
     if (!profile && !firebaseConfigured) {
       profile = await activateLocalSeed(pin);
       if (profile) {
         setInitializingApp(false);
         setCurrentUser(profile);
-        return { success: true, user: profile, mode: 'local-seed' };
+        return { success: true, user: profile, mode: 'local-demo' };
       }
     }
-    if (!profile) return { success: false, message: 'PIN offline belum tersedia. Sambungkan internet dan login sekali pada perangkat ini.' };
+
+    if (!profile) {
+      return {
+        success: false,
+        message: firebaseConfigured
+          ? 'PIN belum terdaftar pada perangkat ini. Tekan “Hubungkan Akun Cloud” sekali, lalu buat PIN 4 digit.'
+          : 'PIN tidak dikenali.'
+      };
+    }
+
     const hydrated = await hydrateLocal(profile);
-    if (!hydrated) return { success: false, message: 'Data offline belum tersedia. Sambungkan internet untuk mengambil database toko terlebih dahulu.' };
-    setInitializingApp(false);
+    if (!hydrated && !navigator.onLine) {
+      return { success: false, message: 'Data offline belum tersedia. Sambungkan internet untuk mengambil database toko terlebih dahulu.' };
+    }
+
+    if (navigator.onLine && firebaseConfigured) {
+      try {
+        if (offlineLogin?.cloudCredential) {
+          const cloudProfile = await connectCloudAccount(offlineLogin.cloudCredential);
+          if (cloudProfile?.id !== profile.id) throw new Error('Kredensial cloud tidak cocok dengan profil PIN.');
+          profile = { ...profile, ...cloudProfile };
+        } else {
+          const cloudProfile = await getCloudSessionProfile();
+          if (cloudProfile?.id === profile.id) profile = { ...profile, ...cloudProfile };
+          else setCloudError('Sesi cloud perlu dihubungkan ulang. Data lokal tetap dapat digunakan.');
+        }
+      } catch (error) {
+        console.warn('Login cloud otomatis belum berhasil; mode lokal tetap dilanjutkan.', error);
+        // Cegah sesi Firebase akun lain mengirim antrean milik profil PIN yang sedang aktif.
+        try { await signOutCloudAccount(); } catch {}
+        setCloudError('Cloud belum terhubung untuk akun ini. Transaksi tetap aman di perangkat dan akan sinkron setelah akun dihubungkan ulang.');
+      }
+    }
+
+    setInitializingApp(!hydrated);
     setCurrentUser(profile);
-    return { success: true, user: profile, mode: 'offline' };
+    return { success: true, user: profile, mode: navigator.onLine ? 'hybrid' : 'offline' };
   }, [activateLocalSeed, deviceSettings.storeCode, hydrateLocal]);
+
+  const connectAccount = useCallback(async ({ email, password, pin }) => {
+    const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
+    if (!navigator.onLine) throw new Error('Hubungkan akun cloud memerlukan koneksi internet.');
+    if (!/^\d{4}$/.test(String(pin || ''))) throw new Error('PIN perangkat harus 4 digit.');
+    const profile = await connectCloudAccount({ email, password });
+    await cacheOfflineCredential(key, pin, profile, { email, password });
+    const hydrated = await hydrateLocal(profile);
+    setInitializingApp(!hydrated);
+    setCurrentUser(profile);
+    return { success: true, user: profile, mode: 'cloud-paired' };
+  }, [deviceSettings.storeCode, hydrateLocal]);
 
   const loginWithBiometric = useCallback(async userId => {
     const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
@@ -539,7 +565,7 @@ export function PosProvider({ children }) {
     const result = await bootstrapCloudStore(payload);
     if (result.requiresSeed) {
       const cloudSeed = clone(seedRef.current);
-      cloudSeed.users = [];
+      cloudSeed.users = [result.profile];
       cloudSeed.shifts = [];
       cloudSeed.cashMovements = [];
       cloudSeed.auditLogs = [];
@@ -559,7 +585,7 @@ export function PosProvider({ children }) {
       await saveCachedDb(payload.storeCode || storeCode, cloudSeed, result.profile);
     }
     setDeviceSettingsState(previous => ({ ...previous, storeCode: payload.storeCode || previous.storeCode }));
-    await cacheOfflineCredential(payload.storeCode || storeCode, payload.ownerPin, result.profile);
+    await cacheOfflineCredential(payload.storeCode || storeCode, payload.ownerPin, result.profile, { email: payload.ownerEmail, password: payload.ownerPassword });
     setInitializingApp(false);
     setCurrentUser(result.profile);
     return result;
@@ -690,7 +716,7 @@ export function PosProvider({ children }) {
 
   const saveEmployee = async data => {
     if (!currentUser) throw new Error('Sesi pengguna belum aktif.');
-    if (!navigator.onLine) throw new Error('Pembuatan atau perubahan PIN karyawan memerlukan internet agar kredensial tetap aman.');
+    if (!navigator.onLine) throw new Error('Pembuatan atau perubahan akun karyawan cloud memerlukan internet.');
     const profile = await upsertCloudEmployee({
       ...data,
       branchId: data.branchId || branchId
@@ -708,6 +734,12 @@ export function PosProvider({ children }) {
       });
     }
     return profile;
+  };
+
+  const resetEmployeePassword = async email => {
+    if (currentUser?.role !== 'owner') throw new Error('Hanya Owner yang dapat mengirim reset password.');
+    if (!navigator.onLine) throw new Error('Reset password memerlukan internet.');
+    return requestEmployeePasswordReset(email);
   };
 
   const findOpenShift = (targetBranchId = branchId) => db.shifts.find(item => item.branchId === targetBranchId && item.status === 'OPEN');
@@ -748,18 +780,41 @@ export function PosProvider({ children }) {
     return shift;
   });
 
-  const resolveProductStockRows = (next, cartItem) => {
-    const product = next.products.find(row => row.id === cartItem.productId && row.branchId === branchId);
+  const resolveProductStockRows = (next, cartItem, targetBranchId = branchId) => {
+    const product = next.products.find(row => row.id === cartItem.productId && row.branchId === targetBranchId);
     if (!product && String(cartItem.productId || '').startsWith('CUSTOM-')) return [];
     if (!product) throw new Error(`Produk ${cartItem.name} tidak ditemukan.`);
     if (product.bundleItems?.length) {
       return product.bundleItems.map(component => {
-        const componentProduct = next.products.find(row => row.id === component.productId && row.branchId === branchId);
+        const componentProduct = next.products.find(row => row.id === component.productId && row.branchId === targetBranchId);
         if (!componentProduct) throw new Error(`Komponen paket ${component.productId} tidak ditemukan.`);
         return { product: componentProduct, qty: component.qty * cartItem.qty, sourceName: product.name };
       });
     }
     return [{ product, qty: cartItem.baseQty ?? cartItem.qty, sourceName: product.name }];
+  };
+
+  const recalculateProductModalPrice = (next, productId, targetBranchId) => {
+    const product = next.products.find(row => row.id === productId && row.branchId === targetBranchId);
+    if (!product) return;
+    const candidates = (next.purchases || [])
+      .filter(purchase => purchase.branchId === targetBranchId && purchase.status === 'RECEIVED' && purchase.inventoryApplied)
+      .flatMap(purchase => (purchase.items || [])
+        .filter(item => item.productId === productId)
+        .map(item => {
+          const returned = (purchase.returns || []).reduce((sum, purchaseReturn) => sum + (purchaseReturn.items || [])
+            .filter(row => row.id === item.id || row.productId === item.productId)
+            .reduce((itemSum, row) => itemSum + Number(row.qty || 0), 0), 0);
+          return {
+            price: money(item.price),
+            remaining: Math.max(0, Number(item.qty || 0) - returned),
+            date: new Date(purchase.updatedAt || purchase.createdAt || 0).getTime() || 0
+          };
+        }))
+      .filter(candidate => candidate.remaining > 0)
+      .sort((first, second) => second.date - first.date);
+    product.modalPrice = candidates[0]?.price ?? money(product.initialModalPrice);
+    product.updatedAt = nowISO();
   };
 
   const holdSale = payload => commit('BILL_HOLD', payload.name || 'Open Bill', next => {
@@ -894,9 +949,16 @@ export function PosProvider({ children }) {
   });
 
   const authorizeManagerPin = async (pin, purpose = 'GENERAL') => {
-    if (!navigator.onLine) throw new Error('Approval Manager untuk refund/void memerlukan koneksi internet.');
-    const result = await verifyCloudManagerPin(pin, purpose);
-    return result?.success ? result : null;
+    const profile = await verifyOfflinePin(storeCode, pin).catch(() => null);
+    if (!profile || !['owner', 'manager'].includes(profile.role) || profile.active === false) {
+      throw new Error('PIN Manager/Owner tidak valid pada perangkat ini. Hubungkan akun Manager/Owner sekali pada perangkat agar approval tersedia.');
+    }
+    return {
+      success: true,
+      purpose,
+      user: profile,
+      approvalToken: `LOCAL-${generateId('APPROVAL')}`
+    };
   };
 
   const refundSale = async payload => {
@@ -952,7 +1014,7 @@ export function PosProvider({ children }) {
         for (const refundItem of payload.items) {
           const original = target.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
           if (!original) continue;
-          const rows = resolveProductStockRows(next, { ...original, qty: refundItem.qty, baseQty: (original.baseQty / original.qty) * refundItem.qty });
+          const rows = resolveProductStockRows(next, { ...original, qty: refundItem.qty, baseQty: (original.baseQty / original.qty) * refundItem.qty }, target.branchId);
           for (const row of rows) {
             if (row.product.trackStock !== false) row.product.stock += row.qty;
             next.stockMovements.unshift({ id: generateId('MOV'), branchId: target.branchId, productId: row.product.id, productName: row.product.name, type: payload.voidAll ? 'VOID' : 'REFUND', qtyChange: row.qty, refId: refund.id, note: payload.reason, createdAt: refund.createdAt, userId: currentUser.id });
@@ -1009,7 +1071,7 @@ export function PosProvider({ children }) {
         next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE', qtyChange: Number(item.qty), refId: purchase.id, note: purchase.invoiceNo, createdAt: nowISO(), userId: currentUser.id });
       }
       purchase.inventoryApplied = true;
-      if (balance > 0) next.payables.unshift({ id: generateId('PAY'), branchId: purchase.branchId, purchaseId: purchase.id, supplierId: purchase.supplierId, supplierName: purchase.supplierName, total: balance, paid: 0, balance, dueDate: purchase.dueDate, status: 'OPEN', payments: [], createdAt: nowISO() });
+      if (balance > 0) next.payables.unshift({ id: generateId('PAY'), branchId: purchase.branchId, purchaseId: purchase.id, supplierId: purchase.supplierId, supplierName: purchase.supplierName, total, paid, balance, dueDate: purchase.dueDate, status: 'OPEN', payments: [], createdAt: nowISO(), updatedAt: nowISO() });
       const activeShift = next.shifts.find(item => item.branchId === purchase.branchId && item.status === 'OPEN');
       if (activeShift && purchase.paymentMethod === 'Tunai' && purchase.paid > 0) next.cashMovements.unshift({ id: generateId('CASH'), branchId: purchase.branchId, shiftId: activeShift.id, type: 'PURCHASE', amount: purchase.paid, note: purchase.id, createdAt: nowISO(), userId: currentUser.id });
     }
@@ -1027,6 +1089,7 @@ export function PosProvider({ children }) {
     let total = 0;
     const purchaseGross = purchase.items.reduce((sum, row) => sum + quantity(row.qty) * money(row.price), 0);
     const purchaseAllocationRatio = purchaseGross > 0 ? money(purchase.total) / purchaseGross : 0;
+    const affectedProductIds = new Set();
     for (const item of payload.items) {
       const original = purchase.items.find(row => row.id === item.id || row.productId === item.productId);
       if (!original) throw new Error(`Item ${item.name || item.productId} tidak ditemukan pada pembelian.`);
@@ -1037,12 +1100,20 @@ export function PosProvider({ children }) {
       const returnQty = quantity(item.qty);
       if (!product || product.stock < returnQty) throw new Error(`Stok ${item.name} tidak cukup untuk retur.`);
       product.stock -= returnQty;
+      affectedProductIds.add(product.id);
       total += Math.round(returnQty * money(original.price) * purchaseAllocationRatio);
       next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE_RETURN', qtyChange: -returnQty, refId: purchase.id, note: payload.reason, createdAt: nowISO(), userId: currentUser.id });
     }
     purchase.returns = [...(purchase.returns || []), { id: generateId('PRET'), items: payload.items, total, reason: payload.reason, createdAt: nowISO() }];
+    purchase.updatedAt = nowISO();
+    affectedProductIds.forEach(productId => recalculateProductModalPrice(next, productId, purchase.branchId));
     const payable = next.payables.find(item => item.purchaseId === purchase.id && item.status === 'OPEN');
-    if (payable) { payable.balance = Math.max(0, payable.balance - total); payable.total = Math.max(payable.paid, payable.total - total); if (payable.balance === 0) payable.status = 'PAID'; }
+    if (payable) {
+      payable.total = Math.max(payable.paid, money(payable.total) - total);
+      payable.balance = Math.max(0, payable.total - money(payable.paid));
+      payable.updatedAt = nowISO();
+      if (payable.balance === 0) payable.status = 'PAID';
+    }
     return { id: purchase.id, total };
   });
 
@@ -1054,6 +1125,7 @@ export function PosProvider({ children }) {
     const paid = Math.min(item.balance, money(amount));
     item.paid += paid; item.balance -= paid; item.payments.unshift({ id: generateId('RCP'), amount: paid, method, createdAt: nowISO(), userId: currentUser.id });
     if (item.balance <= 0) item.status = 'PAID';
+    item.updatedAt = nowISO();
     const activeShift = next.shifts.find(row => row.branchId === item.branchId && row.status === 'OPEN');
     if (activeShift && method === 'Tunai') next.cashMovements.unshift({ id: generateId('CASH'), branchId: item.branchId, shiftId: activeShift.id, type: 'RECEIVABLE_PAYMENT', amount: paid, note: item.id, createdAt: nowISO(), userId: currentUser.id });
     return item;
@@ -1067,6 +1139,7 @@ export function PosProvider({ children }) {
     const paid = Math.min(item.balance, money(amount));
     item.paid += paid; item.balance -= paid; item.payments.unshift({ id: generateId('PPY'), amount: paid, method, createdAt: nowISO(), userId: currentUser.id });
     if (item.balance <= 0) item.status = 'PAID';
+    item.updatedAt = nowISO();
     const activeShift = next.shifts.find(row => row.branchId === item.branchId && row.status === 'OPEN');
     if (activeShift && method === 'Tunai') next.cashMovements.unshift({ id: generateId('CASH'), branchId: item.branchId, shiftId: activeShift.id, type: 'PURCHASE', amount: paid, note: item.id, createdAt: nowISO(), userId: currentUser.id });
     return item;
@@ -1274,9 +1347,9 @@ export function PosProvider({ children }) {
     db, scoped, currentUser, online, cloudConfigured, localReady, dataReady: localReady || cloudReady,
     cloudReady, cloudLoading, initializingApp, cloudSaving, cloudError, pendingSyncCount, syncConflictCount, lastSyncAttemptAt,
     branchId, branch, customerDisplay, setCustomerDisplay,
-    deviceSettings, updateDeviceSettings, login, loginWithBiometric, logout, signOutAccount, bootstrapStore,
+    deviceSettings, updateDeviceSettings, login, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     hasPermission, setConfig, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
-    savePromotion, saveSupplier, saveCustomer, saveEmployee, findOpenShift, startShift, endShift, addCashMovement,
+    savePromotion, saveSupplier, saveCustomer, saveEmployee, resetEmployeePassword, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,
     saveOnlineOrder, convertOrderToBill, savePrinterProfile, saveCampaign, saveFeedback, redeemPoints,

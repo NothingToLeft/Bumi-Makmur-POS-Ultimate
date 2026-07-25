@@ -14,7 +14,7 @@ test('generateId menghasilkan prefix dan nilai unik', () => {
 });
 
 test('safeJSONParse memakai fallback saat data rusak', () => {
-  assert.deepEqual(safeJSONParse('{rusak', { ok: true }), { ok: true });
+  assert.deepEqual(safeJSONParse('{rusak', { ok: true }, { silent: true }), { ok: true });
 });
 
 test('clampMoney membatasi angka negatif dan membulatkan', () => {

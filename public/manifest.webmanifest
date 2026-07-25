@@ -1,42 +1,41 @@
 {
-  "name": "Bumi Makmur POS Hybrid",
+  "name": "Bumi Makmur POS",
   "short_name": "BM POS",
-  "description": "POS profesional Bumi Makmur dengan mode offline, sinkronisasi otomatis Firebase, dan identitas BM premium.",
-  "start_url": "/",
+  "description": "POS profesional Bumi Makmur untuk Android, web, dan PC dengan Firebase Spark FreeSync serta antrean offline otomatis.",
+  "id": "/?source=pwa",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "launch_handler": { "client_mode": "navigate-existing" },
   "background_color": "#052e26",
   "theme_color": "#064e3b",
   "orientation": "any",
-  "icons": [
+  "categories": ["business", "finance", "productivity"],
+  "shortcuts": [
     {
-      "src": "/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
+      "name": "Buka Kasir",
+      "short_name": "Kasir",
+      "url": "/?screen=pos",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
-      "src": "/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
+      "name": "Produk",
+      "short_name": "Produk",
+      "url": "/?screen=products",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
-      "src": "/icons/maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "name": "Laporan",
+      "short_name": "Laporan",
+      "url": "/?screen=reports",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
-  "id": "app.bumimakmur.pos",
-  "categories": [
-    "business",
-    "finance",
-    "productivity"
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

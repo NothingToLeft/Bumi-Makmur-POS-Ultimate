@@ -45,6 +45,6 @@ test('instalasi sebelum Firebase siap masih dapat memakai akun lokal aman', asyn
   const context = await read('src/store/PosContext.jsx');
   assert.match(context, /activateLocalSeed/);
   assert.match(context, /verifySeedUserPin/);
-  assert.match(context, /mode: 'local-seed'/);
+  assert.match(context, /mode: 'local-demo'/);
   assert.match(context, /cacheOfflineCredential/);
 });

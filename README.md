@@ -1,75 +1,60 @@
-# Bumi Makmur POS Hybrid Enterprise v4.2
+# Bumi Makmur POS FreeSync v4.3
 
-> v4.2 memprioritaskan cache perangkat, memindahkan sinkronisasi ke background, menambahkan logo BM premium, dan menyatukan desain nota. Gunakan workflow **test-only** sebelum Firebase siap.
+Satu source code untuk **Android HP/tablet, web, dan aplikasi PC PWA**. Dirancang untuk toko bahan bangunan, listrik, dan air, dengan target utama Infinix Note 40 Pro+ dan Huawei MatePad SE 11.
 
+## Arsitektur tanpa biaya
 
-POS profesional untuk toko bahan bangunan, listrik, dan air. Project ini berjalan sebagai web/PWA dan dapat dibungkus menjadi APK/AAB Android melalui Capacitor.
+- Firebase Authentication Email/Password pada paket Spark.
+- Cloud Firestore pada paket Spark untuk data dan realtime.
+- Firestore persistent cache + antrean lokal terenkripsi untuk operasi offline.
+- Perubahan offline otomatis dikirim ketika internet kembali.
+- Cloudflare Pages sebagai hosting web/PWA utama.
+- Capacitor untuk APK/AAB Android.
+- PWA dapat dipasang di Windows melalui Chrome/Edge.
+- Tidak memakai Cloud Functions, Firebase Storage, atau billing Blaze.
 
-## Mode data hybrid
+## Fitur yang dipertahankan
 
-- Saat internet tersedia, data tersambung realtime ke Firebase.
-- Saat internet terputus, aplikasi tetap dapat dipakai menggunakan cache IndexedDB perangkat.
-- Setiap perubahan offline masuk ke antrean lokal yang persisten.
-- Begitu koneksi kembali, antrean otomatis dikirim ke Cloud Functions dan Firestore.
-- Mutasi memakai ID idempoten agar pengiriman ulang tidak menggandakan transaksi.
-- Konflik stok, poin, pembayaran hutang/piutang, dan retur digabungkan secara aman.
-- Login offline tersedia setelah pengguna berhasil login online minimal sekali pada perangkat tersebut. Kredensial offline berlaku 30 hari dan disimpan sebagai PBKDF2-SHA256, bukan PIN mentah.
+- Kasir, open bill, split bill, split payment, refund, void, retur, shift, audit log.
+- Produk, kategori, varian, modifier, bundle, konversi satuan, barcode, label.
+- Harga modal, markup persen, eceran, grosir, proyek, promo, diskon, pajak.
+- Stok, opname, adjustment, transfer cabang, pembelian, hutang pemasok.
+- Pelanggan, piutang, limit kredit, poin, reward, feedback.
+- Tunai, QRIS, ShopeePay, OVO, GoPay, DANA, transfer, kartu, tempo.
+- Nota 58/80 mm, logo/pesan toko, WhatsApp, gambar nota, nota online.
+- Owner, Store Manager, Kasir, permission khusus, multi-cabang.
+- Kamera barcode, input manual, scanner USB/Bluetooth mode keyboard, biometrik Android, printer profiles, customer display.
+- Dashboard dan laporan omzet, HPP, laba, pembayaran, stok, shift, hutang/piutang.
 
-## Fitur utama
+## Pengujian
 
-- Kasir: barcode kamera/manual/USB, produk favorit, varian, modifier, bundle, item kustom, satuan dan konversi.
-- Harga: modal, markup persen, harga eceran, grosir, dan proyek.
-- Pembayaran: tunai, QRIS, ShopeePay, OVO, GoPay, DANA, transfer, kartu, tempo, split payment.
-- Open bill, split bill, promo, diskon item/transaksi, loyalty, pajak, service, dan pembulatan.
-- Produk, stok minimum, rak, movement, adjustment, opname, transfer cabang, pembelian dan retur.
-- Pelanggan, pemasok, hutang, piutang, cicilan, limit kredit, poin dan reward.
-- Shift, modal awal, kas masuk/keluar, expected cash, selisih, refund dan void.
-- Nota 58/80 mm, logo, pesan toko, nota WhatsApp, bagikan gambar, dan nota online.
-- Laporan omzet, HPP, laba, pembayaran, stok, refund, hutang/piutang, dan shift.
-- Multi-cabang, Owner/Manager/Kasir, Firebase Auth custom token, Firestore Rules, audit log server.
-- Kamera saat startup, biometrik Android, printer profile, layar pelanggan, backup/restore JSON.
+Audit terakhir: **59/59 core tests lulus**, 49 file JS/JSX/MJS lolos pemeriksaan sintaks, relative imports/JSON/secrets/layanan berbayar lolos audit statis.
 
-## Menjalankan web
 
 ```bash
 npm install
-npm run dev
-```
-
-Build produksi:
-
-```bash
 npm run test:core
 npm run build
 ```
 
-## Firebase
+Workflow GitHub menyediakan:
 
-Salin `.env.example` menjadi `.env.local`, isi konfigurasi Firebase, kemudian ikuti `FIREBASE-CLOUD-SETUP.md` dan `HYBRID-OFFLINE-SYNC.md`.
+- `test-only`: core tests, audit statis, dan kompilasi Vite tanpa Firebase/signing.
+- `web-only`: build PWA web/PC.
+- `android-release`: build APK + AAB bertanda tangan.
+- `web-and-android`: keduanya sekaligus.
 
-Cloud backend:
+## Mulai
 
-```bash
-cd functions
-npm install
-cd ..
-npm run firebase:deploy
-```
+1. Ikuti `FIREBASE-SPARK-SETUP.md`.
+2. Deploy rules melalui workflow **Deploy Firebase Spark Rules**.
+3. Ikuti `CLOUDFLARE-PAGES-SETUP.md` untuk web dan PC.
+4. Jalankan workflow Android memakai keystore release yang sama.
 
-## Android signed release
+PIN demo lokal sebelum cloud dipasangkan:
 
-Gunakan workflow GitHub Actions **Build Signed Android Hybrid Release**. Jangan membuat signing key baru bila aplikasi release sebelumnya sudah terpasang. Panduan ada di `ANDROID-SIGNING-SETUP.md`.
+- Owner `1608`
+- Manager `2468`
+- Kasir `1234`
 
-Artifact yang dihasilkan:
-
-```text
-Bumi-Makmur-POS-Hybrid-v4.2.0-signed.apk
-Bumi-Makmur-POS-Hybrid-v4.2.0-signed.aab
-```
-
-## Catatan operasional
-
-- Refund/void oleh Kasir tetap membutuhkan internet untuk approval Manager/Owner yang aman.
-- Pembuatan atau perubahan PIN karyawan, restore cloud, reset database, dan upload aset Firebase membutuhkan internet.
-- Transaksi kasir, pembelian, stok, pelanggan, pengeluaran, shift, hutang/piutang, dan sebagian besar operasi harian tetap dapat dilakukan offline.
-- Lakukan backup JSON berkala walaupun data tersimpan di cloud.
+> PIN demo hanya untuk pengujian lokal. Pada penggunaan cloud, setiap akun memakai Email/Password Firebase saat pemasangan pertama di perangkat, lalu PIN 4 digit/biometrik untuk penggunaan harian.

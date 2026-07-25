@@ -1,21 +1,23 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocFromServer,
   getDocsFromServer,
   onSnapshot,
   query,
-  where
+  runTransaction,
+  setDoc,
+  Timestamp,
+  where,
+  writeBatch
 } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { httpsCallable } from 'firebase/functions';
 import {
+  auth,
   firestore,
   firebaseConfigured,
-  functions,
   PUBLIC_APP_URL,
-  storage,
   STORE_ID
 } from './firebase.js';
 import {
@@ -38,7 +40,7 @@ export {
   stableJson
 };
 
-const GLOBAL_COLLECTIONS = new Set(['branches', 'users', 'printerProfiles', 'campaigns', 'auditLogs']);
+const GLOBAL_COLLECTIONS = new Set(['branches', 'printerProfiles', 'campaigns', 'auditLogs']);
 const CASHIER_COLLECTIONS = new Set([
   'branches', 'products', 'promotions', 'customers', 'sales', 'heldSales',
   'stockMovements', 'receivables', 'refunds', 'shifts', 'cashMovements',
@@ -65,6 +67,12 @@ function collectionRef(name, storeId = STORE_ID) {
 
 function settingsRef(storeId = STORE_ID) {
   return doc(firestore, 'stores', storeId, 'system', 'settings');
+}
+
+function operationRef(operation, storeId = STORE_ID) {
+  return operation.collectionName === '__settings__'
+    ? settingsRef(storeId)
+    : doc(firestore, 'stores', storeId, operation.collectionName, String(operation.id));
 }
 
 function buildQuery(name, profile, storeId = STORE_ID) {
@@ -101,7 +109,7 @@ export function subscribeCloudDb(seed, profile, onChange, onError, storeId = STO
   const emit = () => onChange(clone(state));
   const unsubscribers = [];
 
-  unsubscribers.push(onSnapshot(settingsRef(storeId), snapshot => {
+  unsubscribers.push(onSnapshot(settingsRef(storeId), { includeMetadataChanges: true }, snapshot => {
     if (snapshot.exists()) {
       const settings = snapshot.data();
       for (const key of SETTINGS_KEYS) if (settings[key] !== undefined) state[key] = settings[key];
@@ -112,7 +120,7 @@ export function subscribeCloudDb(seed, profile, onChange, onError, storeId = STO
   for (const name of CLOUD_ENTITY_COLLECTIONS) {
     const targetQuery = buildQuery(name, profile, storeId);
     if (!targetQuery) continue;
-    unsubscribers.push(onSnapshot(targetQuery, snapshot => {
+    unsubscribers.push(onSnapshot(targetQuery, { includeMetadataChanges: true }, snapshot => {
       state = { ...state, [name]: snapshot.docs.map(item => ({ id: item.id, ...item.data() })) };
       emit();
     }, onError));
@@ -120,71 +128,219 @@ export function subscribeCloudDb(seed, profile, onChange, onError, storeId = STO
   return () => unsubscribers.forEach(unsubscribe => unsubscribe());
 }
 
-async function commitOperationsOwner(operations, action = 'OWNER_DATA_REPLACE') {
-  if (!functions) throw new Error('Cloud Functions belum dikonfigurasi.');
-  const callable = httpsCallable(functions, 'applyOwnerDataBatch');
-  for (let index = 0; index < operations.length; index += 250) {
-    const response = await callable({ action, operations: operations.slice(index, index + 250) });
-    if (!response.data?.success) throw new Error('Batch data Owner gagal diterapkan.');
-  }
+function currentData(snapshot) {
+  return snapshot.exists() ? cleanUndefined(snapshot.data()) : null;
+}
+
+function conflictMessage(operation) {
+  const label = operation.collectionName === '__settings__' ? 'pengaturan' : `${operation.collectionName}/${operation.id}`;
+  return `Data ${label} telah berubah di perangkat lain. Perubahan lokal akan digabungkan lalu dicoba kembali.`;
 }
 
 export async function persistOperations(operations, storeId = STORE_ID, context = {}) {
   requireCloud();
   if (!operations?.length) return 0;
-  if (context.direct === true) {
-    await commitOperationsOwner(operations, context.action || 'OWNER_DATA_REPLACE');
+  if (operations.length > 240) throw new Error('Perubahan terlalu besar. Sistem harus memecahnya menjadi beberapa antrean.');
+
+  const mutationId = String(context.mutationId || `MUT-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const receiptRef = doc(firestore, 'stores', storeId, 'mutationReceipts', mutationId);
+  const auditRef = doc(firestore, 'stores', storeId, 'auditLogs', mutationId);
+
+  return runTransaction(firestore, async transaction => {
+    const receiptSnapshot = await transaction.get(receiptRef);
+    if (receiptSnapshot.exists()) return Number(receiptSnapshot.data()?.count || operations.length);
+
+    const refs = operations.map(operation => operationRef(operation, storeId));
+    const snapshots = [];
+    for (const ref of refs) snapshots.push(await transaction.get(ref));
+
+    if (context.direct !== true) {
+      operations.forEach((operation, index) => {
+        const remote = currentData(snapshots[index]);
+        const expected = cleanUndefined(operation.beforeData ?? null);
+        if (stableJson(remote) !== stableJson(expected)) {
+          const error = new Error(conflictMessage(operation));
+          error.code = 'aborted';
+          throw error;
+        }
+      });
+    }
+
+    operations.forEach((operation, index) => {
+      const targetRef = refs[index];
+      if (operation.type === 'delete') transaction.delete(targetRef);
+      else transaction.set(targetRef, cleanUndefined(operation.afterData || {}), { merge: false });
+    });
+
+    const createdAt = new Date().toISOString();
+    transaction.set(auditRef, {
+      id: mutationId,
+      mutationId,
+      action: String(context.action || 'UNKNOWN'),
+      details: String(context.details || '').slice(0, 500),
+      branchId: String(context.branchId || ''),
+      userId: String(context.userId || ''),
+      userName: String(context.userName || ''),
+      userRole: String(context.userRole || ''),
+      deviceId: String(context.deviceId || ''),
+      offlineCreatedAt: String(context.offlineCreatedAt || ''),
+      createdAt,
+      count: operations.length
+    });
+    transaction.set(receiptRef, {
+      id: mutationId,
+      count: operations.length,
+      action: String(context.action || 'UNKNOWN'),
+      userId: String(context.userId || ''),
+      createdAt
+    });
     return operations.length;
-  }
-  if (!functions) throw new Error('Cloud Functions belum dikonfigurasi.');
-  if (operations.length > 240) throw new Error('Perubahan terlalu besar untuk satu transaksi cloud. Pecah operasi menjadi beberapa langkah.');
-  const callable = httpsCallable(functions, 'commitStoreMutation');
-  const response = await callable({
-    action: String(context.action || 'UNKNOWN'),
-    details: String(context.details || '').slice(0, 500),
-    approvalToken: String(context.approvalToken || ''),
-    mutationId: String(context.mutationId || ''),
-    offlineCreatedAt: String(context.offlineCreatedAt || ''),
-    deviceId: String(context.deviceId || ''),
-    operations
   });
-  return Number(response.data?.count || operations.length);
 }
 
 export async function persistDbDiff(before, after, storeId = STORE_ID, context = {}) {
   return persistOperations(buildDiffOperations(before, after), storeId, context);
 }
 
+async function applyDirectOperations(operations, storeId, action) {
+  for (let index = 0; index < operations.length; index += 400) {
+    const batch = writeBatch(firestore);
+    for (const operation of operations.slice(index, index + 400)) {
+      const target = operationRef(operation, storeId);
+      if (operation.type === 'delete') batch.delete(target);
+      else batch.set(target, cleanUndefined(operation.afterData || {}), { merge: false });
+    }
+    const id = `${action}-${Date.now()}-${index}`;
+    batch.set(doc(firestore, 'stores', storeId, 'auditLogs', id), {
+      id,
+      action,
+      details: `${operations.length} operasi`,
+      createdAt: new Date().toISOString(),
+      userId: auth?.currentUser?.uid || '',
+      userName: auth?.currentUser?.displayName || 'Owner',
+      userRole: 'owner'
+    });
+    await batch.commit();
+  }
+}
+
 export async function seedCloudDb(seed, storeId = STORE_ID) {
   requireCloud();
   const empty = Object.fromEntries(CLOUD_ENTITY_COLLECTIONS.map(name => [name, []]));
-  await persistDbDiff(
+  const operations = buildDiffOperations(
     { ...empty, meta: {}, configs: {}, categories: [], units: [] },
-    seed,
-    storeId,
-    { direct: true, action: 'CLOUD_SEED' }
+    seed
   );
+  await applyDirectOperations(operations, storeId, 'CLOUD_SEED');
 }
 
 export async function replaceCloudDb(current, replacement, storeId = STORE_ID) {
   requireCloud();
-  await persistDbDiff(current, replacement, storeId, { direct: true, action: 'CLOUD_RESTORE' });
+  await applyDirectOperations(buildDiffOperations(current, replacement), storeId, 'CLOUD_RESTORE');
 }
 
-export async function uploadStoreAsset(file, kind, storeId = STORE_ID) {
-  if (!storage) throw new Error('Firebase Storage belum dikonfigurasi.');
+function resizeImage(file, { maxDimension, quality, mimeType }) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('File gambar tidak dapat dibaca.'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('Format gambar tidak didukung.'));
+      image.onload = () => {
+        const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d', { alpha: true });
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = 'high';
+        context.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL(mimeType, quality));
+      };
+      image.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function uploadStoreAsset(file, kind) {
   if (!file) throw new Error('File belum dipilih.');
-  const safeName = String(file.name || 'asset').replace(/[^a-zA-Z0-9._-]/g, '-');
-  const target = ref(storage, `stores/${storeId}/assets/${kind}/${Date.now()}-${safeName}`);
-  await uploadBytes(target, file, { contentType: file.type || 'application/octet-stream' });
-  return getDownloadURL(target);
+  if (!String(file.type || '').startsWith('image/')) throw new Error('File harus berupa gambar.');
+  if (file.size > 12 * 1024 * 1024) throw new Error('Gambar terlalu besar. Maksimal 12 MB sebelum kompresi.');
+  const isQris = kind === 'qris';
+  const dataUrl = await resizeImage(file, {
+    maxDimension: isQris ? 1000 : 512,
+    quality: isQris ? 0.9 : 0.82,
+    mimeType: isQris ? 'image/png' : 'image/webp'
+  });
+  const maximumLength = isQris ? 450_000 : 180_000;
+  if (dataUrl.length > maximumLength) throw new Error(`Gambar masih terlalu besar setelah dikompresi. Batas ${isQris ? 'QRIS' : 'logo'} adalah sekitar ${Math.round(maximumLength / 1000)} KB.`);
+  return dataUrl;
 }
 
-export async function createOnlineReceipt(sale) {
-  if (!functions) throw new Error('Cloud Functions belum dikonfigurasi.');
-  const callable = httpsCallable(functions, 'createPublicReceipt');
-  const response = await callable({ saleId: sale?.id, sale, appUrl: PUBLIC_APP_URL });
-  return response.data;
+function sanitizeReceiptSale(sale = {}) {
+  return {
+    id: String(sale.id || ''),
+    branchId: String(sale.branchId || ''),
+    createdAt: String(sale.createdAt || new Date().toISOString()),
+    customerName: String(sale.customerName || 'Umum'),
+    cashierName: String(sale.cashierName || sale.userName || ''),
+    items: (sale.items || []).map(item => ({
+      name: String(item.name || ''),
+      qty: Number(item.qty || 0),
+      unit: String(item.unit || 'item'),
+      price: Number(item.price || 0),
+      itemDiscount: Number(item.itemDiscount || 0)
+    })),
+    subtotal: Number(sale.subtotal || 0),
+    globalDiscount: Number(sale.globalDiscount || 0),
+    promoDiscount: Number(sale.promoDiscount || 0),
+    loyaltyDiscount: Number(sale.loyaltyDiscount || 0),
+    tax: Number(sale.tax || 0),
+    service: Number(sale.service || 0),
+    total: Number(sale.total || 0),
+    change: Number(sale.change || 0),
+    payments: (sale.payments || []).map(payment => ({
+      id: String(payment.id || `${payment.type || 'pay'}-${Math.random().toString(36).slice(2, 8)}`),
+      name: String(payment.name || payment.type || 'Pembayaran'),
+      type: String(payment.type || ''),
+      amount: Number(payment.amount || 0)
+    }))
+  };
+}
+
+export async function createOnlineReceipt(sale, storeId = STORE_ID) {
+  requireCloud();
+  const random = crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const token = random.replace(/[^a-zA-Z0-9-]/g, '');
+  const expiresAt = Timestamp.fromDate(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
+  const settingsSnapshot = await getDoc(settingsRef(storeId));
+  const settingsDocument = settingsSnapshot.exists() ? settingsSnapshot.data() : {};
+  const settings = settingsDocument.configs || settingsDocument;
+  const store = {
+    companyName: String(settings.companyName || 'BUMI MAKMUR'),
+    address: String(settings.address || ''),
+    phone: String(settings.phone || ''),
+    receiptHeader: String(settings.receiptHeader || 'Nota Pembelian'),
+    receiptFooter: String(settings.receiptFooter || 'Terima kasih telah berbelanja.'),
+    receiptMessage: String(settings.receiptMessage || ''),
+    receiptLogo: String(settings.receiptLogo || '').slice(0, 180_000),
+    receiptShowLogo: settings.receiptShowLogo !== false
+  };
+  const payload = {
+    token,
+    storeId,
+    active: true,
+    expiresAt,
+    createdAt: Timestamp.now(),
+    sale: sanitizeReceiptSale(sale),
+    store
+  };
+  await setDoc(doc(firestore, 'publicReceipts', token), payload);
+  const origin = PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  return { token, url: `${origin}/receipt/${encodeURIComponent(token)}` };
 }
 
 export async function fetchPublicReceipt(token) {
@@ -195,4 +351,9 @@ export async function fetchPublicReceipt(token) {
   const expiryDate = data.expiresAt?.toDate ? data.expiresAt.toDate() : (data.expiresAt ? new Date(data.expiresAt) : null);
   if (data.active === false || (expiryDate && expiryDate.getTime() < Date.now())) throw new Error('Nota online sudah tidak aktif.');
   return data;
+}
+
+export async function revokePublicReceipt(token) {
+  requireCloud();
+  await deleteDoc(doc(firestore, 'publicReceipts', String(token || '')));
 }

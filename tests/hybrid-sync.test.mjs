@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOperationsToDb, buildDiffOperations, rebaseOperationsAgainstRemote } from '../src/services/syncEngine.js';
+import { applyOperationsToDb, buildDiffOperations, rebaseOperationsAgainstRemote, stableJson } from '../src/services/syncEngine.js';
 
 const baseDb = () => ({
-  meta: { version: '4.1.0' }, configs: { companyName: 'BM' }, categories: [], units: [],
+  meta: { version: '4.3.0' }, configs: { companyName: 'BM' }, categories: [], units: [],
   products: [{ id: 'P1', name: 'Kabel', stock: 10, modalPrice: 5000, prices: { retail: 6500 } }],
   customers: [{ id: 'C1', name: 'Budi', points: 10 }],
   sales: [], users: [], auditLogs: []
@@ -87,4 +87,9 @@ test('concurrent purchase returns are merged by return id', () => {
   };
   const [rebased] = rebaseOperationsAgainstRemote([operation], remote);
   assert.deepEqual(new Set(rebased.afterData.returns.map(item => item.id)), new Set(['RET-A', 'RET-B']));
+});
+
+
+test('stableJson tidak menganggap urutan key object sebagai konflik', () => {
+  assert.equal(stableJson({ b: 2, a: { y: 2, x: 1 } }), stableJson({ a: { x: 1, y: 2 }, b: 2 }));
 });

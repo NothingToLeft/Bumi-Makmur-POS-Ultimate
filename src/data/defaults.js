@@ -4,8 +4,8 @@ import {
   MonitorSmartphone, Settings, ListChecks, Tags
 } from 'lucide-react';
 
-export const APP_VERSION = '4.2.0';
-export const DB_KEY = 'bm_pos_hybrid_v4_1';
+export const APP_VERSION = '4.3.0';
+export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
 export const MODULES = [
@@ -126,7 +126,7 @@ const defaultProducts = [
 const now = new Date().toISOString();
 
 export const createSeedDb = () => ({
-  meta: { version: APP_VERSION, createdAt: now, updatedAt: now, lastBackupAt: null, lastSyncAt: null, hybridMode: true },
+  meta: { version: APP_VERSION, createdAt: now, updatedAt: now, lastBackupAt: null, lastSyncAt: null, hybridMode: true, sparkOnly: true, hosting: 'cloudflare-pages' },
   configs: {
     companyName: 'BUMI MAKMUR', address: 'Jl. Pembangunan No. 88, Surabaya', phone: '031-0000000',
     activeBranchId: MAIN_BRANCH_ID, darkMode: false, printAuto: false, taxEnabled: false, taxRate: 11,

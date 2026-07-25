@@ -1,16 +1,12 @@
-# Build & QA Report — v4.1.0
+# Build Report v4.3
 
-- Mode: Hybrid offline + Firebase auto-sync.
-- Service worker app shell: disertakan.
-- Cache database: IndexedDB.
-- Queue mutasi: localStorage + mirror IndexedDB.
-- Version name: 4.1.0.
-- Android versionCode: 40100.
-- Test inti: 34/34 lulus.
-- Static parse JS/JSX/MJS: 39 file lulus.
-- Relative import audit: 86 import lulus.
-- Cloud Functions syntax: lulus.
-- Firestore rules: role/store/branch aware; kredensial, approval, dan mutation receipt tidak dapat dibaca klien.
-- Signed release workflow: APK + AAB + `apksigner` verification.
+- Core tests: **59/59 lulus**.
+- Audit statis: **49 file JS/JSX/MJS**, 4 JSON, relative imports, secret scan, dan larangan layanan berbayar: lulus.
+- Parser sintaks TypeScript untuk JS/JSX/MJS: 49 file, 0 kegagalan.
+- Firebase deploy target: Firestore rules/indexes saja (Spark).
+- Web hosting utama: Cloudflare Pages (`dist`), Netlify sebagai fallback.
+- Android target: signed APK + AAB via GitHub Actions.
+- PC target: installable PWA via Edge/Chrome.
+- `test-only` di GitHub: install dependency → tests → audit → kompilasi Vite.
 
-Build Vite/Android final tetap dijalankan melalui GitHub Actions karena dependency installation membutuhkan akses registry npm.
+Instalasi npm lokal pada lingkungan penyusunan mengalami timeout jaringan registry. Karena itu build Vite dan Gradle penuh dijalankan di GitHub Actions; workflow sudah disiapkan untuk memblokir rilis bila tests/audit/compile gagal.

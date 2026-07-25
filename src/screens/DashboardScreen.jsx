@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { TrendingUp, ReceiptText, PackageSearch, WalletCards, AlertTriangle, Clock3, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { isToday, formatRp } from '../utils/helpers.js';
+import { calculateNetHpp } from '../utils/accounting.js';
 import { Card, EmptyState, PageHeader, StatusBadge, SummaryCard } from '../components/ui.jsx';
 
 export default function DashboardScreen() {
@@ -9,7 +10,8 @@ export default function DashboardScreen() {
   const stats = useMemo(() => {
     const sales = scoped.sales.filter(sale => isToday(sale.createdAt || sale.date) && !['VOIDED'].includes(sale.status));
     const revenue = sales.reduce((sum, sale) => sum + Number(sale.total || 0) - Number(sale.refundedTotal || 0), 0);
-    const hpp = sales.reduce((sum, sale) => sum + (sale.items || []).reduce((lineSum, line) => lineSum + Number(line.modalPrice || 0) * Number(line.baseQty || line.qty || 0), 0), 0);
+    const refunds = scoped.refunds.filter(refund => sales.some(sale => sale.id === refund.saleId));
+    const hpp = calculateNetHpp(sales, refunds);
     const expenses = scoped.expenses.filter(item => isToday(item.createdAt)).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const lowStock = scoped.products.filter(product => product.active !== false && product.trackStock !== false && product.stock <= product.minStock);
     const openReceivables = scoped.receivables.filter(item => item.status === 'OPEN').reduce((sum, item) => sum + Number(item.balance || 0), 0);

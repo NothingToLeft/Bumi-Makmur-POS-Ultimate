@@ -1,11 +1,15 @@
-const CACHE_NAME = 'bumi-makmur-pos-hybrid-v4.2.0';
+const CACHE_NAME = 'bumi-makmur-pos-freesync-v4.3.0';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/logo-bm.svg',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png'
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(APP_SHELL))
+      .catch(error => console.warn('[BM POS] App shell cache gagal:', error))
+  );
   self.skipWaiting();
 });
 
@@ -23,27 +27,50 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Navigasi memakai network-first agar versi terbaru cepat terbaca, tetapi tidak pernah memaksa reload klien.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then(response => {
-          if (response.ok) event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put('/index.html', response.clone())));
+          if (response.ok) {
+            const clone = response.clone();
+            event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put('/index.html', clone)));
+          }
           return response;
         })
-        .catch(() => caches.match('/index.html'))
+        .catch(async () => (await caches.match('/index.html')) || Response.error())
     );
     return;
   }
 
-  // Aset memakai stale-while-revalidate agar UI tetap cepat saat sinyal buruk.
+  // Aset Vite yang memiliki hash aman memakai cache-first.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then(cached => cached || fetch(request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, clone)));
+        }
+        return response;
+      }))
+    );
+    return;
+  }
+
+  // File lain memakai stale-while-revalidate; tidak pernah memaksa reload aplikasi.
   event.respondWith(
     caches.match(request).then(cached => {
       const network = fetch(request).then(response => {
-        if (response.ok) event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone())));
+        if (response.ok) {
+          const clone = response.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, clone)));
+        }
         return response;
-      }).catch(() => cached);
+      }).catch(() => cached || Response.error());
       return cached || network;
     })
   );
+});
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });

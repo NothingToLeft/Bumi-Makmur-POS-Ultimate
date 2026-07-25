@@ -5,6 +5,7 @@ import { formatRp, generateId, localDateKey } from '../utils/helpers.js';
 import { Badge, Button, Card, Field, Input, Modal, MoneyInput, Select, Textarea } from '../components/ui.jsx';
 import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
 import { copyReceiptText, getReceiptLogo, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
+import { findProductByCode, isEditableTarget } from '../utils/barcode.js';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
@@ -30,6 +31,11 @@ export default function POSScreen() {
   const [choosingProduct, setChoosingProduct] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [heldSaleId, setHeldSaleId] = useState(null);
+  const [scanNotice, setScanNotice] = useState('');
+  const scannerBufferRef = useRef('');
+  const scannerLastKeyAtRef = useRef(0);
+  const scannerBufferTimerRef = useRef(null);
+  const scanNoticeTimerRef = useRef(null);
 
   useEffect(() => {
     const handleLoad = event => {
@@ -105,6 +111,63 @@ export default function POSScreen() {
     });
   };
 
+  const addCodeToCart = rawCode => {
+    const result = findProductByCode(scoped.products, rawCode);
+    if (!result) {
+      setScanNotice(`Barcode/SKU "${String(rawCode || '').trim()}" tidak ditemukan.`);
+      return false;
+    }
+    const tierPrice = priceFor(result.product, saleType);
+    const options = { ...result.options };
+    if (options.unit) {
+      const conversion = result.product.conversions?.find(item => item.unit === options.unit);
+      options.price = tierPrice * Number(conversion?.factor || 1);
+    } else if (options.variant) {
+      const variant = result.product.variants?.find(item => item.name === options.variant);
+      options.price = tierPrice + Number(variant?.priceDelta || 0);
+    }
+    addProduct(result.product, options);
+    setSearch('');
+    setScanNotice(`${result.product.name} ditambahkan ke keranjang.`);
+    window.clearTimeout(scanNoticeTimerRef.current);
+    scanNoticeTimerRef.current = window.setTimeout(() => setScanNotice(''), 2200);
+    return true;
+  };
+
+  useEffect(() => {
+    const resetBufferSoon = () => {
+      window.clearTimeout(scannerBufferTimerRef.current);
+      scannerBufferTimerRef.current = window.setTimeout(() => { scannerBufferRef.current = ''; }, 180);
+    };
+    const handleScannerKeyboard = event => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || isEditableTarget(event.target)) return;
+      if (paymentOpen || holdOpen || splitOpen || scannerOpen || customOpen || editingLine || choosingProduct || receipt) return;
+      const now = performance.now();
+      if (now - scannerLastKeyAtRef.current > 120) scannerBufferRef.current = '';
+      scannerLastKeyAtRef.current = now;
+      if (event.key === 'Escape') { scannerBufferRef.current = ''; return; }
+      if (event.key === 'Enter') {
+        const code = scannerBufferRef.current.trim();
+        scannerBufferRef.current = '';
+        if (code.length >= 3) {
+          event.preventDefault();
+          addCodeToCart(code);
+        }
+        return;
+      }
+      if (event.key.length === 1 && !/\s/.test(event.key)) {
+        scannerBufferRef.current += event.key;
+        resetBufferSoon();
+      }
+    };
+    window.addEventListener('keydown', handleScannerKeyboard);
+    return () => {
+      window.removeEventListener('keydown', handleScannerKeyboard);
+      window.clearTimeout(scannerBufferTimerRef.current);
+      window.clearTimeout(scanNoticeTimerRef.current);
+    };
+  }, [scoped.products, saleType, paymentOpen, holdOpen, splitOpen, scannerOpen, customOpen, editingLine, choosingProduct, receipt]);
+
   const updateLine = updated => setCart(previous => previous.map(line => line.lineId === updated.lineId ? updated : line));
   const changeQty = (lineId, delta) => setCart(previous => previous.map(line => line.lineId === lineId ? { ...line, qty: Math.max(0, line.qty + delta), baseQty: Math.max(0, line.baseQty + delta * line.factor) } : line).filter(line => line.qty > 0));
   const clear = () => { setCart([]); setGlobalDiscount(0); setPointsRedeemed(0); setNotes(''); setHeldSaleId(null); };
@@ -172,7 +235,8 @@ export default function POSScreen() {
     <div className="h-full flex bg-gray-50 relative overflow-hidden generic-bg">
       <div className={`flex-1 flex flex-col min-w-0 ${mobileCart ? 'hidden md:flex' : 'flex'}`}>
         <div className="bg-white p-3 md:p-4 border-b border-gray-100 card-element space-y-3">
-          <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari nama, SKU, atau barcode..." className="pl-10"/></div><Button variant="secondary" onClick={() => setScannerOpen(true)} className="px-3"><ScanLine size={20}/></Button><Button variant="secondary" onClick={() => setCustomOpen(true)} className="px-3"><Plus size={20}/></Button></div>
+          <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/><Input value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { const exact = findProductByCode(scoped.products, search); if (exact) { event.preventDefault(); addCodeToCart(search); } } }} placeholder="Cari nama, SKU, atau barcode..." className="pl-10"/></div><Button variant="secondary" onClick={() => setScannerOpen(true)} className="px-3"><ScanLine size={20}/></Button><Button variant="secondary" onClick={() => setCustomOpen(true)} className="px-3"><Plus size={20}/></Button></div>
+          {scanNotice && <div className={`text-xs font-bold px-3 py-2 rounded-xl ${scanNotice.includes('tidak ditemukan') ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>{scanNotice}</div>}
           <div className="flex gap-2 overflow-x-auto no-scrollbar"><button onClick={() => setFavoritesOnly(value => !value)} className={`min-h-[40px] px-3 rounded-full border font-bold text-xs flex items-center gap-1 ${favoritesOnly ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-white text-gray-600 border-gray-200'}`}><Star size={15} fill={favoritesOnly?'currentColor':'none'}/> Favorit</button>{['Semua', ...db.categories].map(item => <button key={item} onClick={() => setCategory(item)} className={`min-h-[40px] px-4 rounded-full border font-bold text-xs whitespace-nowrap ${category === item ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-white text-gray-600 border-gray-200'}`}>{item}</button>)}</div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar pb-28 md:pb-4"><div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">{filtered.map(product => <button key={product.id} onClick={() => (product.variants?.length > 1 || product.conversions?.length > 0) ? setChoosingProduct(product) : addProduct(product)} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left card-element active:scale-[.98]"><div className="aspect-square rounded-xl bg-gray-100 img-placeholder flex items-center justify-center mb-2 relative"><Package size={30} className="text-gray-400"/>{product.favorite && <Star size={16} fill="currentColor" className="absolute top-2 right-2 text-yellow-500"/>}{product.bundleItems?.length > 0 && <Badge tone="purple">Paket</Badge>}</div><p className="font-bold text-xs text-gray-800 line-clamp-2 min-h-[32px]">{product.name}</p><p className="font-bold text-emerald-600 mt-2">{formatRp(priceFor(product,saleType))}</p><div className="flex justify-between text-[10px] text-gray-500 mt-1"><span>{product.stock} {product.baseUnit}</span><span>{product.rack}</span></div></button>)}</div></div>
@@ -186,7 +250,7 @@ export default function POSScreen() {
       {paymentOpen && <PaymentModal total={totals.total} methods={db.configs.paymentMethods.filter(item => item.active)} configs={db.configs} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
-      {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={product => { addProduct(product); setScannerOpen(false); }}/>}      
+      {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={(product, options = {}) => { addProduct(product, options); setScannerOpen(false); }}/>}      
       {customOpen && <CustomItemModal onClose={() => setCustomOpen(false)} onAdd={line => { setCart(previous => [...previous, line]); setCustomOpen(false); }}/>}      
       {receipt && <ReceiptModal sale={receipt} configs={db.configs} onClose={() => setReceipt(null)}/>}      
     </div>
@@ -358,18 +422,14 @@ function ScannerModal({ products, onClose, onDetected }) {
 
   const resolveProduct = rawCode => {
     const normalized = String(rawCode || '').trim();
-    const product = products.find(item =>
-      String(item.barcode || '') === normalized ||
-      String(item.sku || '').toLowerCase() === normalized.toLowerCase() ||
-      item.variants?.some(variant => String(variant.barcode || '') === normalized)
-    );
-    if (!product) {
+    const result = findProductByCode(products, normalized);
+    if (!result) {
       setError(`Barcode/SKU "${normalized}" tidak ditemukan.`);
       return false;
     }
     detectedRef.current = true;
     stopCamera();
-    onDetected(product);
+    onDetected(result.product, result.options);
     return true;
   };
 

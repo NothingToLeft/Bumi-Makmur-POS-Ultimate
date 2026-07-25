@@ -113,7 +113,7 @@ body {
 .setup-input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.12); }
 
 
-/* v4.2 typography, icon and receipt precision */
+/* v4.3 typography, icon and receipt precision */
 :root { font-synthesis: none; text-rendering: optimizeLegibility; }
 .font-black { letter-spacing: -0.018em; }
 .font-bold { letter-spacing: -0.006em; }

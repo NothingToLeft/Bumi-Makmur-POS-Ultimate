@@ -2,166 +2,301 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function sameStore(storeId) { return signedIn() && request.auth.token.storeId == storeId; }
-    function owner() { return signedIn() && request.auth.token.role == 'owner'; }
-    function manager() { return signedIn() && request.auth.token.role == 'manager'; }
-    function cashier() { return signedIn() && request.auth.token.role == 'kasir'; }
-    function ownerOrManager() { return owner() || manager(); }
-    function sameBranch() { return owner() || resource.data.branchId == request.auth.token.branchId; }
-
-    match /storeCodes/{code} {
-      allow read, write: if false;
+    function userPath(storeId, uid) {
+      return /databases/$(database)/documents/stores/$(storeId)/users/$(uid);
+    }
+    function hasProfile(storeId) {
+      return signedIn() && exists(userPath(storeId, request.auth.uid));
+    }
+    function profile(storeId) {
+      return get(userPath(storeId, request.auth.uid)).data;
+    }
+    function activeMember(storeId) {
+      return hasProfile(storeId) && profile(storeId).active == true;
+    }
+    function owner(storeId) { return activeMember(storeId) && profile(storeId).role == 'owner'; }
+    function manager(storeId) { return activeMember(storeId) && profile(storeId).role == 'manager'; }
+    function cashier(storeId) { return activeMember(storeId) && profile(storeId).role == 'kasir'; }
+    function ownerOrManager(storeId) { return owner(storeId) || manager(storeId); }
+    function existingBranchAllowed(storeId) {
+      return owner(storeId)
+        || !('branchId' in resource.data)
+        || resource.data.branchId == profile(storeId).branchId;
+    }
+    function incomingBranchAllowed(storeId) {
+      return owner(storeId)
+        || !('branchId' in request.resource.data)
+        || request.resource.data.branchId == profile(storeId).branchId;
+    }
+    function managerApproval(storeId) {
+      return request.resource.data.approvedBy is string
+        && exists(userPath(storeId, request.resource.data.approvedBy))
+        && get(userPath(storeId, request.resource.data.approvedBy)).data.active == true
+        && get(userPath(storeId, request.resource.data.approvedBy)).data.role in ['owner', 'manager'];
     }
 
+    // Nota publik berisi data penjualan yang sudah disanitasi; harga modal dan data internal dilarang.
     match /publicReceipts/{token} {
-      allow read: if resource.data.active == true && request.time < resource.data.expiresAt;
-      allow write: if false;
+      allow get: if resource.data.active == true && request.time < resource.data.expiresAt;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.storeId is string
+        && activeMember(request.resource.data.storeId)
+        && request.resource.data.active == true
+        && request.resource.data.token == token
+        && request.resource.data.keys().hasOnly(['token', 'storeId', 'active', 'expiresAt', 'createdAt', 'sale', 'store'])
+        && request.resource.data.sale.keys().hasOnly([
+          'id', 'branchId', 'createdAt', 'customerName', 'cashierName', 'items', 'subtotal',
+          'globalDiscount', 'promoDiscount', 'loyaltyDiscount', 'tax', 'service',
+          'total', 'change', 'payments'
+        ])
+        && request.resource.data.store.keys().hasOnly([
+          'companyName', 'address', 'phone', 'receiptHeader', 'receiptFooter',
+          'receiptMessage', 'receiptLogo', 'receiptShowLogo'
+        ])
+        && request.resource.data.sale.items.size() <= 200;
+      allow update, delete: if resource.data.storeId is string && ownerOrManager(resource.data.storeId);
+    }
+
+    match /stores/{storeId}/system/bootstrap {
+      allow read: if activeMember(storeId);
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/stores/$(storeId)/system/bootstrap)
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.storeId == storeId;
+      allow update, delete: if owner(storeId);
     }
 
     match /stores/{storeId}/system/settings {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/privateCredentials/{uid} {
-      allow read, write: if false;
-    }
-
-    match /stores/{storeId}/approvals/{token} {
-      allow read, write: if false;
-    }
-
-    match /stores/{storeId}/mutationReceipts/{mutationId} {
-      allow read, write: if false;
-    }
-
-    match /stores/{storeId}/devices/{deviceId} {
-      allow read: if sameStore(storeId) && ownerOrManager();
-      allow write: if false;
+      allow read: if activeMember(storeId);
+      allow create, update: if ownerOrManager(storeId);
+      allow delete: if owner(storeId);
     }
 
     match /stores/{storeId}/users/{uid} {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/branches/{id} {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/products/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/promotions/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/suppliers/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/customers/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/sales/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/heldSales/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/purchases/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/stockMovements/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/stockAdjustments/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/stockOpnames/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/stockTransfers/{id} {
-      allow read: if sameStore(storeId) && (
-        owner() ||
-        resource.data.sourceBranchId == request.auth.token.branchId ||
-        resource.data.destinationBranchId == request.auth.token.branchId
+      allow read: if activeMember(storeId) && (
+        owner(storeId)
+        || uid == request.auth.uid
+        || (manager(storeId) && resource.data.branchId == profile(storeId).branchId)
       );
-      allow write: if false;
+      allow create: if owner(storeId)
+        || (
+          signedIn()
+          && uid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.storeId == storeId
+          && request.resource.data.role == 'owner'
+          && getAfter(/databases/$(database)/documents/stores/$(storeId)/system/bootstrap).data.ownerUid == request.auth.uid
+        );
+      allow update: if owner(storeId);
+      allow delete: if owner(storeId) && uid != request.auth.uid;
     }
 
-    match /stores/{storeId}/expenses/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/receivables/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/payables/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/refunds/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/shifts/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/cashMovements/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/onlineOrders/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/printerProfiles/{id} {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/campaigns/{id} {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/feedback/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
+    match /stores/{storeId}/mutationReceipts/{mutationId} {
+      allow read: if activeMember(storeId) && (ownerOrManager(storeId) || resource.data.userId == request.auth.uid);
+      allow create: if activeMember(storeId)
+        && request.resource.data.id == mutationId
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     match /stores/{storeId}/auditLogs/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager();
-      allow write: if false;
+      allow read: if ownerOrManager(storeId);
+      allow create: if activeMember(storeId) && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /stores/{storeId}/branches/{id} {
+      allow read: if activeMember(storeId);
+      allow create, update, delete: if owner(storeId);
+    }
+
+    match /stores/{storeId}/products/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow update: if (ownerOrManager(storeId) && incomingBranchAllowed(storeId))
+        || (cashier(storeId)
+          && existingBranchAllowed(storeId)
+          && incomingBranchAllowed(storeId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt']));
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/promotions/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/suppliers/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/customers/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if (ownerOrManager(storeId) && incomingBranchAllowed(storeId))
+        || (cashier(storeId)
+          && incomingBranchAllowed(storeId)
+          && request.resource.data.priceTier == 'retail'
+          && request.resource.data.creditLimit == 0
+          && request.resource.data.points == 0
+          && request.resource.data.active == true);
+      allow update: if (ownerOrManager(storeId) && incomingBranchAllowed(storeId))
+        || (cashier(storeId)
+          && existingBranchAllowed(storeId)
+          && incomingBranchAllowed(storeId)
+          && request.resource.data.points >= 0
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'phone', 'email', 'address', 'project', 'notes', 'points', 'updatedAt'
+          ]));
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/sales/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if activeMember(storeId)
+        && incomingBranchAllowed(storeId)
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if (ownerOrManager(storeId) && incomingBranchAllowed(storeId))
+        || (cashier(storeId)
+          && existingBranchAllowed(storeId)
+          && incomingBranchAllowed(storeId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'refundedTotal', 'updatedAt']));
+      allow delete: if owner(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/heldSales/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if activeMember(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if activeMember(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/purchases/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/stockMovements/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if activeMember(storeId)
+        && incomingBranchAllowed(storeId)
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/stockAdjustments/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/stockOpnames/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/stockTransfers/{id} {
+      allow read: if activeMember(storeId) && (
+        owner(storeId)
+        || resource.data.sourceBranchId == profile(storeId).branchId
+        || resource.data.destinationBranchId == profile(storeId).branchId
+      );
+      // Manager hanya boleh mengirim stok dari cabang tugasnya. Transfer masuk
+      // dibuat oleh Owner atau Manager cabang sumber, sehingga Manager tidak bisa
+      // memanipulasi stok cabang lain dengan membuat transfer masuk palsu.
+      allow create: if owner(storeId) || (manager(storeId)
+        && request.resource.data.sourceBranchId == profile(storeId).branchId
+        && request.resource.data.destinationBranchId != profile(storeId).branchId);
+      allow update: if owner(storeId) || (manager(storeId)
+        && resource.data.sourceBranchId == profile(storeId).branchId
+        && request.resource.data.sourceBranchId == profile(storeId).branchId
+        && request.resource.data.destinationBranchId != profile(storeId).branchId);
+      allow delete: if owner(storeId) || (manager(storeId)
+        && resource.data.sourceBranchId == profile(storeId).branchId);
+    }
+
+    match /stores/{storeId}/expenses/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/receivables/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if activeMember(storeId) && incomingBranchAllowed(storeId);
+      allow update: if (ownerOrManager(storeId) && incomingBranchAllowed(storeId))
+        || (cashier(storeId)
+          && existingBranchAllowed(storeId)
+          && incomingBranchAllowed(storeId)
+          && request.resource.data.balance >= 0
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'paid', 'balance', 'payments', 'status', 'updatedAt'
+          ]));
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/payables/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/refunds/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if (ownerOrManager(storeId) && incomingBranchAllowed(storeId))
+        || (cashier(storeId) && incomingBranchAllowed(storeId) && managerApproval(storeId));
+      allow update: if owner(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if owner(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/shifts/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if activeMember(storeId)
+        && incomingBranchAllowed(storeId)
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if (ownerOrManager(storeId) && incomingBranchAllowed(storeId))
+        || (cashier(storeId)
+          && existingBranchAllowed(storeId)
+          && incomingBranchAllowed(storeId)
+          && request.resource.data.userId == request.auth.uid);
+      allow delete: if owner(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/cashMovements/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if activeMember(storeId)
+        && incomingBranchAllowed(storeId)
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/onlineOrders/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/printerProfiles/{id} {
+      allow read: if activeMember(storeId);
+      allow create, update, delete: if ownerOrManager(storeId);
+    }
+
+    match /stores/{storeId}/campaigns/{id} {
+      allow read: if activeMember(storeId);
+      allow create, update, delete: if ownerOrManager(storeId);
+    }
+
+    match /stores/{storeId}/feedback/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create: if activeMember(storeId) && incomingBranchAllowed(storeId);
+      allow update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
     }
   }
 }

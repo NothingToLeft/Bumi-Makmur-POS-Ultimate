@@ -59,11 +59,11 @@ export const isThisMonth = dateString => {
   return key.slice(0, 7) === localDateKey().slice(0, 7);
 };
 
-export const safeJSONParse = (dataString, fallback) => {
+export const safeJSONParse = (dataString, fallback, { silent = false } = {}) => {
   try {
     return dataString ? JSON.parse(dataString) : fallback;
   } catch (error) {
-    console.warn('Data lokal rusak, memakai data cadangan.', error);
+    if (!silent) console.warn('Data lokal rusak, memakai data cadangan.', error);
     return fallback;
   }
 };

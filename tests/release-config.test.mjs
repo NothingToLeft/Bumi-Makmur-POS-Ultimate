@@ -7,7 +7,7 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 test('versi project konsisten pada package dan VERSION.txt', async () => {
   const packageJson = JSON.parse(await read('package.json'));
   const version = (await read('VERSION.txt')).trim();
-  assert.equal(packageJson.version, '4.2.0');
+  assert.equal(packageJson.version, '4.3.0');
   assert.equal(version, packageJson.version);
 });
 
@@ -24,24 +24,35 @@ test('persiapan Android memasang kamera, biometrik, versionCode, dan signing rel
   assert.match(script, /splash\.png/);
 });
 
-test('workflow release wajib memakai key tetap dan memverifikasi signature', async () => {
+test('workflow mendukung test, web PWA, Android release, dan gabungan', async () => {
   const workflow = await read('.github/workflows/build-android.yml');
-  for (const secret of [
-    'ANDROID_KEYSTORE_BASE64',
-    'ANDROID_KEYSTORE_PASSWORD',
-    'ANDROID_KEY_ALIAS',
-    'ANDROID_KEY_PASSWORD'
-  ]) assert.match(workflow, new RegExp(secret));
+  for (const mode of ['test-only', 'web-only', 'android-release', 'web-and-android']) assert.match(workflow, new RegExp(mode));
+  for (const secret of ['ANDROID_KEYSTORE_BASE64', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD']) {
+    assert.match(workflow, new RegExp(secret));
+  }
+  assert.match(workflow, /node-version: 24/);
+  assert.match(workflow, /Compile web source in test-only mode/);
+  assert.match(workflow, /npm run build/);
   assert.match(workflow, /assembleRelease/);
   assert.match(workflow, /bundleRelease/);
   assert.match(workflow, /apksigner/);
   assert.doesNotMatch(workflow, /assembleDebug/);
 });
 
-test('workflow pembuat keystore menggunakan JKS agar password key konsisten', async () => {
+test('workflow Firebase hanya deploy rules dan indexes Spark', async () => {
+  const workflow = await read('.github/workflows/deploy-firebase.yml');
+  assert.match(workflow, /firestore:rules,firestore:indexes/);
+  assert.doesNotMatch(workflow, /storage|functions|hosting/);
+  assert.match(workflow, /google-github-actions\/auth@v3/);
+  assert.match(workflow, /actions\/setup-node@v6/);
+});
+
+test('workflow pembuat keystore menggunakan JKS dan action Node 24 terbaru', async () => {
   const workflow = await read('.github/workflows/generate-signing-key.yml');
   assert.match(workflow, /-storetype JKS/);
   assert.match(workflow, /retention-days: 1/);
+  assert.match(workflow, /actions\/setup-java@v5/);
+  assert.match(workflow, /actions\/upload-artifact@v6/);
 });
 
 test('kamera diminta saat startup dan biometrik tersedia di pengaturan', async () => {

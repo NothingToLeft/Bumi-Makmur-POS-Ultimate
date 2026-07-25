@@ -24,8 +24,21 @@ export function cleanUndefined(value) {
   return value;
 }
 
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .filter(key => value[key] !== undefined)
+        .map(key => [key, canonicalize(value[key])])
+    );
+  }
+  return value;
+}
+
 export function stableJson(value) {
-  return JSON.stringify(cleanUndefined(value));
+  return JSON.stringify(canonicalize(cleanUndefined(value)));
 }
 
 const stableEqual = (first, second) => stableJson(first) === stableJson(second);
