@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -290,4 +290,34 @@ const pluginPath = path.join(path.dirname(mainActivityPath), 'BumiMakmurNativePl
 await mkdir(path.dirname(pluginPath), { recursive: true });
 await writeFile(pluginPath, nativePluginSource(packageName));
 
-console.log(`Android camera permission, biometric plugin, release signing, and version ${versionName} (${versionCode}) prepared.`);
+
+
+// Terapkan identitas BM premium ke launcher icon dan splash Android.
+const publicIconDir = path.join(rootDir, 'public', 'icons');
+const resourceDir = path.join(androidDir, 'app', 'src', 'main', 'res');
+const launcherSizes = {
+  'mipmap-mdpi': 48,
+  'mipmap-hdpi': 72,
+  'mipmap-xhdpi': 96,
+  'mipmap-xxhdpi': 144,
+  'mipmap-xxxhdpi': 192
+};
+
+// PNG 192 px tetap tajam untuk semua density karena Android akan melakukan scaling down.
+for (const folder of Object.keys(launcherSizes)) {
+  const targetDir = path.join(resourceDir, folder);
+  await mkdir(targetDir, { recursive: true });
+  await copyFile(path.join(publicIconDir, 'icon-192.png'), path.join(targetDir, 'ic_launcher.png'));
+  await copyFile(path.join(publicIconDir, 'icon-192.png'), path.join(targetDir, 'ic_launcher_round.png'));
+  await copyFile(path.join(publicIconDir, 'icon-192.png'), path.join(targetDir, 'ic_launcher_foreground.png'));
+}
+for (const folder of ['drawable', 'drawable-land']) {
+  const targetDir = path.join(resourceDir, folder);
+  await mkdir(targetDir, { recursive: true });
+  await copyFile(
+    path.join(publicIconDir, folder === 'drawable-land' ? 'splash-landscape.png' : 'splash-portrait.png'),
+    path.join(targetDir, 'splash.png')
+  );
+}
+
+console.log(`Android BM icon, splash, camera permission, biometric plugin, release signing, and version ${versionName} (${versionCode}) prepared.`);

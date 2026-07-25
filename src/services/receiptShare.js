@@ -1,4 +1,6 @@
-import { formatRp } from '../utils/helpers.js';
+import { escapeHtml, formatRp } from '../utils/helpers.js';
+
+export const getReceiptLogo = (configs = {}) => configs.receiptShowLogo === false ? '' : (configs.receiptLogo || '/logo-bm.svg');
 
 export const normalizeWhatsappNumber = (value, defaultCountryCode = '62') => {
   const digits = String(value || '').replace(/\D/g, '');
@@ -117,9 +119,10 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
   context.fillRect(0, 0, width, 22);
   let y = 70;
 
-  if (configs.receiptShowLogo !== false && configs.receiptLogo) {
+  const receiptLogo = getReceiptLogo(configs);
+  if (receiptLogo) {
     try {
-      const logo = await loadImage(configs.receiptLogo);
+      const logo = await loadImage(receiptLogo);
       const size = 120;
       context.drawImage(logo, (width - size) / 2, y, size, size);
       y += 145;
@@ -130,15 +133,15 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
 
   context.textAlign = 'center';
   context.fillStyle = '#047857';
-  context.font = '700 22px Arial';
+  context.font = '700 22px Segoe UI, Arial, sans-serif';
   context.fillText(String(configs.receiptHeader || 'NOTA PEMBELIAN').toUpperCase(), width / 2, y);
   y += 42;
   context.fillStyle = '#111827';
-  context.font = '900 42px Arial';
+  context.font = '900 42px Segoe UI, Arial, sans-serif';
   context.fillText(configs.companyName || 'BUMI MAKMUR', width / 2, y);
   y += 38;
   context.fillStyle = '#4b5563';
-  context.font = '22px Arial';
+  context.font = '22px Segoe UI, Arial, sans-serif';
   for (const line of wrapCanvasText(context, configs.address || '', width - 160)) {
     context.fillText(line, width / 2, y);
     y += 28;
@@ -150,14 +153,14 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
   y += 42;
 
   context.textAlign = 'left';
-  context.font = '700 22px Arial';
+  context.font = '700 22px Segoe UI, Arial, sans-serif';
   context.fillStyle = '#111827';
   context.fillText(`No: ${sale.id}`, 60, y);
   context.textAlign = 'right';
   context.fillText(new Date(sale.createdAt).toLocaleString('id-ID'), width - 60, y);
   y += 36;
   context.textAlign = 'left';
-  context.font = '22px Arial';
+  context.font = '22px Segoe UI, Arial, sans-serif';
   context.fillStyle = '#374151';
   context.fillText(`Pelanggan: ${sale.customerName || 'Umum'}`, 60, y);
   y += 36;
@@ -167,15 +170,15 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
 
   for (const item of sale.items || []) {
     context.textAlign = 'left';
-    context.font = '700 24px Arial';
+    context.font = '700 24px Segoe UI, Arial, sans-serif';
     context.fillStyle = '#111827';
     const nameLines = wrapCanvasText(context, item.name, 560);
     for (const line of nameLines) { context.fillText(line, 60, y); y += 30; }
-    context.font = '21px Arial';
+    context.font = '21px Segoe UI, Arial, sans-serif';
     context.fillStyle = '#6b7280';
     context.fillText(`${item.qty} ${item.unit || 'item'} × ${formatRp(item.price)}`, 60, y);
     context.textAlign = 'right';
-    context.font = '700 23px Arial';
+    context.font = '700 23px Segoe UI, Arial, sans-serif';
     context.fillStyle = '#111827';
     context.fillText(formatRp(Number(item.price || 0) * Number(item.qty || 0) - Number(item.itemDiscount || 0)), width - 60, y);
     y += 42;
@@ -184,7 +187,7 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
   context.beginPath(); context.moveTo(60, y); context.lineTo(width - 60, y); context.stroke();
   y += 40;
   const drawRow = (label, value, bold = false, color = '#111827') => {
-    context.textAlign = 'left'; context.fillStyle = color; context.font = `${bold ? '900' : '400'} 23px Arial`; context.fillText(label, 60, y);
+    context.textAlign = 'left'; context.fillStyle = color; context.font = `${bold ? '900' : '400'} 23px Segoe UI, Arial, sans-serif`; context.fillText(label, 60, y);
     context.textAlign = 'right'; context.fillText(value, width - 60, y); y += bold ? 48 : 36;
   };
   drawRow('Subtotal', formatRp(sale.subtotal));
@@ -194,17 +197,57 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
   if (sale.tax > 0) drawRow('Pajak', formatRp(sale.tax));
   if (sale.service > 0) drawRow('Service', formatRp(sale.service));
   context.fillStyle = '#064e3b'; context.fillRect(45, y - 10, width - 90, 74);
-  context.fillStyle = '#ffffff'; context.font = '900 32px Arial'; context.textAlign = 'left'; context.fillText('TOTAL', 70, y + 38);
+  context.fillStyle = '#ffffff'; context.font = '900 32px Segoe UI, Arial, sans-serif'; context.textAlign = 'left'; context.fillText('TOTAL', 70, y + 38);
   context.textAlign = 'right'; context.fillText(formatRp(sale.total), width - 70, y + 38);
   y += 100;
   for (const payment of sale.payments || []) drawRow(payment.name, formatRp(payment.amount));
   if (sale.change > 0) drawRow('Kembalian', formatRp(sale.change), true, '#ea580c');
   y += 16;
-  context.textAlign = 'center'; context.fillStyle = '#111827'; context.font = '700 22px Arial';
+  context.textAlign = 'center'; context.fillStyle = '#111827'; context.font = '700 22px Segoe UI, Arial, sans-serif';
   for (const line of wrapCanvasText(context, configs.receiptFooter || 'Terima kasih telah berbelanja.', width - 140)) { context.fillText(line, width / 2, y); y += 30; }
-  context.fillStyle = '#6b7280'; context.font = '19px Arial';
+  context.fillStyle = '#6b7280'; context.font = '19px Segoe UI, Arial, sans-serif';
   for (const line of wrapCanvasText(context, configs.receiptMessage || '', width - 140)) { context.fillText(line, width / 2, y); y += 25; }
   return new Promise(resolve => canvas.toBlob(blob => resolve(blob ? new File([blob], `Nota-${sale.id}.png`, { type: 'image/png' }) : null), 'image/png', 0.95));
+};
+
+
+export const buildReceiptPrintHtml = (sale, configs = {}) => {
+  const logo = getReceiptLogo(configs);
+  const rows = (sale.items || []).map(line => `
+    <div class="item">
+      <div class="item-name">${escapeHtml(line.name || '')}</div>
+      <div class="row subtle"><span>${escapeHtml(String(line.qty))} ${escapeHtml(line.unit || 'item')} × ${escapeHtml(formatRp(line.price))}</span><b>${escapeHtml(formatRp(Number(line.price || 0) * Number(line.qty || 0) - Number(line.itemDiscount || 0)))}</b></div>
+      ${line.itemDiscount > 0 ? `<div class="discount">Diskon item -${escapeHtml(formatRp(line.itemDiscount))}</div>` : ''}
+    </div>`).join('');
+  const payments = (sale.payments || []).map(payment => `<div class="row"><span>${escapeHtml(payment.name || 'Pembayaran')}</span><b>${escapeHtml(formatRp(payment.amount))}</b></div>`).join('');
+  return `
+    <section class="receipt">
+      <header>
+        ${logo ? `<img src="${escapeHtml(logo)}" alt="BM">` : ''}
+        <div class="eyebrow">${escapeHtml(String(configs.receiptHeader || 'Nota Pembelian').toUpperCase())}</div>
+        <h1>${escapeHtml(configs.companyName || 'BUMI MAKMUR')}</h1>
+        <p>${escapeHtml(configs.address || '')}</p>
+        ${configs.receiptShowStorePhone !== false && configs.phone ? `<p>Telp: ${escapeHtml(configs.phone)}</p>` : ''}
+        <div class="receipt-id">${escapeHtml(sale.id || '')}</div>
+        <p>${escapeHtml(new Date(sale.createdAt).toLocaleString('id-ID'))}</p>
+      </header>
+      <div class="meta">
+        ${configs.receiptShowCustomer !== false ? `<div><span>Pelanggan</span><b>${escapeHtml(sale.customerName || 'Umum')}</b></div>` : ''}
+        ${configs.receiptShowCashier !== false ? `<div><span>Kasir</span><b>${escapeHtml(sale.cashierName || '-')}</b></div>` : ''}
+      </div>
+      <div class="items">${rows}</div>
+      <div class="totals">
+        <div class="row"><span>Subtotal</span><span>${escapeHtml(formatRp(sale.subtotal))}</span></div>
+        ${sale.globalDiscount > 0 ? `<div class="row green"><span>Diskon</span><span>-${escapeHtml(formatRp(sale.globalDiscount))}</span></div>` : ''}
+        ${sale.promoDiscount > 0 ? `<div class="row green"><span>Promo</span><span>-${escapeHtml(formatRp(sale.promoDiscount))}</span></div>` : ''}
+        ${sale.loyaltyDiscount > 0 ? `<div class="row gold"><span>Reward poin</span><span>-${escapeHtml(formatRp(sale.loyaltyDiscount))}</span></div>` : ''}
+        ${sale.tax > 0 ? `<div class="row"><span>Pajak</span><span>${escapeHtml(formatRp(sale.tax))}</span></div>` : ''}
+        ${sale.service > 0 ? `<div class="row"><span>Service</span><span>${escapeHtml(formatRp(sale.service))}</span></div>` : ''}
+        <div class="grand"><span>TOTAL</span><b>${escapeHtml(formatRp(sale.total))}</b></div>
+      </div>
+      ${configs.receiptShowPayment !== false ? `<div class="payments">${payments}${sale.change > 0 ? `<div class="row orange"><span>Kembalian</span><b>${escapeHtml(formatRp(sale.change))}</b></div>` : ''}</div>` : ''}
+      <footer><b>${escapeHtml(configs.receiptFooter || 'Terima kasih telah berbelanja.')}</b><p>${escapeHtml(configs.receiptMessage || '')}</p></footer>
+    </section>`;
 };
 
 export const shareReceipt = async (sale, configs) => {

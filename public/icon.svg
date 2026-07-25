@@ -1,7 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#065f46"/>
-  <path d="M112 216 256 112l144 104v184H112z" fill="#ecfdf5"/>
-  <path d="M192 400V264h128v136" fill="#10b981"/>
-  <path d="M224 312h64v88h-64z" fill="#f97316"/>
-  <circle cx="256" cy="207" r="28" fill="#f97316"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Bumi Makmur BM">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#033f32"/>
+      <stop offset="0.55" stop-color="#065f46"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#021f19" flood-opacity=".32"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="124" fill="url(#bg)"/>
+  <path d="M88 208 256 86l168 122" fill="none" stroke="url(#gold)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" opacity=".98"/>
+  <path d="M112 208v214h288V208" fill="none" stroke="#ecfdf5" stroke-width="18" stroke-linejoin="round" opacity=".22"/>
+  <g filter="url(#shadow)">
+    <path d="M124 188h104c58 0 94 27 94 72 0 27-14 48-39 61 34 11 52 35 52 70 0 54-42 85-111 85H124V188Zm70 55v54h27c23 0 35-9 35-27 0-18-12-27-35-27h-27Zm0 106v68h39c25 0 38-11 38-34 0-22-13-34-38-34h-39Z" fill="#fff" transform="translate(-20 -76) scale(.94)"/>
+    <path d="M250 188h59l46 93 46-93h59v288h-65V305l-40 78-40-78v171h-65V188Z" fill="#fff" transform="translate(-28 -76) scale(.94)"/>
+  </g>
+  <rect x="206" y="415" width="100" height="16" rx="8" fill="url(#gold)"/>
 </svg>

@@ -1,13 +1,8 @@
-import { getApp, getApps, initializeApp } from 'firebase/app';
-import {
-  browserLocalPersistence,
-  getAuth,
-  setPersistence
-} from 'firebase/auth';
-import {
-  enableMultiTabIndexedDbPersistence,
-  initializeFirestore
-} from 'firebase/firestore';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, browserLocalPersistence, setPersistence } from 'firebase/auth';
+import { initializeFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
+import { getStorage } from 'firebase/storage';
 
 const env = import.meta.env || {};
 
@@ -21,47 +16,38 @@ const requiredKeys = [
 
 export const firebaseConfigured = requiredKeys.every(key => Boolean(env[key]));
 export const STORE_ID = env.VITE_FIREBASE_STORE_ID || 'bumi-makmur';
-export const DEFAULT_STORE_CODE = env.VITE_FIREBASE_STORE_CODE || 'BM001';
+export const DEFAULT_STORE_CODE = env.VITE_FIREBASE_STORE_CODE || 'BUMIMAKMUR';
+export const FUNCTIONS_REGION = env.VITE_FIREBASE_FUNCTIONS_REGION || 'asia-southeast2';
 export const PUBLIC_APP_URL = (env.VITE_PUBLIC_APP_URL || '').replace(/\/$/, '');
-
-export const firebaseConfig = firebaseConfigured ? {
-  apiKey: env.VITE_FIREBASE_API_KEY,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: env.VITE_FIREBASE_APP_ID
-} : null;
 
 let app = null;
 let auth = null;
 let firestore = null;
+let functions = null;
+let storage = null;
 let authPersistenceReady = Promise.resolve();
-let firestorePersistenceReady = Promise.resolve();
 
 if (firebaseConfigured) {
-  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  const firebaseConfig = {
+    apiKey: env.VITE_FIREBASE_API_KEY,
+    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: env.VITE_FIREBASE_APP_ID
+  };
+
+  app = getApps()[0] || initializeApp(firebaseConfig);
   auth = getAuth(app);
   authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch(error => {
     console.warn('Persistensi sesi Firebase Auth gagal diaktifkan.', error);
   });
-
   firestore = initializeFirestore(app, {
     experimentalAutoDetectLongPolling: true,
     useFetchStreams: false
   });
-
-  firestorePersistenceReady = enableMultiTabIndexedDbPersistence(firestore).catch(error => {
-    if (!['failed-precondition', 'unimplemented'].includes(error?.code)) {
-      console.warn('Persistensi offline Firestore gagal diaktifkan.', error);
-    }
-  });
+  functions = getFunctions(app, FUNCTIONS_REGION);
+  storage = getStorage(app);
 }
 
-export {
-  app,
-  auth,
-  firestore,
-  authPersistenceReady,
-  firestorePersistenceReady
-};
+export { app, auth, firestore, functions, storage, authPersistenceReady };

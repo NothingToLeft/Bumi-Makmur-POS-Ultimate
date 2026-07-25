@@ -4,7 +4,7 @@ import { usePos } from '../store/PosContext.jsx';
 import { formatRp, generateId, localDateKey } from '../utils/helpers.js';
 import { Badge, Button, Card, Field, Input, Modal, MoneyInput, Select, Textarea } from '../components/ui.jsx';
 import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
-import { copyReceiptText, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
+import { copyReceiptText, getReceiptLogo, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
@@ -462,6 +462,7 @@ function ScannerModal({ products, onClose, onDetected }) {
 }
 
 function ReceiptModal({ sale, configs, onClose }) {
+  const receiptLogo = getReceiptLogo(configs);
   const [phone, setPhone] = useState(sale.customerPhone && sale.customerPhone !== '-' ? sale.customerPhone : '');
   const [notice, setNotice] = useState('');
   const print = () => window.print();
@@ -474,7 +475,7 @@ function ReceiptModal({ sale, configs, onClose }) {
         <div className="receipt-premium-header p-5 text-center border-b border-dashed relative overflow-hidden">
           <div className="absolute inset-0 receipt-header-glow"/>
           <div className="relative">
-            {configs.receiptShowLogo !== false && configs.receiptLogo && <img src={configs.receiptLogo} alt="Logo toko" className="w-16 h-16 rounded-2xl object-contain bg-white p-1.5 shadow-lg mx-auto mb-3"/>}
+            {receiptLogo && <img src={receiptLogo} alt="Logo BM" className="w-16 h-16 rounded-[1.15rem] object-contain bg-white shadow-xl ring-1 ring-emerald-100 mx-auto mb-3"/>}
             <p className="text-[10px] uppercase tracking-[.22em] font-bold text-emerald-700">{configs.receiptHeader || 'Nota Pembelian'}</p>
             <h3 className="font-black text-xl text-gray-900 mt-1">{configs.companyName}</h3>
             <p className="text-xs text-gray-600 mt-1">{configs.address}</p>
@@ -503,10 +504,10 @@ function ReceiptModal({ sale, configs, onClose }) {
             {sale.loyaltyDiscount > 0 && <div className="flex justify-between text-yellow-700"><span>Reward Poin</span><span>-{formatRp(sale.loyaltyDiscount)}</span></div>}
             {sale.tax > 0 && <div className="flex justify-between"><span>Pajak</span><span>{formatRp(sale.tax)}</span></div>}
             {sale.service > 0 && <div className="flex justify-between"><span>Service</span><span>{formatRp(sale.service)}</span></div>}
-            <div className="premium-receipt-total flex justify-between text-xl font-black mt-3 p-3 rounded-2xl"><span>TOTAL</span><span>{formatRp(sale.total)}</span></div>
+            <div className="premium-receipt-total flex items-end justify-between gap-3 text-xl font-black mt-3 p-4 rounded-2xl"><div><span className="block text-[10px] tracking-[.18em] text-emerald-100">TOTAL PEMBAYARAN</span><span>TOTAL</span></div><span>{formatRp(sale.total)}</span></div>
           </div>
           {configs.receiptShowPayment !== false && <div className="border-t border-dashed mt-4 pt-3 space-y-1">{sale.payments.map(payment => <div key={payment.id} className="flex justify-between text-sm"><span>{payment.name}</span><b>{formatRp(payment.amount)}</b></div>)}</div>}
-          <div className="text-center mt-5"><p className="text-xs font-bold text-gray-800">{configs.receiptFooter}</p>{configs.receiptMessage && <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">{configs.receiptMessage}</p>}</div>
+          <div className="text-center mt-5 pt-4 border-t border-dashed border-gray-200"><img src="/logo-bm.svg" alt="BM" className="w-7 h-7 rounded-lg mx-auto mb-2 opacity-90"/><p className="text-xs font-bold text-gray-800">{configs.receiptFooter}</p>{configs.receiptMessage && <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">{configs.receiptMessage}</p>}<p className="text-[9px] text-gray-400 mt-2">Didukung Bumi Makmur POS · BM</p></div>
         </div>
         <div className="p-3 bg-gray-50 border-t print-controls space-y-2">
           {configs.whatsappReceiptEnabled !== false && <div className="flex gap-2"><Input value={phone} onChange={event => setPhone(event.target.value)} inputMode="tel" placeholder="Nomor WhatsApp pelanggan" className="min-h-[44px]"/><Button onClick={whatsapp} className="shrink-0 bg-[#25D366] hover:bg-[#20bd5a]"><MessageCircle size={18}/> WhatsApp</Button></div>}

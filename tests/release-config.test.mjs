@@ -20,9 +20,11 @@ test('persiapan Android memasang kamera, biometrik, versionCode, dan signing rel
   assert.match(script, /versionName/);
   assert.match(script, /signing\.gradle/);
   assert.match(script, /registerPlugin\(BumiMakmurNativePlugin\.class\)/);
+  assert.match(script, /ic_launcher_foreground\.png/);
+  assert.match(script, /splash\.png/);
 });
 
-test('workflow Spark Free release wajib memakai key tetap dan memverifikasi signature', async () => {
+test('workflow release wajib memakai key tetap dan memverifikasi signature', async () => {
   const workflow = await read('.github/workflows/build-android.yml');
   for (const secret of [
     'ANDROID_KEYSTORE_BASE64',
@@ -34,8 +36,6 @@ test('workflow Spark Free release wajib memakai key tetap dan memverifikasi sign
   assert.match(workflow, /bundleRelease/);
   assert.match(workflow, /apksigner/);
   assert.doesNotMatch(workflow, /assembleDebug/);
-  assert.match(workflow, /Spark-Free-Hybrid/);
-  assert.doesNotMatch(workflow, /VITE_FIREBASE_FUNCTIONS_REGION/);
 });
 
 test('workflow pembuat keystore menggunakan JKS agar password key konsisten', async () => {
@@ -52,12 +52,4 @@ test('kamera diminta saat startup dan biometrik tersedia di pengaturan', async (
   assert.match(settings, /Minta izin kamera saat aplikasi dibuka/);
   assert.match(settings, /Aktifkan untuk Akun Ini/);
   assert.match(login, /Buka dengan Biometrik/);
-});
-
-test('service worker and login session checks are updated for v4.2', async () => {
-  const sw = await read('public/sw.js');
-  const context = await read('src/store/PosContext.jsx');
-  assert.match(sw, /spark-free-v4\.2\.0/);
-  assert.match(context, /Sesi Firebase pada perangkat ini sudah berakhir/);
-  assert.match(context, /Sesi Firebase sudah berakhir.*Email & Password/);
 });

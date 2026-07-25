@@ -12,8 +12,10 @@
     "android:open": "npx cap open android",
     "android:prepare": "node scripts/prepare-android.mjs",
     "test:core": "node --test tests/*.test.mjs",
-    "firebase:deploy:hosting": "npm run build && firebase deploy --only hosting",
-    "firebase:deploy:free": "firebase deploy --only firestore:rules,firestore:indexes,hosting"
+    "firebase:emulators": "firebase emulators:start --only auth,firestore,functions,storage",
+    "firebase:deploy": "firebase deploy --only firestore:rules,firestore:indexes,storage,functions,hosting",
+    "firebase:deploy:backend": "firebase deploy --only firestore:rules,firestore:indexes,storage,functions",
+    "firebase:deploy:hosting": "npm run build && firebase deploy --only hosting"
   },
   "dependencies": {
     "@capacitor/android": "7.4.3",
@@ -34,5 +36,5 @@
     "vite": "6.0.7",
     "firebase-tools": "^14.0.0"
   },
-  "description": "Bumi Makmur POS Spark Free Hybrid: email/password Firebase, PIN/biometrik lokal, Firestore realtime, operasi offline, dan sinkron otomatis tanpa Cloud Functions atau Cloud Storage."
+  "description": "Bumi Makmur POS Hybrid Enterprise v4.2: startup stabil, sinkronisasi latar belakang, identitas BM premium, dan nota profesional."
 }

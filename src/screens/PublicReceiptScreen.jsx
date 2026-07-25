@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, Package, Printer, ShieldCheck } from 'lucide-react';
 import { fetchPublicReceipt } from '../services/cloudStore.js';
 import { formatRp } from '../utils/helpers.js';
+import { getReceiptLogo } from '../services/receiptShare.js';
 
 export default function PublicReceiptScreen({ token }) {
   const [state, setState] = useState({ loading: true, data: null, error: '' });
@@ -17,12 +18,13 @@ export default function PublicReceiptScreen({ token }) {
   if (state.error) return <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-7 max-w-md text-center shadow-xl"><Package className="mx-auto text-red-500" size={48}/><h1 className="font-black text-xl mt-3">Nota Tidak Tersedia</h1><p className="text-gray-500 mt-2">{state.error}</p></div></div>;
 
   const { sale, store } = state.data;
+  const receiptLogo = getReceiptLogo(store);
   return <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-slate-900 to-emerald-900 p-3 md:p-8">
     <div className="max-w-xl mx-auto">
       <div className="text-white text-center mb-5"><ShieldCheck className="mx-auto text-emerald-300"/><p className="font-black text-xl mt-2">Nota Online Terverifikasi</p><p className="text-xs text-emerald-200">Disimpan langsung oleh Bumi Makmur POS Cloud</p></div>
       <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden">
         <div className="bg-gradient-to-br from-emerald-50 to-white p-6 text-center border-b border-dashed">
-          {store.receiptShowLogo !== false && store.receiptLogo && <img src={store.receiptLogo} alt="Logo" className="w-20 h-20 object-contain mx-auto rounded-2xl bg-white shadow p-2"/>}
+          {receiptLogo && <img src={receiptLogo} alt="Logo BM" className="w-20 h-20 object-contain mx-auto rounded-[1.35rem] bg-white shadow-xl ring-1 ring-emerald-100"/>}
           <p className="text-[10px] tracking-[.22em] uppercase text-emerald-700 font-black mt-3">{store.receiptHeader || 'Nota Pembelian'}</p>
           <h1 className="font-black text-2xl text-gray-900 mt-1">{store.companyName || 'BUMI MAKMUR'}</h1>
           <p className="text-xs text-gray-500 mt-1">{store.address}</p>

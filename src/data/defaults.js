@@ -5,8 +5,8 @@ import {
 } from 'lucide-react';
 
 export const APP_VERSION = '4.2.0';
-export const DB_KEY = 'bm_pos_spark_free_hybrid_v4_2';
-export const MAIN_BRANCH_ID = 'BM001';
+export const DB_KEY = 'bm_pos_hybrid_v4_1';
+export const MAIN_BRANCH_ID = 'BMP-001';
 
 export const MODULES = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
@@ -126,7 +126,7 @@ const defaultProducts = [
 const now = new Date().toISOString();
 
 export const createSeedDb = () => ({
-  meta: { version: APP_VERSION, createdAt: now, updatedAt: now, lastBackupAt: null, lastSyncAt: null, hybridMode: true, sparkFree: true },
+  meta: { version: APP_VERSION, createdAt: now, updatedAt: now, lastBackupAt: null, lastSyncAt: null, hybridMode: true },
   configs: {
     companyName: 'BUMI MAKMUR', address: 'Jl. Pembangunan No. 88, Surabaya', phone: '031-0000000',
     activeBranchId: MAIN_BRANCH_ID, darkMode: false, printAuto: false, taxEnabled: false, taxRate: 11,
@@ -136,7 +136,7 @@ export const createSeedDb = () => ({
     receiptHeader: 'NOTA PEMBELIAN', receiptFooter: 'Terima kasih telah berbelanja.',
     receiptMessage: 'Barang yang sudah dibeli harap diperiksa kembali. Simpan nota sebagai bukti transaksi.',
     receiptWhatsappNote: 'Terima kasih. Bumi Makmur siap melayani kebutuhan bangunan, listrik, dan air Anda.',
-    receiptLogo: '', receiptShowLogo: true, receiptShowCustomer: true, receiptShowCashier: true,
+    receiptLogo: '/logo-bm.svg', receiptShowLogo: true, receiptShowCustomer: true, receiptShowCashier: true,
     receiptShowPayment: true, receiptShowStorePhone: true, receiptPaperWidth: 80,
     whatsappCountryCode: '62', whatsappReceiptEnabled: true,
     qrisMerchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.',

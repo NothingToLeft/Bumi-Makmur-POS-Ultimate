@@ -1,78 +1,75 @@
-# Bumi Makmur POS Spark Free Hybrid v4.2
+# Bumi Makmur POS Hybrid Enterprise v4.2
 
-Aplikasi POS profesional untuk toko bahan bangunan, listrik, dan perlengkapan air. Project ini berjalan sebagai React/Vite, PWA, serta APK/AAB Android melalui Capacitor.
+> v4.2 memprioritaskan cache perangkat, memindahkan sinkronisasi ke background, menambahkan logo BM premium, dan menyatukan desain nota. Gunakan workflow **test-only** sebelum Firebase siap.
 
-## Arsitektur aktif
 
-- **Firebase Spark gratis**: Authentication Email/Password, Cloud Firestore, Security Rules, Indexes, dan Hosting.
-- **Tanpa Cloud Functions dan tanpa Cloud Storage** sehingga tidak memerlukan paket Blaze.
-- Login pertama memakai Email/Password Firebase, lalu PIN 4 digit atau biometrik untuk membuka perangkat.
-- Cache lokal IndexedDB dan antrean mutasi membuat transaksi tetap berjalan saat internet putus.
-- Saat internet kembali, mutasi otomatis dikirim ke Firestore dengan transaksi atomik, idempotency, audit log, dan penanganan konflik.
-- Logo serta QRIS dikompresi dan disimpan sebagai data aplikasi agar tetap dapat digunakan pada paket Spark.
+POS profesional untuk toko bahan bangunan, listrik, dan air. Project ini berjalan sebagai web/PWA dan dapat dibungkus menjadi APK/AAB Android melalui Capacitor.
 
-## Struktur Firebase yang digunakan
+## Mode data hybrid
 
-```text
-stores/bumi-makmur
-├── users/{firebaseUid}
-├── branches/BM001
-├── system/settings
-├── products/{id}
-├── sales/{id}
-└── collection operasional lainnya
-
-publicReceipts/{token}
-```
-
-Profil Owner awal harus berada di:
-
-```text
-stores/bumi-makmur/users/{UID_OWNER}
-```
-
-## Menjalankan di PC
-
-```bash
-npm install
-npm run test:core
-npm run dev
-```
-
-Build web:
-
-```bash
-npm run build
-```
-
-## Build APK/AAB di GitHub
-
-Gunakan workflow:
-
-```text
-Actions → Build Signed Android Spark Free Hybrid Release
-```
-
-Workflow memakai signing key release yang sama dengan versi sebelumnya dan menghasilkan APK serta AAB bertanda tangan.
-
-## Deploy Firebase gratis
-
-Security Rules wajib diperbarui dari file `firestore.rules`. Cara termudah adalah menyalinnya ke Firebase Console → Firestore → Rules → Publish.
-
-Hosting, rules, dan indexes juga dapat dideploy dengan:
-
-```bash
-npm run firebase:deploy:free
-```
-
-atau workflow **Deploy Firebase Spark Free Rules and Hosting** setelah secret `FIREBASE_TOKEN` tersedia.
+- Saat internet tersedia, data tersambung realtime ke Firebase.
+- Saat internet terputus, aplikasi tetap dapat dipakai menggunakan cache IndexedDB perangkat.
+- Setiap perubahan offline masuk ke antrean lokal yang persisten.
+- Begitu koneksi kembali, antrean otomatis dikirim ke Cloud Functions dan Firestore.
+- Mutasi memakai ID idempoten agar pengiriman ulang tidak menggandakan transaksi.
+- Konflik stok, poin, pembayaran hutang/piutang, dan retur digabungkan secara aman.
+- Login offline tersedia setelah pengguna berhasil login online minimal sekali pada perangkat tersebut. Kredensial offline berlaku 30 hari dan disimpan sebagai PBKDF2-SHA256, bukan PIN mentah.
 
 ## Fitur utama
 
-Kasir, open bill, split payment, pembayaran digital, nota WhatsApp/online, produk, multi-harga dan markup, barcode, stok, pembelian, pemasok, pelanggan, loyalty, hutang/piutang, shift, kas, refund/void, laporan, pesanan online, multi-cabang, karyawan, printer, customer display, backup/restore, kamera, biometrik, offline queue, dan sinkronisasi Firebase.
+- Kasir: barcode kamera/manual/USB, produk favorit, varian, modifier, bundle, item kustom, satuan dan konversi.
+- Harga: modal, markup persen, harga eceran, grosir, dan proyek.
+- Pembayaran: tunai, QRIS, ShopeePay, OVO, GoPay, DANA, transfer, kartu, tempo, split payment.
+- Open bill, split bill, promo, diskon item/transaksi, loyalty, pajak, service, dan pembulatan.
+- Produk, stok minimum, rak, movement, adjustment, opname, transfer cabang, pembelian dan retur.
+- Pelanggan, pemasok, hutang, piutang, cicilan, limit kredit, poin dan reward.
+- Shift, modal awal, kas masuk/keluar, expected cash, selisih, refund dan void.
+- Nota 58/80 mm, logo, pesan toko, nota WhatsApp, bagikan gambar, dan nota online.
+- Laporan omzet, HPP, laba, pembayaran, stok, refund, hutang/piutang, dan shift.
+- Multi-cabang, Owner/Manager/Kasir, Firebase Auth custom token, Firestore Rules, audit log server.
+- Kamera saat startup, biometrik Android, printer profile, layar pelanggan, backup/restore JSON.
 
-## Catatan keamanan Spark
+## Menjalankan web
 
-Validasi bisnis utama tetap dijalankan di domain logic aplikasi dan Firestore Rules. Karena paket Spark tidak memakai backend tepercaya Cloud Functions, jangan membagikan akun Owner dan jangan menonaktifkan Security Rules. Owner sebaiknya melakukan audit berkala melalui menu Audit Log dan laporan stok.
+```bash
+npm install
+npm run dev
+```
 
-Baca `FIREBASE-SPARK-FREE-SETUP.md`, `UPDATE-TO-v4.2.md`, dan `QA-REPORT-v4.2.md` sebelum dipakai untuk transaksi nyata.
+Build produksi:
+
+```bash
+npm run test:core
+npm run build
+```
+
+## Firebase
+
+Salin `.env.example` menjadi `.env.local`, isi konfigurasi Firebase, kemudian ikuti `FIREBASE-CLOUD-SETUP.md` dan `HYBRID-OFFLINE-SYNC.md`.
+
+Cloud backend:
+
+```bash
+cd functions
+npm install
+cd ..
+npm run firebase:deploy
+```
+
+## Android signed release
+
+Gunakan workflow GitHub Actions **Build Signed Android Hybrid Release**. Jangan membuat signing key baru bila aplikasi release sebelumnya sudah terpasang. Panduan ada di `ANDROID-SIGNING-SETUP.md`.
+
+Artifact yang dihasilkan:
+
+```text
+Bumi-Makmur-POS-Hybrid-v4.2.0-signed.apk
+Bumi-Makmur-POS-Hybrid-v4.2.0-signed.aab
+```
+
+## Catatan operasional
+
+- Refund/void oleh Kasir tetap membutuhkan internet untuk approval Manager/Owner yang aman.
+- Pembuatan atau perubahan PIN karyawan, restore cloud, reset database, dan upload aset Firebase membutuhkan internet.
+- Transaksi kasir, pembelian, stok, pelanggan, pengeluaran, shift, hutang/piutang, dan sebagian besar operasi harian tetap dapat dilakukan offline.
+- Lakukan backup JSON berkala walaupun data tersimpan di cloud.

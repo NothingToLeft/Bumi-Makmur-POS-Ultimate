@@ -1,5 +1,8 @@
-const CACHE_NAME = 'bumi-makmur-pos-spark-free-v4.2.0';
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
+const CACHE_NAME = 'bumi-makmur-pos-hybrid-v4.2.0';
+const APP_SHELL = [
+  '/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/logo-bm.svg',
+  '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png'
+];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
@@ -20,20 +23,27 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Navigasi memakai network-first agar versi terbaru cepat terbaca, tetapi tidak pernah memaksa reload klien.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          if (response.ok) event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put('/index.html', response.clone())));
+          return response;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // Aset memakai stale-while-revalidate agar UI tetap cepat saat sinyal buruk.
   event.respondWith(
-    fetch(request)
-      .then(response => {
-        if (response.ok) {
-          const copy = response.clone();
-          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, copy)));
-        }
+    caches.match(request).then(cached => {
+      const network = fetch(request).then(response => {
+        if (response.ok) event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone())));
         return response;
-      })
-      .catch(async () => {
-        const cached = await caches.match(request);
-        if (cached) return cached;
-        if (request.mode === 'navigate') return caches.match('/index.html');
-        throw new Error('Resource tidak tersedia offline.');
-      })
+      }).catch(() => cached);
+      return cached || network;
+    })
   );
 });
