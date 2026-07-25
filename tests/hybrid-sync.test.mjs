@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyOperationsToDb, buildDiffOperations, rebaseOperationsAgainstRemote } from '../src/services/syncEngine.js';
 
 const baseDb = () => ({
-  meta: { version: '4.1.0' }, configs: { companyName: 'BM' }, categories: [], units: [],
+  meta: { version: '4.2.0' }, configs: { companyName: 'BM' }, categories: [], units: [],
   products: [{ id: 'P1', name: 'Kabel', stock: 10, modalPrice: 5000, prices: { retail: 6500 } }],
   customers: [{ id: 'C1', name: 'Budi', points: 10 }],
   sales: [], users: [], auditLogs: []

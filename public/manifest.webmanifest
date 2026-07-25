@@ -1,8 +1,9 @@
 {
-  "name": "Bumi Makmur POS Hybrid",
+  "name": "Bumi Makmur POS Spark Free Hybrid",
   "short_name": "BM POS",
-  "description": "POS profesional Bumi Makmur dengan operasi offline dan sinkronisasi otomatis Firebase.",
+  "description": "POS profesional Bumi Makmur dengan Firebase Spark, cache offline, dan sinkronisasi otomatis.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f9fafb",
   "theme_color": "#065f46",
@@ -16,9 +17,5 @@
     }
   ],
   "id": "app.bumimakmur.pos",
-  "categories": [
-    "business",
-    "finance",
-    "productivity"
-  ]
+  "categories": ["business", "finance", "productivity"]
 }

@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { APP_VERSION, MAIN_BRANCH_ID, can, createSeedDb } from '../data/defaults.js';
 import { generateId, safeJSONParse, downloadFile, localDateKey } from '../utils/helpers.js';
 import { firebaseConfigured, DEFAULT_STORE_CODE, STORE_ID } from '../services/firebase.js';
-import { bootstrapCloudStore, getCloudSessionProfile, loginWithCloudPin, signOutCloudAccount, upsertCloudEmployee, verifyCloudManagerPin } from '../services/cloudAuth.js';
+import { createEmployeeAccount, getCloudSessionProfile, loginWithEmailPassword, signOutCloudAccount, updateEmployeeProfile } from '../services/cloudAuth.js';
 import {
   applyOperationsToDb,
   buildDiffOperations,
@@ -162,7 +162,10 @@ export function PosProvider({ children }) {
                 approvalToken: mutation.approvalToken || '',
                 mutationId: mutation.id,
                 offlineCreatedAt: mutation.createdAt,
-                deviceId: deviceSettings.deviceId || ''
+                deviceId: deviceSettings.deviceId || '',
+                userName: profile.name || '',
+                userRole: profile.role || '',
+                branchId: profile.branchId || ''
               });
               removePendingMutation(storeCode, mutation.id);
               synced += 1;
@@ -226,7 +229,24 @@ export function PosProvider({ children }) {
       } catch (syncError) {
         console.warn('Antrean belum seluruhnya tersinkron; realtime tetap dilanjutkan.', syncError);
       }
-      const loaded = await loadCloudDb(seedRef.current, profile, profile.storeId || STORE_ID);
+      let loaded = await loadCloudDb(seedRef.current, profile, profile.storeId || STORE_ID);
+      if (profile.role === 'owner' && loaded.meta?.cloudInitialized !== true) {
+        const initial = clone(seedRef.current);
+        initial.users = loaded.users?.length ? loaded.users : [profile];
+        initial.branches = loaded.branches?.length ? loaded.branches : initial.branches;
+        initial.configs = {
+          ...initial.configs,
+          activeBranchId: profile.branchId || initial.branches[0]?.id || MAIN_BRANCH_ID
+        };
+        await seedCloudDb(initial, profile.storeId || STORE_ID, {
+          userName: profile.name,
+          userRole: profile.role,
+          branchId: profile.branchId || MAIN_BRANCH_ID,
+          deviceId: deviceSettings.deviceId || '',
+          baseDb: loaded
+        });
+        loaded = await loadCloudDb(seedRef.current, profile, profile.storeId || STORE_ID);
+      }
       const localView = overlayPendingOnRemote(loaded);
       dbRef.current = localView;
       setDb(localView);
@@ -313,9 +333,6 @@ export function PosProvider({ children }) {
     if (!requiredPermission || !can(currentUserRef.current, requiredPermission)) {
       throw new Error(`Hak akses ${requiredPermission || action} tidak tersedia untuk akun ini.`);
     }
-    if (!navigator.onLine && currentUserRef.current.role === 'kasir' && ['SALE_REFUND', 'SALE_VOID'].includes(action)) {
-      throw new Error('Refund/void oleh Kasir memerlukan koneksi internet untuk approval Manager yang aman. Transaksi lain tetap dapat berjalan offline.');
-    }
     const before = clone(dbRef.current);
     const next = clone(before);
     const result = mutator(next);
@@ -357,55 +374,82 @@ export function PosProvider({ children }) {
 
   const login = useCallback(async pin => {
     const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
+    const profile = await verifyOfflinePin(key, pin).catch(() => null);
+    if (!profile) {
+      return {
+        success: false,
+        message: 'PIN belum terhubung pada perangkat ini. Gunakan Email & Password untuk login pertama atau ganti akun.'
+      };
+    }
+    const hydrated = await hydrateLocal(profile);
+    if (!hydrated && !navigator.onLine) {
+      return {
+        success: false,
+        message: 'Data offline belum tersedia. Sambungkan internet dan login sekali dengan Email & Password.'
+      };
+    }
+    let resolvedProfile = profile;
     if (navigator.onLine && firebaseConfigured) {
       try {
-        const profile = await loginWithCloudPin(pin, key, {
-          platform: navigator.userAgent,
-          appVersion: APP_VERSION
-        });
-        await cacheOfflineCredential(key, pin, profile);
-        setCurrentUser(profile);
-        return { success: true, user: profile, mode: 'online' };
-      } catch (error) {
-        const cachedProfile = await verifyOfflinePin(key, pin).catch(() => null);
-        if (cachedProfile) {
-          const hydrated = await hydrateLocal(cachedProfile);
-          if (hydrated) {
-            setCurrentUser(cachedProfile);
-            setCloudError('Firebase belum dapat dijangkau. Masuk menggunakan kredensial aman yang tersimpan di perangkat.');
-            return { success: true, user: cachedProfile, mode: 'offline-fallback' };
-          }
+        const cloudProfile = await getCloudSessionProfile(STORE_ID);
+        if (!cloudProfile || cloudProfile.id !== profile.id) {
+          return {
+            success: false,
+            message: 'Sesi Firebase pada perangkat ini sudah berakhir. Login kembali memakai Email & Password agar sinkronisasi aktif.'
+          };
         }
-        return { success: false, message: error?.message || 'PIN tidak dikenali.' };
+        resolvedProfile = cloudProfile;
+      } catch (error) {
+        console.warn('Profil cloud belum dapat diverifikasi; aplikasi tetap membuka cache lokal.', error);
+        setCloudError('Firebase belum dapat dijangkau. Aplikasi dibuka dari cache lokal dan akan mencoba sinkron kembali.');
       }
     }
-    const profile = await verifyOfflinePin(key, pin).catch(() => null);
-    if (!profile) return { success: false, message: 'PIN offline belum tersedia. Sambungkan internet dan login sekali pada perangkat ini.' };
-    const hydrated = await hydrateLocal(profile);
-    if (!hydrated) return { success: false, message: 'Data offline belum tersedia. Sambungkan internet untuk mengambil database toko terlebih dahulu.' };
+    setCurrentUser(resolvedProfile);
+    return { success: true, user: resolvedProfile, mode: navigator.onLine ? 'pin-online' : 'pin-offline' };
+  }, [deviceSettings.storeCode, hydrateLocal]);
+
+  const loginWithEmail = useCallback(async ({ email, password, pin }) => {
+    if (!navigator.onLine) throw new Error('Login pertama dengan Email & Password memerlukan internet.');
+    if (!firebaseConfigured) throw new Error('Konfigurasi Firebase belum tersedia.');
+    if (!/^\d{4}$/.test(String(pin || ''))) throw new Error('Buat PIN perangkat 4 digit.');
+    const profile = await loginWithEmailPassword(email, password, STORE_ID);
+    const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
+    await cacheOfflineCredential(key, pin, profile);
+    setDeviceSettingsState(previous => ({ ...previous, hasLinkedAccount: true, linkedEmail: String(email || '').trim().toLowerCase() }));
+    await hydrateLocal(profile).catch(() => false);
     setCurrentUser(profile);
-    return { success: true, user: profile, mode: 'offline' };
+    setCloudError('');
+    return { success: true, user: profile, mode: 'email-password' };
   }, [deviceSettings.storeCode, hydrateLocal]);
 
   const loginWithBiometric = useCallback(async userId => {
     const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
+    let profile = await getCachedOfflineProfile(key, userId);
     if (navigator.onLine && firebaseConfigured) {
       try {
-        const profile = await getCloudSessionProfile();
-        if (profile && profile.id === userId) {
-          setCurrentUser(profile);
-          return { success: true, user: profile, mode: 'online' };
-        }
+        const cloudProfile = await getCloudSessionProfile(STORE_ID);
+        if (cloudProfile && cloudProfile.id === userId) profile = cloudProfile;
       } catch (error) {
-        console.warn('Sesi biometrik cloud tidak tersedia; mencoba cache lokal.', error);
+        console.warn('Sesi Firebase biometrik belum dapat diperbarui; memakai profil lokal.', error);
       }
     }
-    const profile = await getCachedOfflineProfile(key, userId);
-    if (!profile) return { success: false, message: 'Sesi biometrik belum tersimpan. Masuk sekali menggunakan PIN.' };
+    if (!profile) return { success: false, message: 'Sesi biometrik belum tersedia. Login sekali dengan Email & Password dan PIN.' };
     const hydrated = await hydrateLocal(profile);
-    if (!hydrated) return { success: false, message: 'Data offline belum tersedia pada perangkat ini.' };
+    if (!hydrated && !navigator.onLine) return { success: false, message: 'Data offline belum tersedia pada perangkat ini.' };
+    if (navigator.onLine && firebaseConfigured) {
+      try {
+        const cloudProfile = await getCloudSessionProfile(STORE_ID);
+        if (!cloudProfile || cloudProfile.id !== profile.id) {
+          return { success: false, message: 'Sesi Firebase sudah berakhir. Login kembali dengan Email & Password sebelum memakai biometrik.' };
+        }
+        profile = cloudProfile;
+      } catch (error) {
+        console.warn('Verifikasi sesi biometrik ke Firebase gagal; memakai profil cache lokal.', error);
+        setCloudError('Firebase belum dapat dijangkau. Mode cache lokal aktif.');
+      }
+    }
     setCurrentUser(profile);
-    return { success: true, user: profile, mode: 'offline' };
+    return { success: true, user: profile, mode: navigator.onLine ? 'biometric-online' : 'biometric-offline' };
   }, [deviceSettings.storeCode, hydrateLocal]);
 
   const updateDeviceSettings = useCallback(patch => {
@@ -424,36 +468,7 @@ export function PosProvider({ children }) {
     if (pending > 0) throw new Error(`Masih ada ${pending} pembaruan offline yang belum tersinkron. Sambungkan internet sebelum keluar penuh.`);
     logout();
     await Promise.all([signOutCloudAccount(), clearOfflineIdentity(storeCode)]);
-  };
-
-  const bootstrapStore = async payload => {
-    if (!navigator.onLine) throw new Error('Setup toko pertama memerlukan koneksi internet.');
-    const result = await bootstrapCloudStore(payload);
-    if (result.requiresSeed) {
-      const cloudSeed = clone(seedRef.current);
-      cloudSeed.users = [];
-      cloudSeed.shifts = [];
-      cloudSeed.cashMovements = [];
-      cloudSeed.auditLogs = [];
-      cloudSeed.configs = {
-        ...cloudSeed.configs,
-        companyName: String(payload.businessName || cloudSeed.configs.companyName || 'BUMI MAKMUR').trim(),
-        activeBranchId: MAIN_BRANCH_ID
-      };
-      cloudSeed.branches = (cloudSeed.branches || []).map((item, index) => index === 0 ? {
-        ...item,
-        id: MAIN_BRANCH_ID,
-        name: String(payload.branchName || item.name || 'Bumi Makmur Pusat').trim(),
-        address: String(payload.branchAddress || item.address || '').trim(),
-        phone: String(payload.branchPhone || item.phone || '').trim()
-      } : item);
-      await seedCloudDb(cloudSeed, result.profile.storeId || STORE_ID);
-      await saveCachedDb(payload.storeCode || storeCode, cloudSeed, result.profile);
-    }
-    setDeviceSettingsState(previous => ({ ...previous, storeCode: payload.storeCode || previous.storeCode }));
-    await cacheOfflineCredential(payload.storeCode || storeCode, payload.ownerPin, result.profile);
-    setCurrentUser(result.profile);
-    return result;
+    setDeviceSettingsState(previous => ({ ...previous, hasLinkedAccount: false, linkedEmail: '', biometricEnabled: false, biometricUserId: '' }));
   };
 
   const hasPermission = permission => can(currentUser, permission);
@@ -580,24 +595,41 @@ export function PosProvider({ children }) {
   });
 
   const saveEmployee = async data => {
-    if (!currentUser) throw new Error('Sesi pengguna belum aktif.');
-    if (!navigator.onLine) throw new Error('Pembuatan atau perubahan PIN karyawan memerlukan internet agar kredensial tetap aman.');
-    const profile = await upsertCloudEmployee({
-      ...data,
-      branchId: data.branchId || branchId
-    });
-    if (profile) {
-      setDb(previous => {
-        const exists = previous.users.some(user => user.id === profile.id);
-        const users = exists
-          ? previous.users.map(user => user.id === profile.id ? profile : user)
-          : [profile, ...previous.users];
-        const next = { ...previous, users };
-        dbRef.current = next;
-        void saveLocalSnapshot(next, currentUser);
-        return next;
-      });
+    if (!currentUser || currentUser.role !== 'owner') throw new Error('Hanya Owner yang boleh mengelola akun karyawan.');
+    if (!navigator.onLine) throw new Error('Pembuatan atau perubahan akun karyawan memerlukan internet.');
+    const name = String(data.name || '').trim();
+    if (!name) throw new Error('Nama karyawan wajib diisi.');
+    if (data.id === currentUser.id && (data.role !== 'owner' || data.active === false)) {
+      throw new Error('Akun Owner yang sedang digunakan tidak dapat diturunkan role atau dinonaktifkan.');
     }
+    if (!data.id && !['manager', 'kasir'].includes(data.role)) {
+      throw new Error('Akun baru hanya dapat dibuat sebagai Manager atau Kasir.');
+    }
+    const payload = {
+      ...data,
+      name,
+      branchId: data.branchId || branchId,
+      storeId: currentUser.storeId || STORE_ID,
+      permissions: Array.isArray(data.permissions) ? data.permissions : []
+    };
+    const profile = data.id
+      ? await updateEmployeeProfile(payload, currentUser.storeId || STORE_ID)
+      : await createEmployeeAccount(payload, currentUser.storeId || STORE_ID);
+
+    if (/^\d{4}$/.test(String(data.pin || ''))) {
+      await cacheOfflineCredential(storeCode, String(data.pin), profile);
+    }
+
+    setDb(previous => {
+      const exists = previous.users.some(user => user.id === profile.id);
+      const users = exists
+        ? previous.users.map(user => user.id === profile.id ? profile : user)
+        : [profile, ...previous.users];
+      const next = { ...previous, users };
+      dbRef.current = next;
+      void saveLocalSnapshot(next, currentUser);
+      return next;
+    });
     return profile;
   };
 
@@ -785,9 +817,16 @@ export function PosProvider({ children }) {
   });
 
   const authorizeManagerPin = async (pin, purpose = 'GENERAL') => {
-    if (!navigator.onLine) throw new Error('Approval Manager untuk refund/void memerlukan koneksi internet.');
-    const result = await verifyCloudManagerPin(pin, purpose);
-    return result?.success ? result : null;
+    const profile = await verifyOfflinePin(storeCode, pin).catch(() => null);
+    if (!profile || profile.active === false || !['owner', 'manager'].includes(profile.role)) {
+      return null;
+    }
+    return {
+      success: true,
+      purpose,
+      user: profile,
+      approvalToken: `LOCAL-${profile.id}-${Date.now()}`
+    };
   };
 
   const refundSale = async payload => {
@@ -1101,7 +1140,7 @@ export function PosProvider({ children }) {
     const restored = { ...parsed, meta: { ...parsed.meta, version: APP_VERSION, restoredAt: nowISO(), updatedAt: nowISO() } };
     setCloudSaving(true);
     try {
-      await replaceCloudDb(dbRef.current, restored, currentUser.storeId || STORE_ID);
+      await replaceCloudDb(dbRef.current, restored, currentUser.storeId || STORE_ID, { userName: currentUser.name, userRole: currentUser.role, branchId, deviceId: deviceSettings.deviceId || '' });
       dbRef.current = restored;
       setDb(restored);
       setLocalReady(true);
@@ -1131,7 +1170,7 @@ export function PosProvider({ children }) {
     seed.cashMovements = [];
     seed.auditLogs = [];
     seed.configs = { ...seed.configs, companyName: db.configs.companyName, activeBranchId: db.configs.activeBranchId || MAIN_BRANCH_ID };
-    await replaceCloudDb(dbRef.current, seed, currentUser.storeId || STORE_ID);
+    await replaceCloudDb(dbRef.current, seed, currentUser.storeId || STORE_ID, { action: 'CLOUD_RESET', userName: currentUser.name, userRole: currentUser.role, branchId, deviceId: deviceSettings.deviceId || '' });
     dbRef.current = seed;
     setDb(seed);
     setLocalReady(true);
@@ -1165,7 +1204,7 @@ export function PosProvider({ children }) {
     db, scoped, currentUser, online, cloudConfigured, localReady, dataReady: localReady || cloudReady,
     cloudReady, cloudLoading, cloudSaving, cloudError, pendingSyncCount, syncConflictCount, lastSyncAttemptAt,
     branchId, branch, customerDisplay, setCustomerDisplay,
-    deviceSettings, updateDeviceSettings, login, loginWithBiometric, logout, signOutAccount, bootstrapStore,
+    deviceSettings, updateDeviceSettings, login, loginWithEmail, loginWithBiometric, logout, signOutAccount,
     hasPermission, setConfig, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,

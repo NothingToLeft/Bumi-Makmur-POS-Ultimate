@@ -1,0 +1,15 @@
+BUMI MAKMUR POS SPARK FREE HYBRID v4.2 — HASIL AUDIT
+
+Core tests             : 40/40 LULUS
+JS/JSX/MJS syntax      : 42 file LULUS
+Relative imports       : LULUS
+JSON configuration     : LULUS
+GitHub workflow YAML   : LULUS
+Firebase Spark design  : Tanpa Cloud Functions / Cloud Storage
+Sensitive file scan    : Tidak ditemukan .jks, private key, service account, atau .env rahasia
+Version                : 4.2.0
+Android versionCode    : 40200
+Package ID             : app.bumimakmur.pos
+
+Build Vite/APK penuh tidak dijalankan lokal karena registry npm timeout.
+Workflow GitHub menjalankan install, test, web build, signed APK/AAB, dan signature verification.

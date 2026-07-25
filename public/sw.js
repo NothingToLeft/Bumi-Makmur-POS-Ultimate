@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bumi-makmur-pos-hybrid-v4.1.0';
+const CACHE_NAME = 'bumi-makmur-pos-spark-free-v4.2.0';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {

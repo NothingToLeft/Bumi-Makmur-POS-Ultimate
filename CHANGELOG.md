@@ -1,5 +1,18 @@
 # Changelog
 
+## v4.2.0 — Firebase Spark Free Hybrid
+
+- Migrasi login cloud dari Custom Token/Cloud Functions ke Firebase Email/Password.
+- PIN PBKDF2 dan biometrik menjadi pengunci lokal setelah login pertama.
+- Firestore direct transaction, cache offline, mutation queue, idempotency, audit log, dan conflict rebase.
+- Menghapus Cloud Functions dan Cloud Storage agar dapat berjalan pada paket Spark gratis.
+- Menyamakan cabang utama menjadi `BM001`.
+- Memperbaiki verifikasi sesi cloud pada PIN/biometrik.
+- Memperbaiki orphan Firebase Auth saat pembuatan profil karyawan gagal.
+- Memperbaiki izin Kasir untuk pesanan online dan sinkronisasi loyalty point.
+- Nota publik sekarang memakai Timestamp dan otomatis kedaluwarsa pada Security Rules.
+- Service worker, workflow Android, dokumentasi, dan QA diperbarui.
+
 ## 4.1.0 — Hybrid Offline + Firebase Auto-Sync
 
 - Mengaktifkan operasional offline melalui IndexedDB dan app shell service worker.

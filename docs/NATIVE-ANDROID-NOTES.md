@@ -1,11 +1,9 @@
-# Native Android Notes
+# Native Android Notes v4.2
 
+- Version name: `4.2.0`
+- Version code: `40200`
 - Package ID: `app.bumimakmur.pos`
-- Version name: `4.1.0`
-- Version code: `40100`
-- Target: HP Android dan tablet Android.
-- Mode data: Hybrid offline + Firebase auto-sync.
-- Permission: internet, network state, camera, notification, biometric, Bluetooth legacy/modern, USB host optional.
-- Kamera diminta saat startup bila pengaturan aktif.
-- Biometrik menggunakan Android BiometricPrompt.
-- Release ditandatangani dengan keystore tetap dan diverifikasi menggunakan `apksigner`.
+- Kamera diminta ketika aplikasi dibuka bila pengaturan tersebut aktif.
+- Biometrik memakai AndroidX Biometric dan tidak menyimpan sidik jari/wajah.
+- Bluetooth, USB host, notification, network, dan camera permissions dipersiapkan oleh `scripts/prepare-android.mjs`.
+- APK/AAB release ditandatangani oleh workflow GitHub Actions menggunakan keystore tetap.

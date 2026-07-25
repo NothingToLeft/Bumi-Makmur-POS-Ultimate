@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "4.1.0",
+  "version": "4.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -12,10 +12,8 @@
     "android:open": "npx cap open android",
     "android:prepare": "node scripts/prepare-android.mjs",
     "test:core": "node --test tests/*.test.mjs",
-    "firebase:emulators": "firebase emulators:start --only auth,firestore,functions,storage",
-    "firebase:deploy": "firebase deploy --only firestore:rules,firestore:indexes,storage,functions,hosting",
-    "firebase:deploy:backend": "firebase deploy --only firestore:rules,firestore:indexes,storage,functions",
-    "firebase:deploy:hosting": "npm run build && firebase deploy --only hosting"
+    "firebase:deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "firebase:deploy:free": "firebase deploy --only firestore:rules,firestore:indexes,hosting"
   },
   "dependencies": {
     "@capacitor/android": "7.4.3",
@@ -36,5 +34,5 @@
     "vite": "6.0.7",
     "firebase-tools": "^14.0.0"
   },
-  "description": "Bumi Makmur POS Hybrid Enterprise: tetap beroperasi offline, menyimpan antrean lokal aman, dan menyinkronkan otomatis ke Firebase saat internet kembali."
+  "description": "Bumi Makmur POS Spark Free Hybrid: email/password Firebase, PIN/biometrik lokal, Firestore realtime, operasi offline, dan sinkron otomatis tanpa Cloud Functions atau Cloud Storage."
 }

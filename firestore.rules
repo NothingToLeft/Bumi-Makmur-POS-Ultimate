@@ -1,167 +1,273 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function sameStore(storeId) { return signedIn() && request.auth.token.storeId == storeId; }
-    function owner() { return signedIn() && request.auth.token.role == 'owner'; }
-    function manager() { return signedIn() && request.auth.token.role == 'manager'; }
-    function cashier() { return signedIn() && request.auth.token.role == 'kasir'; }
-    function ownerOrManager() { return owner() || manager(); }
-    function sameBranch() { return owner() || resource.data.branchId == request.auth.token.branchId; }
+    function signedIn() {
+      return request.auth != null;
+    }
 
-    match /storeCodes/{code} {
-      allow read, write: if false;
+    function profilePath(storeId) {
+      return /databases/$(database)/documents/stores/$(storeId)/users/$(request.auth.uid);
+    }
+
+    function hasProfile(storeId) {
+      return signedIn() && exists(profilePath(storeId));
+    }
+
+    function profile(storeId) {
+      return get(profilePath(storeId)).data;
+    }
+
+    function activeUser(storeId) {
+      return hasProfile(storeId)
+        && profile(storeId).active == true
+        && profile(storeId).storeId == storeId;
+    }
+
+    function owner(storeId) {
+      return activeUser(storeId) && profile(storeId).role == 'owner';
+    }
+
+    function manager(storeId) {
+      return activeUser(storeId)
+        && (profile(storeId).role == 'owner' || profile(storeId).role == 'manager');
+    }
+
+    function cashier(storeId) {
+      return activeUser(storeId) && profile(storeId).role == 'kasir';
+    }
+
+    function branchAllowed(storeId, data) {
+      return owner(storeId)
+        || data.get('branchId', '') == profile(storeId).branchId
+        || data.get('sourceBranchId', '') == profile(storeId).branchId
+        || data.get('destinationBranchId', '') == profile(storeId).branchId;
+    }
+
+    function customerCashierCreateIsSafe(storeId) {
+      return cashier(storeId)
+        && branchAllowed(storeId, request.resource.data)
+        && request.resource.data.get('priceTier', 'retail') == 'retail'
+        && request.resource.data.get('creditLimit', 0) == 0
+        && request.resource.data.get('points', 0) == 0
+        && request.resource.data.get('active', true) == true;
+    }
+
+    function customerCashierUpdateIsSafe(storeId) {
+      return cashier(storeId)
+        && branchAllowed(storeId, resource.data)
+        && branchAllowed(storeId, request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'phone', 'email', 'address', 'project', 'notes', 'points'
+        ])
+        && request.resource.data.get('points', 0) >= 0;
+    }
+
+    match /stores/{storeId} {
+      allow read: if activeUser(storeId);
+      allow create, update, delete: if owner(storeId);
+
+      match /users/{uid} {
+        allow read: if activeUser(storeId)
+          && (request.auth.uid == uid || manager(storeId));
+        allow create, update: if owner(storeId)
+          && request.resource.data.storeId == storeId
+          && request.resource.data.uid == uid
+          && request.resource.data.role in ['owner', 'manager', 'kasir'];
+        allow delete: if owner(storeId) && uid != request.auth.uid;
+      }
+
+      match /branches/{branchId} {
+        allow read: if activeUser(storeId);
+        allow create, update, delete: if owner(storeId);
+      }
+
+      match /system/{documentId} {
+        allow read: if activeUser(storeId);
+        allow create, update: if manager(storeId);
+        allow delete: if owner(storeId);
+      }
+
+      match /products/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if (
+            manager(storeId)
+            && branchAllowed(storeId, resource.data)
+            && branchAllowed(storeId, request.resource.data)
+          ) || (
+            activeUser(storeId)
+            && branchAllowed(storeId, resource.data)
+            && branchAllowed(storeId, request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock'])
+          );
+        allow delete: if owner(storeId);
+      }
+
+      match /promotions/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /suppliers/{id} {
+        allow read: if manager(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /purchases/{id} {
+        allow read: if manager(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if owner(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /stockAdjustments/{id} {
+        allow read: if manager(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if owner(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /stockOpnames/{id} {
+        allow read: if manager(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if owner(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /stockTransfers/{id} {
+        allow read: if manager(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if owner(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /expenses/{id} {
+        allow read: if manager(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if owner(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /payables/{id} {
+        allow read: if manager(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if owner(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /feedback/{id} {
+        allow read: if manager(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if activeUser(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update, delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /customers/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if (
+          manager(storeId) && branchAllowed(storeId, request.resource.data)
+        ) || customerCashierCreateIsSafe(storeId);
+        allow update: if (
+          manager(storeId)
+          && branchAllowed(storeId, resource.data)
+          && branchAllowed(storeId, request.resource.data)
+        ) || customerCashierUpdateIsSafe(storeId);
+        allow delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /sales/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if activeUser(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if activeUser(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if owner(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /heldSales/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if activeUser(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if activeUser(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /stockMovements/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if activeUser(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update, delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /receivables/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if activeUser(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if activeUser(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /refunds/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if activeUser(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update, delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /shifts/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if activeUser(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if activeUser(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /cashMovements/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if activeUser(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if owner(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /onlineOrders/{id} {
+        allow read: if activeUser(storeId) && branchAllowed(storeId, resource.data);
+        allow create: if manager(storeId) && branchAllowed(storeId, request.resource.data);
+        allow update: if manager(storeId) && branchAllowed(storeId, resource.data) && branchAllowed(storeId, request.resource.data);
+        allow delete: if manager(storeId) && branchAllowed(storeId, resource.data);
+      }
+
+      match /printerProfiles/{id} {
+        allow read: if activeUser(storeId);
+        allow create, update, delete: if manager(storeId);
+      }
+
+      match /campaigns/{id} {
+        allow read: if activeUser(storeId);
+        allow create, update, delete: if manager(storeId);
+      }
+
+      match /auditLogs/{id} {
+        allow read: if manager(storeId);
+        allow create: if activeUser(storeId)
+          && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if false;
+      }
     }
 
     match /publicReceipts/{token} {
-      allow read: if resource.data.active == true && request.time < resource.data.expiresAt;
-      allow write: if false;
+      allow get: if resource.data.active == true
+        && resource.data.expiresAt is timestamp
+        && request.time < resource.data.expiresAt;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.storeId is string
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && activeUser(request.resource.data.storeId);
+      allow update, delete: if signedIn()
+        && resource.data.storeId is string
+        && owner(resource.data.storeId);
     }
 
-    match /stores/{storeId}/system/settings {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/privateCredentials/{uid} {
+    match /{document=**} {
       allow read, write: if false;
-    }
-
-    match /stores/{storeId}/approvals/{token} {
-      allow read, write: if false;
-    }
-
-    match /stores/{storeId}/mutationReceipts/{mutationId} {
-      allow read, write: if false;
-    }
-
-    match /stores/{storeId}/devices/{deviceId} {
-      allow read: if sameStore(storeId) && ownerOrManager();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/users/{uid} {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/branches/{id} {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/products/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/promotions/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/suppliers/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/customers/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/sales/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/heldSales/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/purchases/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/stockMovements/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/stockAdjustments/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/stockOpnames/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/stockTransfers/{id} {
-      allow read: if sameStore(storeId) && (
-        owner() ||
-        resource.data.sourceBranchId == request.auth.token.branchId ||
-        resource.data.destinationBranchId == request.auth.token.branchId
-      );
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/expenses/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/receivables/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/payables/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/refunds/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/shifts/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/cashMovements/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/onlineOrders/{id} {
-      allow read: if sameStore(storeId) && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/printerProfiles/{id} {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/campaigns/{id} {
-      allow read: if sameStore(storeId);
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/feedback/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager() && sameBranch();
-      allow write: if false;
-    }
-
-    match /stores/{storeId}/auditLogs/{id} {
-      allow read: if sameStore(storeId) && ownerOrManager();
-      allow write: if false;
     }
   }
 }
