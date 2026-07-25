@@ -1,4 +1,4 @@
-name: Deploy Firebase Cloud Backend
+name: Deploy Firebase Spark Rules
 
 on:
   workflow_dispatch:
@@ -8,69 +8,43 @@ permissions:
   id-token: write
 
 jobs:
-  deploy:
+  deploy-rules:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
+          package-manager-cache: false
 
       - name: Authenticate Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
-      - name: Validate Firebase configuration
+      - name: Validate Firebase project
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
-          VITE_FIREBASE_STORE_ID: ${{ secrets.VITE_FIREBASE_STORE_ID }}
-          VITE_FIREBASE_STORE_CODE: ${{ secrets.VITE_FIREBASE_STORE_CODE }}
-          VITE_FIREBASE_FUNCTIONS_REGION: ${{ secrets.VITE_FIREBASE_FUNCTIONS_REGION }}
-          VITE_PUBLIC_APP_URL: ${{ secrets.VITE_PUBLIC_APP_URL }}
         shell: bash
         run: |
           set -euo pipefail
-          required=(FIREBASE_PROJECT_ID VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID VITE_FIREBASE_STORE_ID VITE_FIREBASE_STORE_CODE VITE_FIREBASE_FUNCTIONS_REGION VITE_PUBLIC_APP_URL)
-          for key in "${required[@]}"; do
-            if [ -z "${!key:-}" ]; then echo "::error::$key belum tersedia."; exit 1; fi
-          done
-          cat > .env.production <<ENVFILE
-          VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
-          VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
-          VITE_FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
-          VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET
-          VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
-          VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
-          VITE_FIREBASE_STORE_ID=$VITE_FIREBASE_STORE_ID
-          VITE_FIREBASE_STORE_CODE=$VITE_FIREBASE_STORE_CODE
-          VITE_FIREBASE_FUNCTIONS_REGION=$VITE_FIREBASE_FUNCTIONS_REGION
-          VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL
-          ENVFILE
+          if [ -z "${FIREBASE_PROJECT_ID:-}" ]; then
+            echo "::error::VITE_FIREBASE_PROJECT_ID belum tersedia."
+            exit 1
+          fi
           printf '{"projects":{"default":"%s"}}\n' "$FIREBASE_PROJECT_ID" > .firebaserc
 
-      - name: Install, test and build web
+      - name: Install tools and run tests
         run: |
           npm install --no-audit --no-fund
           npm run test:core
-          npm run build
+          npm run audit:static
 
-      - name: Validate Cloud Functions
-        working-directory: functions
-        run: |
-          npm install --no-audit --no-fund
-          npm run lint
-
-      - name: Deploy rules, indexes, functions, storage and hosting
+      - name: Deploy Firestore rules and indexes only
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-        run: npx firebase-tools deploy --project "$FIREBASE_PROJECT_ID" --only firestore:rules,firestore:indexes,storage,functions,hosting --non-interactive
+        run: npx firebase-tools deploy --project "$FIREBASE_PROJECT_ID" --only firestore:rules,firestore:indexes --non-interactive
