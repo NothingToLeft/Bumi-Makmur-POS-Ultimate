@@ -1,4 +1,4 @@
-name: Build Signed Android Hybrid Release
+name: Deploy Firebase Spark Free Rules and Hosting
 
 on:
   workflow_dispatch:
@@ -7,10 +7,9 @@ permissions:
   contents: read
 
 jobs:
-  build-release:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -18,262 +17,44 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Validate Firebase build configuration
+      - name: Validate configuration
         env:
+          FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
           VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_STORE_ID: ${{ secrets.VITE_FIREBASE_STORE_ID }}
           VITE_FIREBASE_STORE_CODE: ${{ secrets.VITE_FIREBASE_STORE_CODE }}
-          VITE_FIREBASE_FUNCTIONS_REGION: ${{ secrets.VITE_FIREBASE_FUNCTIONS_REGION }}
           VITE_PUBLIC_APP_URL: ${{ secrets.VITE_PUBLIC_APP_URL }}
-        shell: bash
         run: |
           set -euo pipefail
-
-          required=(
-            VITE_FIREBASE_API_KEY
-            VITE_FIREBASE_AUTH_DOMAIN
-            VITE_FIREBASE_PROJECT_ID
-            VITE_FIREBASE_STORAGE_BUCKET
-            VITE_FIREBASE_MESSAGING_SENDER_ID
-            VITE_FIREBASE_APP_ID
-            VITE_FIREBASE_STORE_ID
-            VITE_FIREBASE_STORE_CODE
-            VITE_FIREBASE_FUNCTIONS_REGION
-            VITE_PUBLIC_APP_URL
-          )
-
-          for key in "${required[@]}"; do
-            if [ -z "${!key:-}" ]; then
-              echo "::error::$key belum diisi pada Settings > Secrets and variables > Actions."
-              exit 1
-            fi
-          done
-
+          test -n "$FIREBASE_PROJECT_ID" || { echo "::error::VITE_FIREBASE_PROJECT_ID belum diisi."; exit 1; }
+          test -n "$FIREBASE_TOKEN" || { echo "::error::FIREBASE_TOKEN belum diisi. Rules tetap dapat dipublish manual dari Firebase Console."; exit 1; }
           cat > .env.production <<ENVFILE
           VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
           VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
-          VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
+          VITE_FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
           VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET
           VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
           VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
           VITE_FIREBASE_STORE_ID=$VITE_FIREBASE_STORE_ID
           VITE_FIREBASE_STORE_CODE=$VITE_FIREBASE_STORE_CODE
-          VITE_FIREBASE_FUNCTIONS_REGION=$VITE_FIREBASE_FUNCTIONS_REGION
           VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL
           ENVFILE
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Run core tests
-        run: npm run test:core
-
-      - name: Build web application
-        run: npm run build
-
-      - name: Create and sync Android project
+      - name: Install, test and build
         run: |
-          npx cap add android
-          npx cap sync android
-          npm run android:prepare
+          npm install --no-audit --no-fund
+          npm run test:core
+          npm run build
 
-      - name: Prepare release signing key
+      - name: Deploy free Firebase resources
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || \
-             [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || \
-             [ -z "$ANDROID_KEY_ALIAS" ] || \
-             [ -z "$ANDROID_KEY_PASSWORD" ]; then
-            echo "::error::Android signing secrets belum lengkap."
-            exit 1
-          fi
-
-          KEYSTORE_PATH="$RUNNER_TEMP/bumi-makmur-upload.jks"
-          export KEYSTORE_PATH
-
-                    python3 - <<'PYCODE'
-          import base64
-          import hashlib
-          import os
-          import re
-          import sys
-          from pathlib import Path
-
-          raw = os.environ.get("ANDROID_KEYSTORE_BASE64", "")
-
-          # Hapus BOM, zero-width character, spasi, baris baru,
-          # tanda petik, nama variabel, dan karakter lain yang
-          # bukan bagian dari Base64.
-          raw = raw.replace("\ufeff", "")
-          raw = raw.replace("\u200b", "")
-          raw = raw.replace("\u200c", "")
-          raw = raw.replace("\u200d", "")
-          raw = raw.replace("\u2060", "")
-
-          prefix = "/u3+7Q"
-          start = raw.find(prefix)
-
-          if start < 0:
-              print("::error::Awalan Base64 keystore /u3+7Q tidak ditemukan.")
-              sys.exit(1)
-
-          raw = raw[start:]
-
-          # Pertahankan hanya karakter alfabet Base64.
-          cleaned = re.sub(r"[^A-Za-z0-9+/=]", "", raw)
-
-          expected_length = 5308
-
-          if len(cleaned) < expected_length:
-              print(
-                  f"::error::Base64 terpotong. "
-                  f"Ditemukan {len(cleaned)} karakter, "
-                  f"seharusnya {expected_length}."
-              )
-              sys.exit(1)
-
-          payload = cleaned[:expected_length]
-
-          try:
-              decoded = base64.b64decode(payload, validate=True)
-          except Exception as exc:
-              print(f"::error::Base64 masih tidak valid: {exc}")
-              sys.exit(1)
-
-          if len(decoded) != 3980:
-              print(
-                  f"::error::Ukuran JKS salah. "
-                  f"Ditemukan {len(decoded)} byte, seharusnya 3980 byte."
-              )
-              sys.exit(1)
-
-          if not decoded.startswith(bytes.fromhex("feedfeed")):
-              print("::error::Hasil decode bukan Java KeyStore yang valid.")
-              sys.exit(1)
-
-          expected_sha256 = (
-              "fc54097137ce8ce179d11a1cbb0002cb"
-              "8716290108701c87d76ef9d374c364ca"
-          )
-
-          actual_sha256 = hashlib.sha256(decoded).hexdigest()
-
-          if actual_sha256 != expected_sha256:
-              print("::error::Isi keystore berbeda atau Base64 rusak.")
-              print(f"::error::SHA-256 terdeteksi: {actual_sha256}")
-              sys.exit(1)
-
-          output_path = Path(os.environ["KEYSTORE_PATH"])
-          output_path.write_bytes(decoded)
-
-          print("Keystore berhasil didekode dan diverifikasi.")
-          print(f"Ukuran JKS: {len(decoded)} byte.")
-          print(f"SHA-256: {actual_sha256}")
-          PYCODE
-
-          keytool -list \
-            -keystore "$KEYSTORE_PATH" \
-            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
-            -alias "$ANDROID_KEY_ALIAS" \
-            >/dev/null
-
-          echo "BM_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
-          echo "BM_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "BM_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "BM_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
-
-      - name: Build signed APK and AAB
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon clean assembleRelease bundleRelease
-
-      - name: Verify APK signature
-        run: |
-          APKSIGNER=$(
-            find "$ANDROID_HOME/build-tools" \
-              -name apksigner \
-              -type f |
-            sort -V |
-            tail -1
-          )
-
-          if [ -z "$APKSIGNER" ]; then
-            echo "::error::apksigner tidak ditemukan."
-            exit 1
-          fi
-
-          "$APKSIGNER" verify \
-            --verbose \
-            --print-certs \
-            android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Package release artifacts
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-
-          VERSION=$(tr -d '\r\n' < VERSION.txt)
-
-          mkdir -p release-package
-
-          cp \
-            android/app/build/outputs/apk/release/app-release.apk \
-            "release-package/Bumi-Makmur-POS-Hybrid-v${VERSION}-signed.apk"
-
-          cp \
-            android/app/build/outputs/bundle/release/app-release.aab \
-            "release-package/Bumi-Makmur-POS-Hybrid-v${VERSION}-signed.aab"
-
-          sha256sum release-package/* \
-            > release-package/SHA256SUMS.txt
-
-          keytool -list -v \
-            -keystore "$BM_KEYSTORE_PATH" \
-            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
-            -alias "$ANDROID_KEY_ALIAS" \
-            > release-package/SIGNING-CERTIFICATE.txt
-
-          printf '%s\n' \
-            "Versi: $VERSION" \
-            "Package ID: app.bumimakmur.pos" \
-            "Mode: Hybrid offline + Firebase auto-sync" \
-            "Gunakan release keystore yang sama untuk semua pembaruan." \
-            > release-package/INSTALL-NOTES.txt
-
-      - name: Upload signed release
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bumi-Makmur-POS-Hybrid-signed-release
-          path: release-package
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload web build
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bumi-Makmur-POS-Hybrid-web-dist
-          path: dist
-          if-no-files-found: error
-          retention-days: 14
+          FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npx firebase-tools deploy --project "$FIREBASE_PROJECT_ID" --token "$FIREBASE_TOKEN" --only firestore:rules,firestore:indexes,hosting --non-interactive
