@@ -1,32 +1,35 @@
-name: Build Signed Android Hybrid Release
+name: Build Bumi Makmur POS v4.3
 
 on:
   workflow_dispatch:
     inputs:
       run_mode:
-        description: Pilih test-only sebelum Firebase siap, atau full-release untuk APK/AAB bertanda tangan
+        description: Pilih jenis build
         required: true
         default: test-only
         type: choice
         options:
           - test-only
-          - full-release
+          - web-only
+          - android-release
+          - web-and-android
 
 permissions:
   contents: read
 
 jobs:
-  build-release:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
+          package-manager-cache: false
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -34,42 +37,39 @@ jobs:
       - name: Run core tests
         run: npm run test:core
 
-      - name: Stop after tests
+      - name: Run static audit
+        run: npm run audit:static
+
+      - name: Compile web source in test-only mode
         if: ${{ inputs.run_mode == 'test-only' }}
-        run: echo "Core tests passed. Firebase secrets and signing are not required in test-only mode."
+        run: npm run build
 
-      - name: Setup Java
-        if: ${{ inputs.run_mode == 'full-release' }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
+      - name: Stop after tests and web compilation
+        if: ${{ inputs.run_mode == 'test-only' }}
+        run: echo "Core tests, audit statis, dan kompilasi Vite lulus. Tidak membuat APK."
 
-      - name: Validate Firebase build configuration
-        if: ${{ inputs.run_mode == 'full-release' }}
+      - name: Validate Firebase web configuration
+        if: ${{ inputs.run_mode != 'test-only' }}
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_STORE_ID: ${{ secrets.VITE_FIREBASE_STORE_ID }}
           VITE_FIREBASE_STORE_CODE: ${{ secrets.VITE_FIREBASE_STORE_CODE }}
-          VITE_FIREBASE_FUNCTIONS_REGION: ${{ secrets.VITE_FIREBASE_FUNCTIONS_REGION }}
           VITE_PUBLIC_APP_URL: ${{ secrets.VITE_PUBLIC_APP_URL }}
         shell: bash
         run: |
           set -euo pipefail
           required=(
             VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID
-            VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID
-            VITE_FIREBASE_APP_ID VITE_FIREBASE_STORE_ID VITE_FIREBASE_STORE_CODE
-            VITE_FIREBASE_FUNCTIONS_REGION VITE_PUBLIC_APP_URL
+            VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID
+            VITE_FIREBASE_STORE_ID VITE_FIREBASE_STORE_CODE
           )
           for key in "${required[@]}"; do
             if [ -z "${!key:-}" ]; then
-              echo "::error::$key belum diisi pada Settings > Secrets and variables > Actions."
+              echo "::error::$key belum diisi pada GitHub Secrets."
               exit 1
             fi
           done
@@ -77,21 +77,35 @@ jobs:
           VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
           VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
           VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
-          VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET
           VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
           VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
           VITE_FIREBASE_STORE_ID=$VITE_FIREBASE_STORE_ID
           VITE_FIREBASE_STORE_CODE=$VITE_FIREBASE_STORE_CODE
-          VITE_FIREBASE_FUNCTIONS_REGION=$VITE_FIREBASE_FUNCTIONS_REGION
           VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL
           ENVFILE
 
-      - name: Build web application
-        if: ${{ inputs.run_mode == 'full-release' }}
+      - name: Build web and PC PWA
+        if: ${{ inputs.run_mode != 'test-only' }}
         run: npm run build
 
-      - name: Create and sync Android project
-        if: ${{ inputs.run_mode == 'full-release' }}
+      - name: Upload Web and PC PWA
+        if: ${{ inputs.run_mode == 'web-only' || inputs.run_mode == 'web-and-android' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: Bumi-Makmur-POS-v4.3-Web-PC-PWA
+          path: dist
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Setup Java
+        if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Create Android project
+        if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
         run: |
           rm -rf android
           npx cap add android
@@ -99,7 +113,7 @@ jobs:
           npm run android:prepare
 
       - name: Validate Android signing secrets
-        if: ${{ inputs.run_mode == 'full-release' }}
+        if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -115,8 +129,8 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/bumi-makmur-upload.jks"
           keytool -list -keystore "$RUNNER_TEMP/bumi-makmur-upload.jks" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
 
-      - name: Build signed release APK and AAB
-        if: ${{ inputs.run_mode == 'full-release' }}
+      - name: Build signed APK and AAB
+        if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
         working-directory: android
         env:
           BM_KEYSTORE_PATH: ${{ runner.temp }}/bumi-makmur-upload.jks
@@ -127,8 +141,8 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
 
-      - name: Verify APK signature
-        if: ${{ inputs.run_mode == 'full-release' }}
+      - name: Verify release signature
+        if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
         shell: bash
         run: |
           APK="android/app/build/outputs/apk/release/app-release.apk"
@@ -137,10 +151,10 @@ jobs:
           sha256sum "$APK" android/app/build/outputs/bundle/release/app-release.aab > SHA256SUMS.txt
 
       - name: Upload signed Android release
-        if: ${{ inputs.run_mode == 'full-release' }}
-        uses: actions/upload-artifact@v4
+        if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
+        uses: actions/upload-artifact@v6
         with:
-          name: Bumi-Makmur-POS-Hybrid-v4.2-signed-release
+          name: Bumi-Makmur-POS-v4.3-Android-Signed
           path: |
             android/app/build/outputs/apk/release/app-release.apk
             android/app/build/outputs/bundle/release/app-release.aab
