@@ -1,70 +1,86 @@
-# Bumi Makmur POS FreeSync v4.5.1
+# Bumi Makmur POS FreeSync v5.0.0
 
-Satu source code untuk **Android HP/tablet, web, dan aplikasi PC PWA**. Rilis v4.5.1 adalah hotfix khusus sinkronisasi Store Manager, sambil mempertahankan login cabang + nama + PIN, pengelolaan karyawan, biometrik eksplisit, dan sinkronisasi web–HP.
+Satu source code untuk **Android HP/tablet, Web, dan aplikasi PC PWA**. Rilis v5.0 merupakan pembaruan besar yang menambahkan Pusat Kontrol Operasional, QRIS adaptif per cabang, migrasi aman dari v4.x, serta isolasi konflik cloud agar perubahan QRIS tidak membebani pengaturan global.
 
-## Arsitektur tanpa biaya
+## Arsitektur tetap gratis
 
 - Firebase Authentication Email/Password internal pada paket Spark.
-- Cloud Firestore pada paket Spark untuk data, realtime, aturan akses, dan direktori login.
-- Firestore persistent cache + antrean lokal terenkripsi untuk operasi offline.
-- Cloudflare Pages sebagai hosting web/PWA utama.
-- Capacitor untuk APK/AAB Android.
-- PWA dapat dipasang di Windows melalui Chrome/Edge.
-- **Tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.**
+- Cloud Firestore pada paket Spark untuk database, realtime, Security Rules, audit, dan direktori login.
+- IndexedDB + cache Firestore + antrean mutasi tahan restart untuk mode offline.
+- Cloudflare Pages untuk Web/PC PWA.
+- Capacitor + GitHub Actions untuk APK/AAB Android.
+- **Tanpa Cloud Functions, Firebase Storage, Blaze, billing, atau layanan backend berbayar.**
+- Firebase CLI dipisahkan dari dependency build agar instalasi Web/Android lebih ringan; CLI hanya dipakai saat deploy rules.
 
-## Perubahan utama v4.5.1
+## Fitur profesional baru v5.0
 
-- Login Owner dan Karyawan tetap terpisah.
-- Karyawan cukup memilih **toko/cabang**, memasukkan **nama login**, lalu **PIN 4 digit**.
-- Sidik jari/Face ID hanya muncul setelah tombol biometrik ditekan.
-- Tambah, edit, nonaktifkan, ganti PIN, dan hapus karyawan dilakukan dari `Pengaturan → Karyawan`.
-- Owner dapat membuat Store Manager dan Kasir untuk cabang mana pun.
-- Store Manager dapat mengelola Kasir pada cabangnya sendiri, tetapi tidak dapat membuat cabang atau mengubah pengaturan global Owner.
-- Cabang baru otomatis masuk ke pilihan login setelah sinkronisasi.
-- Konflik perubahan dari web dan HP direbase otomatis dan dicoba kembali tanpa memenuhi layar dengan error cloud.
-- Store Manager sekarang memuat transfer keluar dan masuk menggunakan field cabang yang benar (`sourceBranchId` dan `destinationBranchId`), sehingga Firestore tidak lagi menolak sinkronisasi.
+### Pusat Kontrol Operasional
 
-## Fitur operasional yang dipertahankan
+- Skor kesehatan operasional per cabang.
+- Nilai stok berdasarkan modal dan potensi nilai retail.
+- Stok menipis/habis serta saran jumlah restock otomatis.
+- Risiko harga jual sama atau lebih rendah dari modal.
+- Deteksi SKU dan barcode ganda.
+- Piutang/utang lewat jatuh tempo.
+- Peringatan shift yang terlalu lama terbuka.
+- Omzet bersih dan jumlah transaksi hari ini.
+- Ekspor CSV dan cetak daftar restock untuk kertas 80 mm.
 
-- Kasir, open bill, split payment, refund, void, retur, shift, dan audit log.
-- Produk, kategori, varian, bundle, konversi satuan, barcode, dan label.
-- Harga modal, markup persen, eceran, grosir, proyek, promo, diskon, dan pajak.
-- Stok, opname, adjustment, transfer cabang, pembelian, dan hutang pemasok.
-- Pelanggan, piutang, limit kredit, poin, reward, dan feedback.
-- Tunai, QRIS, ShopeePay, OVO, GoPay, DANA, transfer, kartu, dan tempo.
-- Nota 58/80 mm, logo/pesan toko, WhatsApp, gambar nota, dan nota online.
-- Kamera barcode, scanner USB/Bluetooth keyboard, biometrik Android, profil printer, dan layar pelanggan.
-- Dashboard serta laporan omzet, HPP, laba, pembayaran, stok, shift, hutang/piutang.
+### QRIS Adaptive v3 per cabang
+
+- Menerima sumber gambar hingga 24 MB.
+- Memangkas ruang kosong secara aman, menambahkan kembali quiet zone putih, lalu mencoba PNG lossless dan WebP adaptif.
+- Target hasil sekitar 330 KB dengan batas keras 420 KB agar base64 tetap muat di dokumen Firestore.
+- Latar transparan diratakan menjadi putih; area bukan QR dapat dipangkas otomatis tanpa menghilangkan quiet zone.
+- Menampilkan ukuran asli, hasil, resolusi, mode optimasi, penghematan, preview besar, dan status proses tanpa popup browser.
+- QRIS disimpan pada `branchPaymentProfiles/{branchId}`, bukan lagi membebani pengaturan global.
+- Owner mengatur QRIS semua cabang; Store Manager hanya cabangnya sendiri; Kasir otomatis memakai QRIS cabang login.
+
+### Stabilitas dan migrasi
+
+- Cache/backup v4.x yang belum memiliki koleksi v5 dinormalisasi tanpa memasukkan data demo baru.
+- QRIS lama tetap dapat tampil sebagai fallback dan akan diminta dioptimalkan sebelum disimpan bila melebihi batas aman.
+- Aktivasi toko disembunyikan dari login normal dan hanya tersedia melalui mode pemulihan khusus pada instalasi benar-benar baru.
+- Login Owner dan Karyawan tetap terpisah; Karyawan memakai cabang + nama login + PIN 4 digit.
+- Biometrik hanya berjalan setelah tombol Sidik Jari/Face ID ditekan.
+- Konflik web–HP tetap direbase, diantrekan, dan dicoba ulang secara idempotent.
+- Hotfix scope Store Manager untuk transfer masuk/keluar tetap dipertahankan.
+
+## Role
+
+- **Owner:** seluruh cabang, seluruh pengaturan, Manager/Kasir, QRIS global per cabang, backup/restore.
+- **Store Manager:** operasional luas pada satu cabang, Pusat Kontrol, QRIS cabang, dan pengelolaan Kasir cabangnya; tidak dapat membuat cabang/Manager atau mengubah pengaturan global Owner.
+- **Kasir:** kasir, open bill, transaksi, pelanggan terbatas, shift, pesanan, dan layar pelanggan sesuai izin.
+
+## Fitur lama yang tetap dipertahankan
+
+Kasir, barcode kamera/manual/USB/Bluetooth keyboard, open bill, split payment, refund, void, produk, varian, bundle, konversi satuan, markup, promo, stok, opname, transfer cabang, pembelian, retur, hutang/piutang, pelanggan, poin, shift, laporan, nota 58/80 mm, WhatsApp, nota online, printer profiles, customer display, backup, PWA, dan Android signed release.
 
 ## Pemeriksaan source
 
-- **72/72 core tests lulus.**
-- **53 file JS/JSX/MJS** lolos pemeriksaan sintaks.
-- Relative import, JSON, secret scan, dan larangan layanan berbayar lolos audit statis.
+- **77/77 core regression tests lulus.**
+- **58 file JS/JSX/MJS** diperiksa untuk import relatif, secret, dan layanan berbayar; file non-JSX lolos `node --check`.
+- JSON valid, relative import lengkap, dan struktur ZIP diverifikasi sebelum rilis.
+- Kompilasi Vite final dijalankan oleh workflow GitHub `test-only`, karena registry npm tidak tersedia pada lingkungan penyusunan lokal.
 
 ```bash
-npm install
+npm install --no-audit --no-fund
 npm run test:core
 npm run audit:static
 npm run build
 ```
 
-Workflow GitHub:
+## Urutan update
 
-- `test-only`: tests, audit statis, dan kompilasi Vite.
-- `web-only`: build PWA web/PC.
-- `android-release`: build APK + AAB bertanda tangan.
-- `web-and-android`: build web dan Android sekaligus.
+Panduan rinci pengguna GitHub Desktop tersedia di `UPLOAD-GITHUB-DESKTOP.md`. wajib
 
-## Urutan update wajib
+1. Di versi lama: **Unduh Backup JSON** dan pastikan **Antrean Offline = 0**.
+2. Ekstrak ZIP lalu salin seluruh isinya ke root repository lokal melalui GitHub Desktop; banyak file berubah adalah normal untuk rilis penuh v5.0. Commit dan push ke branch `main`.
+3. Jalankan **Build Bumi Makmur POS v5.0.0 → `test-only`**.
+4. Jalankan **Deploy Firebase Spark Rules**. Ini wajib karena ada koleksi `branchPaymentProfiles` baru.
+5. Tunggu Cloudflare Pages sukses memperbarui Web/PWA.
+6. Jalankan **`android-release`** memakai keystore lama.
+7. Instal APK v5.0 langsung di atas APK lama. **Jangan uninstall.**
+8. Uji QRIS dengan aplikasi pembayaran sebelum transaksi nyata.
 
-1. Backup JSON dari aplikasi lama dan pastikan antrean offline kosong.
-2. Upload isi ZIP v4.5.1 ke repository GitHub yang sama.
-3. Jalankan **Build Bumi Makmur POS v4.5.1 → test-only**.
-4. Firestore Rules v4.5 yang sudah hijau tetap kompatibel; **tidak perlu deploy rules ulang** untuk hotfix ini.
-5. Setelah test-only hijau, jalankan **android-release** memakai keystore lama.
-6. Pasang APK v4.5.1 langsung di atas APK v4.5; jangan uninstall.
-7. Cloudflare Pages akan memperbarui versi web otomatis setelah commit masuk ke branch `main`.
-8. Logout lalu login ulang sebagai Store Manager dan pastikan status berubah menjadi **Cloud tersambung**.
-
-> PIN demo lokal hanya untuk pemeriksaan source: Owner `1608`, Manager `2468`, Kasir `1234`. Pada penggunaan cloud, buat akun dari Pengaturan dan gunakan nama login + PIN yang ditentukan Owner/Manager.
+> Package ID tetap `app.bumimakmur.pos`, Android version code `50000`, dan database key lokal dipertahankan agar update tidak menghapus data perangkat.

@@ -1,15 +1,16 @@
 import {
   LayoutDashboard, ShoppingCart, ReceiptText, Package, Boxes, Truck, ContactRound,
   Users, Clock3, WalletCards, BarChart3, ShoppingBag, Store, Printer,
-  MonitorSmartphone, Settings, ListChecks, Tags
+  MonitorSmartphone, Settings, ListChecks, Tags, Gauge
 } from 'lucide-react';
 
-export const APP_VERSION = '4.5.1';
+export const APP_VERSION = '5.0.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
 export const MODULES = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+  { id: 'controlCenter', label: 'Pusat Kontrol', icon: Gauge, permission: 'control.view' },
   { id: 'pos', label: 'Kasir', icon: ShoppingCart, permission: 'pos.use' },
   { id: 'openBills', label: 'Open Bill', icon: ListChecks, permission: 'pos.use' },
   { id: 'transactions', label: 'Transaksi', icon: ReceiptText, permission: 'transactions.view' },
@@ -32,7 +33,7 @@ export const MODULES = [
 export const ROLE_PERMISSIONS = {
   owner: ['*'],
   manager: [
-    'dashboard.view', 'pos.use', 'transactions.view', 'transactions.refund', 'transactions.void',
+    'dashboard.view', 'control.view', 'payments.manage', 'pos.use', 'transactions.view', 'transactions.refund', 'transactions.void',
     'products.view', 'products.manage', 'promotions.view', 'promotions.manage', 'inventory.view', 'inventory.manage', 'purchases.view',
     'purchases.manage', 'suppliers.view', 'suppliers.manage', 'customers.view', 'customers.manage',
     'shifts.view', 'shifts.manage', 'finance.view', 'finance.manage', 'reports.view', 'orders.view',
@@ -130,7 +131,7 @@ export const createSeedDb = () => ({
   configs: {
     companyName: 'BUMI MAKMUR', address: 'Jl. Pembangunan No. 88, Surabaya', phone: '031-0000000',
     activeBranchId: MAIN_BRANCH_ID, darkMode: false, printAuto: false, taxEnabled: false, taxRate: 11,
-    cameraPermissionOnStartup: true,
+    cameraPermissionOnStartup: true, shiftWarningHours: 14, reorderMultiplier: 2,
     serviceEnabled: false, serviceRate: 0, roundingStep: 0, loyaltyEnabled: true, pointRate: 10000,
     pointValue: 100, refundApprovalLimit: 500000, requireShiftForCash: true,
     receiptHeader: 'NOTA PEMBELIAN', receiptFooter: 'Terima kasih telah berbelanja.',
@@ -174,6 +175,7 @@ export const createSeedDb = () => ({
     { id: 'CUS-001', branchId: MAIN_BRANCH_ID, name: 'Pak Budi Tukang', phone: '081111111111', email: '', type: 'Tukang', priceTier: 'wholesale', creditLimit: 3000000, points: 120, address: 'Surabaya', project: 'Renovasi Rumah', notes: '', active: true }
   ],
   sales: [], heldSales: [], purchases: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [],
+  branchPaymentProfiles: [{ id: MAIN_BRANCH_ID, branchId: MAIN_BRANCH_ID, merchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.', qrisAssetMeta: null, enabled: true, updatedAt: now, updatedBy: 'SYSTEM' }],
   expenses: [], receivables: [], payables: [], refunds: [], shifts: [
     { id: 'SHIFT-DEMO', branchId: MAIN_BRANCH_ID, userId: 'USR-KASIR', userName: 'Kasir Satu', startAt: now, endAt: null, startingCash: 500000, actualEndingCash: null, expectedEndingCash: null, difference: null, status: 'OPEN', notes: 'Shift demo awal' }
   ],

@@ -47,6 +47,22 @@ service cloud.firestore {
         && data.active is bool
         && data.schemaVersion == 2;
     }
+    function validBranchPaymentProfile(data, branchId) {
+      return data.keys().hasOnly([
+          'branchId', 'merchantName', 'qrisImage', 'qrisInstruction',
+          'qrisAssetMeta', 'enabled', 'updatedAt', 'updatedBy'
+        ])
+        && data.branchId == branchId
+        && data.merchantName is string
+        && data.merchantName.size() > 0
+        && data.merchantName.size() <= 120
+        && data.qrisImage is string
+        && data.qrisImage.size() <= 600000
+        && data.qrisInstruction is string
+        && data.qrisInstruction.size() <= 240
+        && data.enabled is bool
+        && data.updatedBy is string;
+    }
     function existingBranchAllowed(storeId) {
       return owner(storeId)
         || !('branchId' in resource.data)
@@ -394,6 +410,19 @@ service cloud.firestore {
     match /stores/{storeId}/printerProfiles/{id} {
       allow read: if activeMember(storeId);
       allow create, update, delete: if ownerOrManager(storeId);
+    }
+
+    // QRIS disimpan per cabang dalam dokumen terpisah agar gambar tidak
+    // membebani dokumen settings global dan tidak memicu konflik antar cabang.
+    match /stores/{storeId}/branchPaymentProfiles/{id} {
+      allow read: if activeMember(storeId) && (
+        owner(storeId)
+        || resource.data.branchId == profile(storeId).branchId
+      );
+      allow create, update: if validBranchPaymentProfile(request.resource.data, id)
+        && (owner(storeId) || managerOwnBranch(storeId, request.resource.data.branchId));
+      allow delete: if owner(storeId)
+        || (manager(storeId) && resource.data.branchId == profile(storeId).branchId);
     }
 
     match /stores/{storeId}/campaigns/{id} {

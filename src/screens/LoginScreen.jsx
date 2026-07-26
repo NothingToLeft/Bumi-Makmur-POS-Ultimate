@@ -41,18 +41,21 @@ export default function LoginScreen() {
   const [biometric, setBiometric] = useState({ available: false, status: 'checking' });
   const [showSetup, setShowSetup] = useState(false);
   const [showOwnerConnect, setShowOwnerConnect] = useState(false);
+  const [directoryChecked, setDirectoryChecked] = useState(false);
 
   const branches = useMemo(() => {
     const rows = (loginDirectory?.branches || []).filter(item => item?.id && item.active !== false);
     return rows.length ? rows : [{ id: MAIN_BRANCH_ID, name: 'Pusat BUMI MAKMUR', active: true }];
   }, [loginDirectory]);
   const activeRole = ROLE_CONFIG[mode] || null;
+  const activationModeRequested = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('activate') === '1';
+  const setupAvailable = Boolean(activationModeRequested && directoryChecked && !loginDirectoryLoading && (loginDirectory?.branches || []).length === 0);
   const biometricEnabled = Boolean(deviceSettings.biometricEnabled && deviceSettings.biometricUserId && biometric.available);
   const biometricMatchesMode = !deviceSettings.biometricRole || deviceSettings.biometricRole === mode;
 
   useEffect(() => {
-    void refreshLoginDirectory();
     let active = true;
+    void refreshLoginDirectory().finally(() => { if (active) setDirectoryChecked(true); });
     void getBiometricAvailability().then(result => {
       if (active) setBiometric(result || { available: false, status: 'unknown' });
     });
@@ -180,6 +183,7 @@ export default function LoginScreen() {
               onBiometric={() => void runBiometric()}
               onOwnerConnect={() => setShowOwnerConnect(true)}
               onSetup={() => setShowSetup(true)}
+              setupAvailable={setupAvailable}
               online={online}
               cloudConfigured={cloudConfigured}
             />
@@ -250,7 +254,7 @@ function LoginChooser({ onSelect, cloudConfigured }) {
 function RoleLogin({
   mode, role, pin, error, busy, branches, selectedBranchId, onBranchChange, directoryLoading,
   employeeName, onEmployeeNameChange, onPress, onErase, onBack, biometricEnabled,
-  onBiometric, onOwnerConnect, onSetup, online, cloudConfigured
+  onBiometric, onOwnerConnect, onSetup, setupAvailable, online, cloudConfigured
 }) {
   const RoleIcon = role.icon;
   const isOwner = mode === 'owner';
@@ -293,8 +297,8 @@ function RoleLogin({
       {isOwner && (
         <div className="mt-4 pt-4 border-t border-gray-100">
           <button onClick={onOwnerConnect} disabled={busy || !online || !cloudConfigured} className="w-full min-h-[50px] rounded-xl text-sm font-bold text-blue-700 bg-blue-50 border border-blue-100 flex items-center justify-center gap-2 disabled:opacity-40"><Link2 size={18}/> Masuk Owner dengan Email</button>
-          <button onClick={onSetup} disabled={busy || !online || !cloudConfigured} className="mt-2 w-full min-h-[48px] rounded-xl text-sm font-bold text-gray-700 bg-gray-50 border border-gray-200 flex items-center justify-center gap-2 disabled:opacity-40"><ServerCog size={18}/> Setup Toko Pertama Kali</button>
-          <p className="text-[11px] text-gray-500 mt-2 text-center leading-relaxed">Email Owner hanya diperlukan pada perangkat baru atau saat sesi cloud perlu dihubungkan ulang.</p>
+          {setupAvailable&&<button onClick={onSetup} disabled={busy || !online || !cloudConfigured} className="mt-2 w-full min-h-[48px] rounded-xl text-sm font-bold text-gray-700 bg-gray-50 border border-gray-200 flex items-center justify-center gap-2 disabled:opacity-40"><ServerCog size={18}/> Aktivasi Toko Baru</button>}
+          <p className="text-[11px] text-gray-500 mt-2 text-center leading-relaxed">Email Owner hanya diperlukan pada perangkat baru atau saat sesi cloud perlu dihubungkan ulang. Aktivasi toko baru disembunyikan dari login normal dan hanya tersedia melalui mode pemulihan khusus.</p>
         </div>
       )}
     </div>

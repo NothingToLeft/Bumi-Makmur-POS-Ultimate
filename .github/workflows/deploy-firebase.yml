@@ -47,7 +47,7 @@ jobs:
       - name: Deploy Firestore rules and indexes only
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-        run: npx firebase-tools deploy --project "$FIREBASE_PROJECT_ID" --only firestore:rules,firestore:indexes --non-interactive
+        run: npx --yes firebase-tools@14 deploy --project "$FIREBASE_PROJECT_ID" --only firestore:rules,firestore:indexes --non-interactive
 
       - name: Remove temporary Google credentials
         if: always()

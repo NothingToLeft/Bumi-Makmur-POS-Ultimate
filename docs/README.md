@@ -1,10 +1,12 @@
-# Dokumentasi Aktif
+# Dokumentasi Aktif v5.0.0
 
-Gunakan dokumentasi **v4.5.1** di root project dan file dalam folder ini.
+Dokumen utama berada di root project:
 
-Project aktif tetap:
+- `README.md`
+- `CHANGELOG.md`
+- `QA-CHECKLIST.md`
+- `BUILD-REPORT.md`
+- `FIREBASE-SPARK-SETUP.md`
+- `LANGKAH-SETELAH-DOWNLOAD.txt`
 
-- Firebase Authentication + Cloud Firestore pada Spark/free tier;
-- tanpa Cloud Functions, Firebase Storage, Blaze, atau billing;
-- Cloudflare Pages untuk web/PWA;
-- Capacitor + GitHub Actions untuk APK/AAB.
+Arsitektur aktif: Firebase Authentication + Cloud Firestore pada Spark/free tier, Cloudflare Pages untuk Web/PWA, dan Capacitor + GitHub Actions untuk APK/AAB. Tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.

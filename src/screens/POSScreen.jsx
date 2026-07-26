@@ -56,6 +56,14 @@ export default function POSScreen() {
   }), [scoped.products, search, category, favoritesOnly]);
 
   const customer = scoped.customers.find(item => item.id === customerId) || scoped.customers[0];
+  const branchPaymentProfile = scoped.paymentProfile || null;
+  const paymentDisplayConfig = {
+    ...db.configs,
+    qrisImage: branchPaymentProfile?.qrisImage || db.configs.qrisImage || '',
+    qrisMerchantName: branchPaymentProfile?.merchantName || db.configs.qrisMerchantName || db.configs.companyName,
+    qrisInstruction: branchPaymentProfile?.qrisInstruction || db.configs.qrisInstruction
+  };
+  const activePaymentMethods = (db.configs.paymentMethods || []).filter(item => item.active && (item.id !== 'qris' || branchPaymentProfile?.enabled !== false));
   useEffect(() => { if (customer?.priceTier && cart.length === 0) setSaleType(customer.priceTier); }, [customerId]);
 
   const totals = useMemo(() => {
@@ -262,7 +270,7 @@ export default function POSScreen() {
 
       {choosingProduct && <ProductChoiceModal product={choosingProduct} saleType={saleType} onClose={() => setChoosingProduct(null)} onAdd={options => { addProduct(choosingProduct, options); setChoosingProduct(null); }}/>}      
       {editingLine && <LineEditModal line={editingLine} product={scoped.products.find(item => item.id === editingLine.productId)} onClose={() => setEditingLine(null)} onSave={line => { updateLine(line); setEditingLine(null); }}/>}      
-      {paymentOpen && <PaymentModal total={totals.total} methods={db.configs.paymentMethods.filter(item => item.active)} configs={db.configs} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
+      {paymentOpen && <PaymentModal total={totals.total} methods={activePaymentMethods} configs={paymentDisplayConfig} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
       {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={(product, options = {}) => { addProduct(product, options); setScannerOpen(false); }}/>}      

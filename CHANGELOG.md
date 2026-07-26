@@ -1,5 +1,57 @@
 # Changelog Bumi Makmur POS
 
+## 5.0.0 — Professional Control Center & QRIS Adaptive
+
+### QRIS Adaptive v3
+- Mengganti batas kompresi tunggal yang memunculkan alert `Gambar masih terlalu besar` dengan pipeline adaptif bertahap.
+- Menerima sumber PNG/JPG/WebP hingga 24 MB.
+- Memangkas ruang kosong di sekitar gambar secara aman, menambahkan kembali quiet zone putih, lalu mencoba PNG lossless dan WebP adaptif.
+- Menargetkan hasil sekitar 330 KB dengan batas keras 420 KB agar data URL tetap aman di bawah batas Firestore Rules.
+- Menambahkan fallback kontras tinggi untuk gambar yang sangat rumit, latar putih, validasi resolusi minimal, preview besar, metadata mode/ukuran/resolusi, dan status proses tanpa popup browser.
+- Menggunakan Object URL dan melepas canvas setiap tahap untuk mengurangi lonjakan memori pada Android ketika memproses gambar besar.
+- QRIS lama yang terlalu besar diarahkan ke proses optimasi ulang; hasil mendekati batas tetap dapat disimpan bila masih aman untuk Firestore.
+
+### QRIS per cabang dan isolasi konflik
+- Menambahkan koleksi `branchPaymentProfiles` dengan satu dokumen per cabang.
+- Owner dapat memilih dan mengatur QRIS setiap cabang.
+- Store Manager hanya dapat mengatur QRIS cabangnya sendiri.
+- Kasir otomatis memakai QRIS cabang yang dipilih saat login.
+- Memisahkan gambar QRIS dari dokumen settings global untuk mengurangi konflik perubahan Web dan HP.
+- Cabang baru otomatis memperoleh profil pembayaran dasar.
+
+### Pusat Kontrol Operasional
+- Menambahkan modul baru **Pusat Kontrol** untuk Owner dan Store Manager.
+- Menambahkan Operational Health Score per cabang.
+- Menampilkan stok habis/menipis dan saran jumlah restock berdasarkan kelipatan stok minimum.
+- Menampilkan nilai stok modal, potensi nilai retail, omzet bersih hari ini, risiko margin, SKU/barcode ganda, piutang/utang jatuh tempo, dan shift terbuka terlalu lama.
+- Menambahkan ekspor CSV serta cetak daftar restock 80 mm.
+- Menambahkan pengaturan target restock dan batas peringatan durasi shift.
+
+### Migrasi aman v4.x → v5
+- Menambahkan normalisasi struktur database lama sebelum dipakai oleh mutasi v5.
+- Koleksi baru dibuat sebagai wadah kosong tanpa menyisipkan produk/transaksi demo ke database nyata.
+- Backup JSON lama dinormalisasi saat restore.
+- Mempertahankan database key lokal, package ID, dan signing path agar update tidak menghapus data.
+- Mempertahankan fallback QRIS lama sampai profil per cabang disimpan.
+
+### Login, role, dan cloud
+- Menghapus aktivasi toko dari login normal; fungsi bootstrap hanya dapat dibuka melalui mode pemulihan khusus pada database benar-benar baru.
+- Mempertahankan login Owner/Karyawan terpisah, cabang + nama + PIN, dan biometrik eksplisit.
+- Mempertahankan pembatasan Store Manager satu cabang dan pengelolaan Kasir cabangnya.
+- Mempertahankan hotfix query transfer Manager berdasarkan `sourceBranchId` dan `destinationBranchId`.
+- Menambahkan Firestore Rules khusus `branchPaymentProfiles` dengan batas ukuran dan scope per cabang.
+- Tetap memakai Firebase Auth + Firestore Spark tanpa Functions, Storage, Blaze, atau billing.
+
+### Build dan dependency
+- Mengisolasi Firebase CLI dari dependency build aplikasi; `firebase-tools` hanya diunduh pada workflow deploy rules.
+- Mengurangi paket dan peringatan deprecated yang tidak diperlukan saat build Web/Android.
+
+### QA
+- Core tests: **77/77 lulus**.
+- Audit statis: **lulus**.
+- Audit source: **58 file JS/JSX/MJS**, relative import lengkap; file non-JSX lolos `node --check`.
+- Kompilasi Vite final diwajibkan melalui workflow GitHub `test-only`.
+
 ## 4.5.1 — Store Manager Cloud Sync Hotfix
 
 ### Sinkronisasi Store Manager

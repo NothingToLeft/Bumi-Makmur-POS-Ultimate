@@ -35,6 +35,8 @@ import {
   verifyOfflineLogin
 } from '../services/offlineStore.js';
 import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
+import { dataUrlByteLength } from '../utils/assetProcessing.js';
+import { normalizeDbShape } from '../utils/dbShape.js';
 
 const PosContext = createContext(null);
 const DEVICE_SETTINGS_KEY = 'bm_pos_device_security_v1';
@@ -62,7 +64,7 @@ const verifySeedUserPin = async (user, pin) => {
 };
 
 const ACTION_PERMISSIONS = {
-  SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage',
+  SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage', BRANCH_PAYMENT_UPDATE: 'payments.manage',
   PRODUCT_CREATE: 'products.manage', PRODUCT_UPDATE: 'products.manage', PRODUCT_ARCHIVE: 'products.manage', PRODUCT_TOGGLE: 'products.manage',
   PROMOTION_CREATE: 'promotions.manage', PROMOTION_UPDATE: 'promotions.manage',
   SUPPLIER_CREATE: 'suppliers.manage', SUPPLIER_UPDATE: 'suppliers.manage',
@@ -80,7 +82,7 @@ const ACTION_PERMISSIONS = {
 
 export function PosProvider({ children }) {
   const seedRef = useRef(createSeedDb());
-  const [db, setDb] = useState(() => ({ ...seedRef.current, users: [], branches: [], products: [], suppliers: [], customers: [], promotions: [], sales: [], heldSales: [], purchases: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [], expenses: [], receivables: [], payables: [], refunds: [], shifts: [], cashMovements: [], onlineOrders: [], printerProfiles: [], campaigns: [], feedback: [], auditLogs: [] }));
+  const [db, setDb] = useState(() => ({ ...seedRef.current, users: [], branches: [], products: [], suppliers: [], customers: [], promotions: [], sales: [], heldSales: [], purchases: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [], branchPaymentProfiles: [], expenses: [], receivables: [], payables: [], refunds: [], shifts: [], cashMovements: [], onlineOrders: [], printerProfiles: [], campaigns: [], feedback: [], auditLogs: [] }));
   const dbRef = useRef(db);
   const [currentUser, setCurrentUser] = useState(null);
   const currentUserRef = useRef(null);
@@ -112,7 +114,7 @@ export function PosProvider({ children }) {
   const [loginDirectory, setLoginDirectory] = useState(() => safeJSONParse(localStorage.getItem(LOGIN_DIRECTORY_KEY), {
     storeId: STORE_ID,
     businessName: 'BUMI MAKMUR',
-    branches: [{ id: MAIN_BRANCH_ID, name: 'Pusat BUMI MAKMUR', active: true }]
+    branches: []
   }));
   const [loginDirectoryLoading, setLoginDirectoryLoading] = useState(false);
   const cloudUnsubscribeRef = useRef(null);
@@ -210,7 +212,7 @@ export function PosProvider({ children }) {
     await recoverPendingMutations(key);
     const cached = await loadCachedDb(key);
     if (!cached?.db) return false;
-    let localDb = clone(cached.db);
+    let localDb = normalizeDbShape(cached.db, seedRef.current, APP_VERSION);
     const alreadyApplied = new Set(cached.appliedMutationIds || []);
     for (const mutation of readPendingMutations(key)) {
       if (!alreadyApplied.has(mutation.id)) localDb = applyOperationsToDb(localDb, mutation.operations);
@@ -499,7 +501,7 @@ export function PosProvider({ children }) {
     if (!requiredPermission || !can(currentUserRef.current, requiredPermission)) {
       throw new Error(`Hak akses ${requiredPermission || action} tidak tersedia untuk akun ini.`);
     }
-    const before = clone(dbRef.current);
+    const before = normalizeDbShape(dbRef.current, seedRef.current, APP_VERSION);
     const next = clone(before);
     const result = mutator(next);
     const operations = buildDiffOperations(before, next);
@@ -775,6 +777,7 @@ export function PosProvider({ children }) {
       next.branches.push(created);
       const general = { id: generateId('CUS'), branchId: created.id, name: 'Umum (Non-Member)', phone: '-', email: '', type: 'Reguler', priceTier: 'retail', creditLimit: 0, points: 0, address: '', project: '', notes: '', active: true };
       next.customers.push(general);
+      next.branchPaymentProfiles.push({ id: created.id, branchId: created.id, merchantName: next.configs.companyName || 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.', qrisAssetMeta: null, enabled: true, updatedAt: nowISO(), updatedBy: currentUserRef.current.id });
       return created;
     });
     if (navigator.onLine && currentUserRef.current?.role === 'owner' && auth?.currentUser?.uid === currentUserRef.current.id) {
@@ -1426,6 +1429,35 @@ export function PosProvider({ children }) {
     return bill;
   });
 
+
+  const saveBranchPaymentProfile = data => commit('BRANCH_PAYMENT_UPDATE', String(data.branchId || branchId), next => {
+    const targetBranchId = String(data.branchId || branchId || '').trim();
+    if (!targetBranchId) throw new Error('Cabang profil pembayaran wajib dipilih.');
+    if (currentUserRef.current?.role === 'manager' && targetBranchId !== currentUserRef.current.branchId) {
+      throw new Error('Store Manager hanya dapat mengubah QRIS cabangnya sendiri.');
+    }
+    if (!next.branches.some(item => item.id === targetBranchId && item.active !== false)) throw new Error('Cabang tidak ditemukan atau sudah nonaktif.');
+    const item = {
+      id: targetBranchId,
+      branchId: targetBranchId,
+      merchantName: String(data.merchantName || next.configs.companyName || 'BUMI MAKMUR').trim(),
+      qrisImage: String(data.qrisImage || ''),
+      qrisInstruction: String(data.qrisInstruction || 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.').trim(),
+      qrisAssetMeta: data.qrisAssetMeta || null,
+      enabled: data.enabled !== false,
+      updatedAt: nowISO(),
+      updatedBy: currentUserRef.current.id
+    };
+    if (item.qrisImage && !item.qrisImage.startsWith('data:image/')) throw new Error('Data QRIS tidak valid. Unggah ulang gambar QRIS.');
+    if (item.qrisImage && (item.qrisImage.length > 590_000 || dataUrlByteLength(item.qrisImage) > 420_000)) {
+      throw new Error('QRIS lama masih terlalu besar untuk Firestore. Tekan Ganti QRIS agar sistem mengoptimalkannya sebelum disimpan.');
+    }
+    const index = next.branchPaymentProfiles.findIndex(row => row.branchId === targetBranchId || row.id === targetBranchId);
+    if (index >= 0) next.branchPaymentProfiles[index] = item;
+    else next.branchPaymentProfiles.unshift(item);
+    return item;
+  });
+
   const savePrinterProfile = data => {
     if (!can(currentUserRef.current, 'devices.manage')) throw new Error('Anda tidak memiliki izin mengubah profil printer.');
     return commit(data.id ? 'PRINTER_UPDATE' : 'PRINTER_CREATE', data.name, next => {
@@ -1484,7 +1516,10 @@ export function PosProvider({ children }) {
     const text = await file.text();
     const parsed = JSON.parse(text);
     if (!parsed?.meta || !Array.isArray(parsed.products) || !Array.isArray(parsed.sales)) throw new Error('File backup tidak valid.');
-    const restored = { ...parsed, meta: { ...parsed.meta, version: APP_VERSION, restoredAt: nowISO(), updatedAt: nowISO() } };
+    const restored = normalizeDbShape({
+      ...parsed,
+      meta: { ...parsed.meta, version: APP_VERSION, restoredAt: nowISO(), updatedAt: nowISO() }
+    }, seedRef.current, APP_VERSION);
     setCloudSaving(true);
     try {
       await replaceCloudDb(dbRef.current, restored, currentUser.storeId || STORE_ID);
@@ -1544,7 +1579,8 @@ export function PosProvider({ children }) {
     shifts: db.shifts.filter(item => item.branchId === branchId),
     cashMovements: db.cashMovements.filter(item => item.branchId === branchId),
     orders: db.onlineOrders.filter(item => item.branchId === branchId),
-    feedback: db.feedback.filter(item => item.branchId === branchId)
+    feedback: db.feedback.filter(item => item.branchId === branchId),
+    paymentProfile: (db.branchPaymentProfiles || []).find(item => item.branchId === branchId) || null
   }), [db, branchId]);
 
   const value = {
@@ -1557,7 +1593,7 @@ export function PosProvider({ children }) {
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,
-    saveOnlineOrder, convertOrderToBill, savePrinterProfile, saveCampaign, saveFeedback, redeemPoints,
+    saveOnlineOrder, convertOrderToBill, saveBranchPaymentProfile, savePrinterProfile, saveCampaign, saveFeedback, redeemPoints,
     exportBackup, importBackup, syncNow, resetDemo
   };
 

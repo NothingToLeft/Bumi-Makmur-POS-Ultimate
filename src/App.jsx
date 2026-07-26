@@ -4,6 +4,7 @@ import { PosProvider, usePos } from './store/PosContext.jsx';
 import { APP_VERSION, MODULES, can } from './data/defaults.js';
 import LoginScreen from './screens/LoginScreen.jsx';
 import DashboardScreen from './screens/DashboardScreen.jsx';
+import ControlCenterScreen from './screens/ControlCenterScreen.jsx';
 import POSScreen from './screens/POSScreen.jsx';
 import OpenBillsScreen from './screens/OpenBillsScreen.jsx';
 import ProductsScreen from './screens/ProductsScreen.jsx';
@@ -37,7 +38,7 @@ function AppShell(){
  if(initializingApp&&!dataReady)return <CloudLoadingScreen/>;
  const navigate=id=>{setActive(id);setMore(false)};
  const content=()=>{switch(active){
-  case'dashboard':return <DashboardScreen/>;case'pos':return <POSScreen/>;case'openBills':return <OpenBillsScreen onNavigate={navigate}/>;case'transactions':return <TransactionsScreen/>;case'products':return <ProductsScreen/>;case'promotions':return <PromotionsScreen/>;case'inventory':return <InventoryScreen/>;case'purchases':return <PurchasesScreen/>;case'suppliers':return <SuppliersScreen/>;case'customers':return <CustomersScreen/>;case'shifts':return <ShiftsScreen/>;case'finance':return <FinanceScreen/>;case'reports':return <ReportsScreen/>;case'orders':return <OrdersScreen onNavigate={navigate}/>;case'employees':return <EmployeesScreen/>;case'branches':return <BranchesScreen/>;case'devices':return <DevicesScreen/>;case'customerDisplay':return <CustomerDisplayScreen/>;case'settings':return <SettingsScreen/>;default:return <POSScreen/>}}
+  case'dashboard':return <DashboardScreen/>;case'controlCenter':return <ControlCenterScreen/>;case'pos':return <POSScreen/>;case'openBills':return <OpenBillsScreen onNavigate={navigate}/>;case'transactions':return <TransactionsScreen/>;case'products':return <ProductsScreen/>;case'promotions':return <PromotionsScreen/>;case'inventory':return <InventoryScreen/>;case'purchases':return <PurchasesScreen/>;case'suppliers':return <SuppliersScreen/>;case'customers':return <CustomersScreen/>;case'shifts':return <ShiftsScreen/>;case'finance':return <FinanceScreen/>;case'reports':return <ReportsScreen/>;case'orders':return <OrdersScreen onNavigate={navigate}/>;case'employees':return <EmployeesScreen/>;case'branches':return <BranchesScreen/>;case'devices':return <DevicesScreen/>;case'customerDisplay':return <CustomerDisplayScreen/>;case'settings':return <SettingsScreen/>;default:return <POSScreen/>}}
  const bottomIds=['pos','transactions','products','inventory'];const bottom=bottomIds.map(id=>allowed.find(m=>m.id===id)).filter(Boolean).slice(0,4);
  return <div className={`h-screen flex overflow-hidden font-sans app-shell-premium ${db.configs.darkMode?'theme-dark':'theme-light'}`}>
   <aside className="hidden md:flex w-20 lg:w-64 bg-emerald-900 text-white flex-col shrink-0 sidebar-nav sidebar-premium">

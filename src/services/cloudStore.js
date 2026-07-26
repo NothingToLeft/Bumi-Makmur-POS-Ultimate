@@ -21,6 +21,7 @@ import {
   PUBLIC_APP_URL,
   STORE_ID
 } from './firebase.js';
+import { processStoreAsset } from '../utils/assetProcessing.js';
 import {
   CLOUD_ENTITY_COLLECTIONS,
   SETTINGS_KEYS,
@@ -47,7 +48,7 @@ const GLOBAL_COLLECTIONS = new Set(['printerProfiles', 'campaigns']);
 const CASHIER_COLLECTIONS = new Set([
   'branches', 'products', 'promotions', 'customers', 'sales', 'heldSales',
   'stockMovements', 'receivables', 'refunds', 'shifts', 'cashMovements',
-  'onlineOrders', 'printerProfiles', 'campaigns'
+  'onlineOrders', 'printerProfiles', 'campaigns', 'branchPaymentProfiles'
 ]);
 const MANAGER_COLLECTIONS = new Set(CLOUD_ENTITY_COLLECTIONS);
 const clone = value => value == null
@@ -367,45 +368,8 @@ export async function replaceCloudDb(current, replacement, storeId = STORE_ID) {
   await applyDirectOperations(buildDiffOperations(current, replacement), storeId, 'CLOUD_RESTORE');
 }
 
-function resizeImage(file, { maxDimension, quality, mimeType }) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('File gambar tidak dapat dibaca.'));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error('Format gambar tidak didukung.'));
-      image.onload = () => {
-        const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
-        const width = Math.max(1, Math.round(image.width * scale));
-        const height = Math.max(1, Math.round(image.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext('2d', { alpha: true });
-        context.imageSmoothingEnabled = true;
-        context.imageSmoothingQuality = 'high';
-        context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL(mimeType, quality));
-      };
-      image.src = String(reader.result || '');
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
 export async function uploadStoreAsset(file, kind) {
-  if (!file) throw new Error('File belum dipilih.');
-  if (!String(file.type || '').startsWith('image/')) throw new Error('File harus berupa gambar.');
-  if (file.size > 12 * 1024 * 1024) throw new Error('Gambar terlalu besar. Maksimal 12 MB sebelum kompresi.');
-  const isQris = kind === 'qris';
-  const dataUrl = await resizeImage(file, {
-    maxDimension: isQris ? 1000 : 512,
-    quality: isQris ? 0.9 : 0.82,
-    mimeType: isQris ? 'image/png' : 'image/webp'
-  });
-  const maximumLength = isQris ? 450_000 : 180_000;
-  if (dataUrl.length > maximumLength) throw new Error(`Gambar masih terlalu besar setelah dikompresi. Batas ${isQris ? 'QRIS' : 'logo'} adalah sekitar ${Math.round(maximumLength / 1000)} KB.`);
-  return dataUrl;
+  return processStoreAsset(file, kind);
 }
 
 function sanitizeReceiptSale(sale = {}) {

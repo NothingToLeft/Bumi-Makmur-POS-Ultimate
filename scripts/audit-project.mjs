@@ -74,11 +74,11 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '4.5.1') errors.push(`Versi package harus 4.5.1, ditemukan ${pkg.version}`);
+if (pkg.version !== '5.0.0') errors.push(`Versi package harus 5.0.0, ditemukan ${pkg.version}`);
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 
 const rules = await readFile(path.join(root, 'firestore.rules'), 'utf8');
-for (const collection of ['products', 'sales', 'purchases', 'customers', 'receivables', 'payables', 'refunds', 'publicReceipts']) {
+for (const collection of ['products', 'sales', 'purchases', 'customers', 'receivables', 'payables', 'refunds', 'publicReceipts', 'branchPaymentProfiles']) {
   if (!rules.includes(collection)) errors.push(`Firestore rules belum mencakup ${collection}`);
 }
 

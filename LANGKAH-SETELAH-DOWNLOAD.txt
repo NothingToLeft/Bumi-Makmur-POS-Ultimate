@@ -1,12 +1,14 @@
-BUMI MAKMUR POS v4.5.1 — HOTFIX CLOUD STORE MANAGER
+BUMI MAKMUR POS v5.0.0 — PROFESSIONAL CONTROL CENTER & QRIS ADAPTIVE
 
-1. Backup JSON dari aplikasi dan jangan uninstall APK lama.
-2. Ekstrak ZIP v4.5.1 lalu upload seluruh isinya ke repository GitHub yang sama.
-3. Commit ke branch main.
-4. Jalankan Actions > Build Bumi Makmur POS v4.5.1 > test-only.
-5. Jika hijau, Cloudflare Pages akan memperbarui web otomatis.
-6. Firestore Rules v4.5 yang sudah hijau tidak perlu dideploy ulang.
-7. Jalankan android-release, unduh artifact Bumi-Makmur-POS-v4.5.1-Android-Signed.
-8. Instal APK di atas v4.5 tanpa uninstall.
-9. Logout Store Manager, login ulang memakai cabang + nama + PIN.
-10. Status yang diharapkan: Cloud tersambung, antrean offline 0, dan data cabang Manager tampil.
+1. Buka versi lama, unduh Backup JSON, dan pastikan Antrean Offline = 0.
+2. Ekstrak ZIP v5.0, lalu salin seluruh ISI folder ke root repository lokal melalui GitHub Desktop. Banyak file berubah adalah normal.
+3. Di GitHub Desktop pilih Commit to main lalu Push origin. Jangan ikutkan keystore, APK, node_modules, dist, atau file .env rahasia.
+4. Actions > Build Bumi Makmur POS v5.0.0 > Run workflow > test-only.
+5. Pastikan tests, audit, dan Vite build hijau.
+6. Actions > Deploy Firebase Spark Rules > Run workflow. LANGKAH INI WAJIB untuk QRIS per cabang.
+7. Tunggu Cloudflare Pages deployment branch main berstatus Success.
+8. Jalankan android-release dan unduh artifact Bumi-Makmur-POS-v5.0-Android-Signed.
+9. Instal APK di atas versi lama. JANGAN uninstall agar data lokal tetap ada.
+10. Login Owner, buka Pengaturan > Pembayaran, pilih cabang, unggah QRIS, preview, lalu Simpan Profil QRIS Cabang.
+11. Uji scan QRIS dengan aplikasi pembayaran sebelum transaksi sungguhan.
+12. Uji Pusat Kontrol, login Store Manager, Web–HP sync, dan pastikan Antrean Offline kembali 0.

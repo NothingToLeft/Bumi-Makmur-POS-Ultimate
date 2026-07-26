@@ -5,13 +5,13 @@ import { access, readFile } from 'node:fs/promises';
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 const expectedModules = [
-  'dashboard', 'pos', 'openBills', 'transactions', 'products', 'promotions', 'inventory',
+  'dashboard', 'controlCenter', 'pos', 'openBills', 'transactions', 'products', 'promotions', 'inventory',
   'purchases', 'suppliers', 'customers', 'shifts', 'finance', 'reports', 'orders',
   'branches', 'devices', 'customerDisplay', 'settings'
 ];
 
 const expectedScreens = [
-  'AdminScreens.jsx', 'DashboardScreen.jsx', 'DeviceSettingsScreens.jsx', 'InventoryScreen.jsx',
+  'AdminScreens.jsx', 'ControlCenterScreen.jsx', 'DashboardScreen.jsx', 'DeviceSettingsScreens.jsx', 'InventoryScreen.jsx',
   'LoginScreen.jsx', 'OpenBillsScreen.jsx', 'OrdersScreen.jsx', 'POSScreen.jsx',
   'PartnersScreens.jsx', 'ProductsScreen.jsx', 'PromotionsScreen.jsx', 'PublicReceiptScreen.jsx',
   'PurchasesScreen.jsx', 'ReportsScreen.jsx', 'ShiftFinanceScreens.jsx', 'TransactionsScreen.jsx'

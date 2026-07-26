@@ -248,7 +248,7 @@ export async function bootstrapCloudStore(payload) {
         businessName: String(payload.businessName || 'BUMI MAKMUR').trim(),
         ownerUid: uid,
         createdAt: serverTimestamp(),
-        architecture: 'spark-only-v4.5'
+        architecture: 'spark-only-v5.0'
       });
     }
 

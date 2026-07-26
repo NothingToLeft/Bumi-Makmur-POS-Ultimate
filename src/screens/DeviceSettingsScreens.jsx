@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Printer, Plus, Bluetooth, Usb, Wifi, FileText, MonitorSmartphone, Save, Upload, Download, RefreshCw, Database, WifiOff, Cloud, ScrollText, Trash2, Settings, QrCode, Camera, Fingerprint, ScanFace, ShieldCheck, ExternalLink, Image as ImageIcon, MessageCircle, WalletCards } from 'lucide-react';
+import { CheckCircle2, Printer, Plus, Bluetooth, Usb, Wifi, FileText, MonitorSmartphone, Save, Upload, Download, RefreshCw, Database, WifiOff, Cloud, ScrollText, Trash2, Settings, QrCode, Camera, Fingerprint, ScanFace, ShieldCheck, ExternalLink, Image as ImageIcon, MessageCircle, WalletCards, Loader2, Maximize2, CircleCheck, AlertTriangle } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { APP_VERSION } from '../data/defaults.js';
 import { formatRp, printHtmlDocument } from '../utils/helpers.js';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Select, StatusBadge, Textarea } from '../components/ui.jsx';
 import { authenticateBiometric, checkCameraPermission, getBiometricAvailability, openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
 import { uploadStoreAsset } from '../services/cloudStore.js';
+import { formatAssetBytes } from '../utils/assetProcessing.js';
 import { EmployeeManagementPanel } from './AdminScreens.jsx';
 
 export function DevicesScreen(){
@@ -23,14 +24,14 @@ function CampaignForm({data,onClose,onSave}){const[form,setForm]=useState(data);
 function FeedbackForm({onSave}){const[rating,setRating]=useState(5);const[comment,setComment]=useState('');return <Card className="p-4"><p className="font-bold mb-3">Form Feedback Pelanggan</p><Select value={rating} onChange={e=>setRating(Number(e.target.value))}><option value="5">5 - Sangat Puas</option><option value="4">4 - Puas</option><option value="3">3 - Cukup</option><option value="2">2 - Kurang</option><option value="1">1 - Buruk</option></Select><Textarea className="mt-2" value={comment} onChange={e=>setComment(e.target.value)} placeholder="Komentar"/><Button className="w-full mt-2" onClick={()=>{onSave({rating,comment,customerName:'Anonim'});setComment('')}}>Kirim Feedback</Button></Card>}
 
 export function SettingsScreen(){
- const {db,online,localReady,cloudReady,cloudSaving,cloudError,pendingSyncCount,syncConflictCount,lastSyncAttemptAt,currentUser,deviceSettings,updateDeviceSettings,setConfig,exportBackup,importBackup,syncNow,resetDemo,signOutAccount,hasPermission}=usePos();
- const fileRef=useRef(null);const isOwner=currentUser?.role==='owner';const canManageEmployees=hasPermission('employees.manage');
- const tabs=[...(isOwner?[['business','Toko'],['payment','Pembayaran']]:[]),['security','Keamanan'],...(canManageEmployees?[['employees','Karyawan']]:[]),['system','Cloud & Backup'],['audit','Audit Cloud'],['changelog','Changelog']];
+ const {db,online,localReady,cloudReady,cloudSaving,cloudError,pendingSyncCount,syncConflictCount,lastSyncAttemptAt,currentUser,branchId,deviceSettings,updateDeviceSettings,setConfig,saveBranchPaymentProfile,exportBackup,importBackup,syncNow,resetDemo,signOutAccount,hasPermission}=usePos();
+ const fileRef=useRef(null);const isOwner=currentUser?.role==='owner';const canManageEmployees=hasPermission('employees.manage');const canManagePayments=isOwner||hasPermission('payments.manage');
+ const tabs=[...(isOwner?[['business','Toko']]:[]),...(canManagePayments?[['payment','Pembayaran']]:[]),['security','Keamanan'],...(canManageEmployees?[['employees','Karyawan']]:[]),['system','Cloud & Backup'],['audit','Audit Cloud'],['changelog','Changelog']];
  const[tab,setTab]=useState(isOwner?'business':canManageEmployees?'employees':'security');
  useEffect(()=>{if(!tabs.some(([id])=>id===tab))setTab(tabs[0]?.[0]||'security')},[isOwner,canManageEmployees,tab]);
  const config=db.configs; const patch=(key,value)=>{if(!isOwner){alert('Pengaturan toko global hanya dapat diubah oleh Owner.');return}setConfig({[key]:value})};
  const addPayment=()=>{if(!isOwner)return;const name=prompt('Nama metode pembayaran baru');if(name)patch('paymentMethods',[...config.paymentMethods,{id:`custom-${Date.now()}`,name,type:'other',active:true}])};
- return <div className="h-full flex flex-col bg-gray-50 generic-bg"><PageHeader title="Pengaturan Sistem" subtitle={`Bumi Makmur POS Hybrid v${APP_VERSION} · offline-ready · sinkron otomatis Firebase`}/><div className="bg-white border-b px-4 md:px-6 flex overflow-x-auto no-scrollbar card-element">{tabs.map(([id,label])=><button key={id} onClick={()=>setTab(id)} className={`px-4 min-h-[52px] font-bold text-sm border-b-2 whitespace-nowrap ${tab===id?'border-emerald-600 text-emerald-700':'border-transparent text-gray-500'}`}>{label}</button>)}</div><div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6">{tab==='business'&&isOwner&&<BusinessSettings config={config} patch={patch}/>} {tab==='payment'&&isOwner&&<PaymentSettings config={config} patch={patch} addPayment={addPayment}/>} {tab==='security'&&<SecuritySettings config={config} patch={patch} currentUser={currentUser} deviceSettings={deviceSettings} updateDeviceSettings={updateDeviceSettings}/>} {tab==='employees'&&canManageEmployees&&<EmployeeManagementPanel/>} {tab==='system'&&<SystemSettings currentUser={currentUser} db={db} online={online} localReady={localReady} cloudReady={cloudReady} cloudSaving={cloudSaving} cloudError={cloudError} pendingSyncCount={pendingSyncCount} syncConflictCount={syncConflictCount} lastSyncAttemptAt={lastSyncAttemptAt} exportBackup={exportBackup} importBackup={importBackup} fileRef={fileRef} syncNow={syncNow} resetDemo={resetDemo} signOutAccount={signOutAccount}/>} {tab==='audit'&&<AuditSettings db={db} online={online} localReady={localReady} cloudReady={cloudReady} pendingSyncCount={pendingSyncCount} syncConflictCount={syncConflictCount} syncNow={syncNow}/>} {tab==='changelog'&&<ReleaseNotesSettings/>}</div></div>;
+ return <div className="h-full flex flex-col bg-gray-50 generic-bg"><PageHeader title="Pengaturan Sistem" subtitle={`Bumi Makmur POS Hybrid v${APP_VERSION} · offline-ready · sinkron otomatis Firebase`}/><div className="bg-white border-b px-4 md:px-6 flex overflow-x-auto no-scrollbar card-element">{tabs.map(([id,label])=><button key={id} onClick={()=>setTab(id)} className={`px-4 min-h-[52px] font-bold text-sm border-b-2 whitespace-nowrap ${tab===id?'border-emerald-600 text-emerald-700':'border-transparent text-gray-500'}`}>{label}</button>)}</div><div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6">{tab==='business'&&isOwner&&<BusinessSettings config={config} patch={patch}/>} {tab==='payment'&&canManagePayments&&<PaymentSettings db={db} config={config} patch={patch} addPayment={addPayment} currentUser={currentUser} branchId={branchId} saveBranchPaymentProfile={saveBranchPaymentProfile}/>} {tab==='security'&&<SecuritySettings config={config} patch={patch} currentUser={currentUser} deviceSettings={deviceSettings} updateDeviceSettings={updateDeviceSettings}/>} {tab==='employees'&&canManageEmployees&&<EmployeeManagementPanel/>} {tab==='system'&&<SystemSettings currentUser={currentUser} db={db} online={online} localReady={localReady} cloudReady={cloudReady} cloudSaving={cloudSaving} cloudError={cloudError} pendingSyncCount={pendingSyncCount} syncConflictCount={syncConflictCount} lastSyncAttemptAt={lastSyncAttemptAt} exportBackup={exportBackup} importBackup={importBackup} fileRef={fileRef} syncNow={syncNow} resetDemo={resetDemo} signOutAccount={signOutAccount}/>} {tab==='audit'&&<AuditSettings db={db} online={online} localReady={localReady} cloudReady={cloudReady} pendingSyncCount={pendingSyncCount} syncConflictCount={syncConflictCount} syncNow={syncNow}/>} {tab==='changelog'&&<ReleaseNotesSettings/>}</div></div>;
 }
 
 function SecuritySettings({config,patch,currentUser,deviceSettings,updateDeviceSettings}){
@@ -45,35 +46,9 @@ function SecuritySettings({config,patch,currentUser,deviceSettings,updateDeviceS
 }
 
 function Toggle({label,checked,onChange,description}){return <label className="flex items-center justify-between gap-3 p-4 border-b last:border-0 cursor-pointer"><div><p className="font-bold text-sm text-gray-800">{label}</p>{description&&<p className="text-xs text-gray-500">{description}</p>}</div><input type="checkbox" className="w-5 h-5" checked={checked} onChange={e=>onChange(e.target.checked)}/></label>}
-const readImageFile = (file, preserveSharpEdges = false) => new Promise((resolve, reject) => {
-  if (!file) return resolve('');
-  if (!file.type?.startsWith('image/')) return reject(new Error('File harus berupa gambar.'));
-  if (file.size > 4_000_000) return reject(new Error('Ukuran gambar maksimal 4 MB.'));
-  const reader = new FileReader();
-  reader.onerror = () => reject(new Error('Gambar gagal dibaca.'));
-  reader.onload = () => {
-    const image = new Image();
-    image.onerror = () => reject(new Error('Format gambar tidak didukung.'));
-    image.onload = () => {
-      const maxSide = 900;
-      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(image.width * scale));
-      canvas.height = Math.max(1, Math.round(image.height * scale));
-      const context = canvas.getContext('2d');
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = 'high';
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL(preserveSharpEdges ? 'image/png' : 'image/webp', 0.9));
-    };
-    image.src = String(reader.result || '');
-  };
-  reader.readAsDataURL(file);
-});
-
 function BusinessSettings({config,patch}){
   const logoRef=useRef(null);
-  const uploadLogo=async file=>{try{if(!file)return;const url=await uploadStoreAsset(file,'logo');patch('receiptLogo',url);}catch(error){alert(error.message)}};
+  const uploadLogo=async file=>{try{if(!file)return;const result=await uploadStoreAsset(file,'logo');patch('receiptLogo',result.dataUrl);}catch(error){alert(error.message)}};
   return <div className="max-w-4xl space-y-4">
     <Card className="p-5 premium-settings-hero"><div className="flex flex-col md:flex-row gap-5 items-start"><div className="w-24 h-24 rounded-3xl bg-white shadow-lg border flex items-center justify-center overflow-hidden shrink-0"><img src={config.receiptLogo || '/logo-bm.svg'} alt="Logo BM" className="w-full h-full object-contain"/></div><div className="flex-1"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700">Identitas Premium</p><h3 className="text-2xl font-black text-gray-900 mt-1">{config.companyName || 'BUMI MAKMUR'}</h3><p className="text-sm text-gray-600 mt-1">Logo dan pesan ini tampil pada struk cetak, nota digital, dan WhatsApp.</p><div className="flex flex-wrap gap-2 mt-4"><input ref={logoRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={event=>uploadLogo(event.target.files?.[0])}/><Button onClick={()=>logoRef.current?.click()}><Upload size={17}/> Unggah Logo</Button>{config.receiptLogo && config.receiptLogo !== '/logo-bm.svg' && <Button variant="danger" onClick={()=>patch('receiptLogo','/logo-bm.svg')}><Trash2 size={17}/> Pakai Logo BM</Button>}</div></div></div></Card>
 
@@ -101,6 +76,7 @@ function BusinessSettings({config,patch}){
       <Toggle label="Wajib Shift untuk Tunai" checked={config.requireShiftForCash} onChange={v=>patch('requireShiftForCash',v)}/>
     </Card>
     <Card className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3"><Field label="Belanja per 1 poin"><MoneyInput value={config.pointRate} onValueChange={value=>patch('pointRate',value)}/></Field><Field label="Nilai 1 poin"><MoneyInput value={config.pointValue} onValueChange={value=>patch('pointValue',value)}/></Field><Field label="Batas approval refund"><MoneyInput value={config.refundApprovalLimit} onValueChange={value=>patch('refundApprovalLimit',value)}/></Field></Card>
+    <Card className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Target Restock" hint="Saran pesan di Pusat Kontrol = kelipatan stok minimum."><Select value={config.reorderMultiplier||2} onChange={event=>patch('reorderMultiplier',Number(event.target.value))}><option value="1.5">1,5× stok minimum</option><option value="2">2× stok minimum</option><option value="2.5">2,5× stok minimum</option><option value="3">3× stok minimum</option></Select></Field><Field label="Peringatan Shift Terbuka" hint="Shift lebih lama dari batas ini masuk Pusat Kontrol."><Select value={config.shiftWarningHours||14} onChange={event=>patch('shiftWarningHours',Number(event.target.value))}><option value="10">10 jam</option><option value="12">12 jam</option><option value="14">14 jam</option><option value="18">18 jam</option><option value="24">24 jam</option></Select></Field></Card>
     <ReceiptSettingsPreview config={config}/>
   </div>
 }
@@ -110,19 +86,111 @@ function ReceiptSettingsPreview({config}){
  return <Card className="p-5"><div className="mb-4"><p className="font-black text-lg">Preview Nota Langsung</p><p className="text-xs text-gray-500">Perubahan judul, logo, pesan, dan lebar kertas terlihat tanpa membuat transaksi baru.</p></div><div className="mx-auto max-w-sm bg-white border border-gray-200 rounded-[1.75rem] overflow-hidden shadow-xl premium-receipt"><div className="receipt-premium-header p-5 text-center border-b border-dashed">{logo&&<img src={logo} alt="BM" className="w-16 h-16 rounded-2xl mx-auto shadow-lg"/>}<p className="text-[9px] mt-3 uppercase tracking-[.2em] font-black text-emerald-700">{config.receiptHeader||'NOTA PEMBELIAN'}</p><h3 className="font-black text-xl mt-1 text-gray-900">{config.companyName||'BUMI MAKMUR'}</h3><p className="text-[10px] text-gray-500">{config.address||'Alamat toko'}</p>{config.receiptShowStorePhone!==false&&<p className="text-[10px] text-gray-500">Telp: {config.phone||'-'}</p>}<span className="inline-flex mt-3 px-3 py-1 rounded-full bg-white border border-emerald-100 text-[9px] font-black text-emerald-800">INV-PREVIEW-0001</span></div><div className="p-4 text-xs"><div className="grid grid-cols-2 gap-2 mb-3">{config.receiptShowCustomer!==false&&<div className="p-2 rounded-xl bg-gray-50"><span className="text-gray-400 block text-[9px]">Pelanggan</span><b>Pak Budi</b></div>}{config.receiptShowCashier!==false&&<div className="p-2 rounded-xl bg-gray-50"><span className="text-gray-400 block text-[9px]">Kasir</span><b>Kasir Satu</b></div>}</div><div className="space-y-2"><div className="flex justify-between border-b border-dashed pb-2"><div><b>Kabel NYM 2×1,5</b><p className="text-[9px] text-gray-500">5 meter × Rp9.000</p></div><b>Rp45.000</b></div><div className="flex justify-between border-b border-dashed pb-2"><div><b>Lampu LED 10W</b><p className="text-[9px] text-gray-500">2 pcs × Rp35.000</p></div><b>Rp70.000</b></div></div><div className="mt-3 space-y-1"><div className="flex justify-between"><span>Subtotal</span><span>Rp115.000</span></div><div className="flex justify-between text-emerald-700"><span>Diskon</span><span>-Rp5.000</span></div><div className="premium-receipt-total rounded-xl p-3 mt-2 flex justify-between font-black text-base"><span>TOTAL</span><span>Rp110.000</span></div></div>{config.receiptShowPayment!==false&&<div className="border-t border-dashed mt-3 pt-2 flex justify-between"><span>QRIS</span><b>Rp110.000</b></div>}<div className="text-center border-t border-dashed mt-4 pt-3"><img src="/logo-bm.svg" alt="BM" className="w-6 h-6 rounded-lg mx-auto mb-1"/><b>{config.receiptFooter||'Terima kasih telah berbelanja.'}</b><p className="text-[9px] text-gray-500 mt-1 leading-relaxed">{config.receiptMessage||''}</p></div></div></div></Card>
 }
 
-function PaymentSettings({config,patch,addPayment}){
+function PaymentSettings({db,config,patch,addPayment,currentUser,branchId,saveBranchPaymentProfile}){
+  const isOwner=currentUser?.role==='owner';
+  const availableBranches=(db.branches||[]).filter(item=>item.active!==false);
+  const [selectedBranchId,setSelectedBranchId]=useState(isOwner?branchId:(currentUser?.branchId||branchId));
+  const [draft,setDraft]=useState(null);
+  const [assetState,setAssetState]=useState({status:'idle',message:'',tone:'success'});
+  const [saving,setSaving]=useState(false);
+  const [previewOpen,setPreviewOpen]=useState(false);
   const qrisRef=useRef(null);
-  const uploadQris=async file=>{try{if(!file)return;const url=await uploadStoreAsset(file,'qris');patch('qrisImage',url);}catch(error){alert(error.message)}};
-  const brandClass={cash:'payment-cash',qris:'payment-qris',shopeepay:'payment-shopeepay',ovo:'payment-ovo',gopay:'payment-gopay',dana:'payment-dana',bank:'payment-bank',card:'payment-card',credit:'payment-credit',other:'payment-other'};
-  return <div className="max-w-4xl space-y-4">
-    <Card className="p-5 bg-gradient-to-br from-slate-950 to-emerald-950 text-white border-0"><div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-5 items-center"><div className="w-44 h-44 bg-white rounded-3xl p-3 flex items-center justify-center shadow-xl mx-auto">{config.qrisImage?<img src={config.qrisImage} alt="QRIS toko" className="w-full h-full object-contain rounded-2xl"/>:<QrCode size={112} className="text-gray-900"/>}</div><div><p className="text-xs uppercase tracking-[.2em] text-emerald-300 font-black">QRIS & E-Wallet</p><h3 className="text-2xl font-black mt-1">Terima pembayaran digital lebih cepat</h3><p className="text-sm text-emerald-100 mt-2">Satu QRIS dapat menerima pembayaran dari aplikasi yang mendukung QRIS, termasuk ShopeePay, OVO, GoPay, dan DANA.</p><input ref={qrisRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={event=>uploadQris(event.target.files?.[0])}/><div className="flex flex-wrap gap-2 mt-4"><Button onClick={()=>qrisRef.current?.click()}><Upload size={17}/> Unggah QRIS</Button>{config.qrisImage&&<Button variant="danger" onClick={()=>patch('qrisImage','')}><Trash2 size={17}/> Hapus</Button>}</div></div></div></Card>
+  const activeProfile=(db.branchPaymentProfiles||[]).find(item=>item.branchId===selectedBranchId);
+  const selectedBranch=availableBranches.find(item=>item.id===selectedBranchId);
 
-    <Card className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Nama Merchant QRIS"><Input value={config.qrisMerchantName || ''} onChange={e=>patch('qrisMerchantName',e.target.value)}/></Field><Field label="Petunjuk Pembayaran"><Input value={config.qrisInstruction || ''} onChange={e=>patch('qrisInstruction',e.target.value)}/></Field></Card>
-    <Card><Toggle label="Pajak" checked={config.taxEnabled} onChange={v=>patch('taxEnabled',v)} description={`Tarif saat ini ${config.taxRate}%`}/><Toggle label="Service Charge / Gratuity" checked={config.serviceEnabled} onChange={v=>patch('serviceEnabled',v)} description={`Tarif saat ini ${config.serviceRate}%`}/></Card>
-    <Card className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3"><Field label="Tarif Pajak (%)"><Input type="number" value={config.taxRate} onChange={e=>patch('taxRate',Number(e.target.value))}/></Field><Field label="Service (%)"><Input type="number" value={config.serviceRate} onChange={e=>patch('serviceRate',Number(e.target.value))}/></Field><Field label="Pembulatan"><Select value={config.roundingStep} onChange={e=>patch('roundingStep',Number(e.target.value))}><option value="0">Tanpa pembulatan</option><option value="100">Rp100</option><option value="500">Rp500</option><option value="1000">Rp1.000</option></Select></Field></Card>
-    <Card className="p-4"><div className="flex justify-between items-center mb-4"><div><p className="font-black">Metode Pembayaran</p><p className="text-xs text-gray-500">Aktifkan hanya metode yang digunakan toko.</p></div><Button size="sm" onClick={addPayment}><Plus size={15}/> Tambah</Button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{config.paymentMethods.map((method,index)=><label key={method.id} className={`payment-setting-card ${brandClass[method.brand || method.id] || 'payment-other'} ${method.active?'is-enabled':''}`}><span className="payment-method-icon"><WalletCards size={20}/></span><span className="flex-1 min-w-0"><b className="block truncate">{method.name}</b><small>{method.type}</small></span><input type="checkbox" checked={method.active} onChange={e=>patch('paymentMethods',config.paymentMethods.map((row,i)=>i===index?{...row,active:e.target.checked}:row))}/></label>)}</div></Card>
+  useEffect(()=>{
+    const source=activeProfile||{
+      id:selectedBranchId,branchId:selectedBranchId,merchantName:config.qrisMerchantName||config.companyName||'BUMI MAKMUR',
+      qrisImage:config.qrisImage||'',qrisInstruction:config.qrisInstruction||'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.',
+      qrisAssetMeta:null,enabled:true
+    };
+    setDraft({...source,id:selectedBranchId,branchId:selectedBranchId});
+    setAssetState({status:'idle',message:'',tone:'success'});
+  },[selectedBranchId,activeProfile?.updatedAt,activeProfile?.qrisImage,config.companyName]);
+
+  useEffect(()=>{
+    if(!availableBranches.some(item=>item.id===selectedBranchId))setSelectedBranchId(availableBranches[0]?.id||branchId);
+  },[availableBranches,selectedBranchId,branchId]);
+
+  const updateDraft=patchValue=>setDraft(previous=>({...previous,...patchValue}));
+  const uploadQris=async file=>{
+    if(!file)return;
+    setAssetState({status:'processing',message:'Menganalisis ketajaman dan mengoptimalkan QRIS...',tone:'success'});
+    try{
+      const result=await uploadStoreAsset(file,'qris');
+      updateDraft({qrisImage:result.dataUrl,qrisAssetMeta:result.meta});
+      const pipelineLabel=result.meta.pipeline==='high-contrast-fallback'?'mode kontras aman':result.meta.cropped?'auto-crop + warna':'warna adaptif';
+      const limitNote=result.meta.nearLimit?' Hasil mendekati batas aman, tetapi masih dapat disimpan.':'';
+      setAssetState({status:'success',tone:'success',message:`QRIS siap disimpan: ${formatAssetBytes(result.meta.originalBytes)} → ${formatAssetBytes(result.meta.outputBytes)} (${result.meta.width}×${result.meta.height}px, ${pipelineLabel}).${limitNote}`});
+    }catch(error){
+      setAssetState({status:'error',tone:'error',message:error.message||'QRIS gagal diproses.'});
+    }finally{
+      if(qrisRef.current)qrisRef.current.value='';
+    }
+  };
+  const saveProfile=async()=>{
+    if(!draft)return;
+    setSaving(true);
+    setAssetState(previous=>({...previous,status:previous.status==='error'?'error':'processing',message:'Menyimpan profil pembayaran cabang ke cache dan Firebase...'}));
+    try{
+      await Promise.resolve(saveBranchPaymentProfile(draft));
+      setAssetState({status:'success',tone:'success',message:`Profil QRIS ${selectedBranch?.name||selectedBranchId} berhasil disimpan.`});
+    }catch(error){
+      setAssetState({status:'error',tone:'error',message:error.message||'Profil QRIS gagal disimpan.'});
+    }finally{setSaving(false)}
+  };
+  const brandClass={cash:'payment-cash',qris:'payment-qris',shopeepay:'payment-shopeepay',ovo:'payment-ovo',gopay:'payment-gopay',dana:'payment-dana',bank:'payment-bank',card:'payment-card',credit:'payment-credit',other:'payment-other'};
+  const meta=draft?.qrisAssetMeta;
+  return <div className="max-w-5xl space-y-4">
+    <Card className="p-4 border-emerald-200 bg-emerald-50/60">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+        <Field label="Profil Pembayaran Cabang" hint={isOwner?'Setiap cabang dapat memakai QRIS dan nama merchant berbeda.':'Store Manager hanya dapat mengatur cabangnya sendiri.'}>
+          {isOwner?<Select value={selectedBranchId} onChange={event=>setSelectedBranchId(event.target.value)}>{availableBranches.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</Select>:<Input value={selectedBranch?.name||currentUser?.branchId||'-'} disabled/>}
+        </Field>
+        <Badge tone="green">Firestore dokumen terpisah per cabang</Badge>
+      </div>
+    </Card>
+
+    <Card className="p-5 bg-gradient-to-br from-slate-950 to-emerald-950 text-white border-0">
+      <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-5 items-center">
+        <button type="button" onClick={()=>draft?.qrisImage&&setPreviewOpen(true)} className="w-52 h-52 bg-white rounded-3xl p-3 flex items-center justify-center shadow-xl mx-auto relative group" aria-label="Perbesar preview QRIS">
+          {draft?.qrisImage?<img src={draft.qrisImage} alt={`QRIS ${selectedBranch?.name||''}`} className="w-full h-full object-contain rounded-2xl"/>:<QrCode size={132} className="text-gray-900"/>}
+          {draft?.qrisImage&&<span className="absolute right-3 bottom-3 w-10 h-10 rounded-xl bg-slate-950/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Maximize2 size={18}/></span>}
+        </button>
+        <div>
+          <p className="text-xs uppercase tracking-[.2em] text-emerald-300 font-black">QRIS Adaptive v3</p>
+          <h3 className="text-2xl font-black mt-1">QRIS tajam, ringan, dan aman untuk Firestore</h3>
+          <p className="text-sm text-emerald-100 mt-2">Gambar hingga 24 MB diproses otomatis: ruang kosong dipangkas aman, quiet zone putih ditambahkan kembali, lalu ukuran diturunkan bertahap. Bila gambar sangat rumit, sistem memakai mode kontras tinggi agar tetap lolos batas Firestore tanpa popup gagal.</p>
+          <input ref={qrisRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={event=>void uploadQris(event.target.files?.[0])}/>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Button onClick={()=>qrisRef.current?.click()} disabled={assetState.status==='processing'||saving}><Upload size={17}/> {draft?.qrisImage?'Ganti QRIS':'Unggah QRIS'}</Button>
+            {draft?.qrisImage&&<Button variant="secondary" onClick={()=>setPreviewOpen(true)}><Maximize2 size={17}/> Preview Besar</Button>}
+            {draft?.qrisImage&&<Button variant="danger" onClick={()=>{updateDraft({qrisImage:'',qrisAssetMeta:null});setAssetState({status:'success',tone:'success',message:'QRIS dihapus dari draft. Tekan Simpan Profil untuk menerapkan.'})}}><Trash2 size={17}/> Hapus</Button>}
+          </div>
+          {meta&&<div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 text-center"><div className="rounded-xl bg-white/10 p-2"><p className="text-[10px] text-emerald-200">Asli</p><b className="text-xs">{formatAssetBytes(meta.originalBytes)}</b></div><div className="rounded-xl bg-white/10 p-2"><p className="text-[10px] text-emerald-200">Hasil</p><b className="text-xs">{formatAssetBytes(meta.outputBytes)}</b></div><div className="rounded-xl bg-white/10 p-2"><p className="text-[10px] text-emerald-200">Resolusi</p><b className="text-xs">{meta.width}×{meta.height}</b></div><div className="rounded-xl bg-white/10 p-2"><p className="text-[10px] text-emerald-200">Hemat</p><b className="text-xs">{meta.reductionPercent}%</b></div><div className="rounded-xl bg-white/10 p-2 col-span-2 sm:col-span-1"><p className="text-[10px] text-emerald-200">Mode</p><b className="text-[10px]">{meta.pipeline==='high-contrast-fallback'?'Kontras':meta.cropped?'Auto-crop':'Warna'}</b></div></div>}
+        </div>
+      </div>
+    </Card>
+
+    {assetState.message&&<div className={`p-4 rounded-2xl border flex gap-3 text-sm font-semibold ${assetState.status==='error'?'bg-red-50 border-red-200 text-red-800':assetState.status==='processing'?'bg-blue-50 border-blue-200 text-blue-800':'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{assetState.status==='processing'?<Loader2 size={20} className="animate-spin shrink-0"/>:assetState.status==='error'?<AlertTriangle size={20} className="shrink-0"/>:<CircleCheck size={20} className="shrink-0"/>}<span>{assetState.message}</span></div>}
+
+    <Card className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <Field label="Nama Merchant QRIS"><Input value={draft?.merchantName||''} onChange={event=>updateDraft({merchantName:event.target.value})} placeholder="BUMI MAKMUR"/></Field>
+      <Field label="Petunjuk Pembayaran"><Input value={draft?.qrisInstruction||''} onChange={event=>updateDraft({qrisInstruction:event.target.value})} placeholder="Scan QR lalu tunjukkan bukti pembayaran..."/></Field>
+      <label className="md:col-span-2 flex items-center gap-3 p-4 bg-gray-50 border rounded-xl"><input type="checkbox" className="w-5 h-5" checked={draft?.enabled!==false} onChange={event=>updateDraft({enabled:event.target.checked})}/><span><b className="text-sm block">Aktifkan QRIS pada cabang ini</b><small className="text-gray-500">Bila dimatikan, kasir tetap dapat memakai metode digital lain tanpa menampilkan QRIS.</small></span></label>
+      <Button className="md:col-span-2" onClick={saveProfile} disabled={saving||assetState.status==='processing'||!draft?.merchantName?.trim()}>{saving?<Loader2 size={17} className="animate-spin"/>:<Save size={17}/>} {saving?'Menyimpan...':'Simpan Profil QRIS Cabang'}</Button>
+    </Card>
+
+    {isOwner&&<>
+      <Card className="p-4"><p className="font-black mb-1">Pengaturan Transaksi Global Owner</p><p className="text-xs text-gray-500 mb-3">Pajak, service, pembulatan, dan daftar metode berlaku ke seluruh cabang.</p><Toggle label="Pajak" checked={config.taxEnabled} onChange={v=>patch('taxEnabled',v)} description={`Tarif saat ini ${config.taxRate}%`}/><Toggle label="Service Charge / Gratuity" checked={config.serviceEnabled} onChange={v=>patch('serviceEnabled',v)} description={`Tarif saat ini ${config.serviceRate}%`}/></Card>
+      <Card className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3"><Field label="Tarif Pajak (%)"><Input type="number" min="0" max="100" value={config.taxRate} onChange={e=>patch('taxRate',Number(e.target.value))}/></Field><Field label="Service (%)"><Input type="number" min="0" max="100" value={config.serviceRate} onChange={e=>patch('serviceRate',Number(e.target.value))}/></Field><Field label="Pembulatan"><Select value={config.roundingStep} onChange={e=>patch('roundingStep',Number(e.target.value))}><option value="0">Tanpa pembulatan</option><option value="100">Rp100</option><option value="500">Rp500</option><option value="1000">Rp1.000</option></Select></Field></Card>
+      <Card className="p-4"><div className="flex justify-between items-center mb-4"><div><p className="font-black">Metode Pembayaran Global</p><p className="text-xs text-gray-500">Aktifkan hanya metode yang dipakai seluruh jaringan toko.</p></div><Button size="sm" onClick={addPayment}><Plus size={15}/> Tambah</Button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{config.paymentMethods.map((method,index)=><label key={method.id} className={`payment-setting-card ${brandClass[method.brand||method.id]||'payment-other'} ${method.active?'is-enabled':''}`}><span className="payment-method-icon"><WalletCards size={20}/></span><span className="flex-1 min-w-0"><b className="block truncate">{method.name}</b><small>{method.type}</small></span><input type="checkbox" checked={method.active} onChange={e=>patch('paymentMethods',config.paymentMethods.map((row,i)=>i===index?{...row,active:e.target.checked}:row))}/></label>)}</div></Card>
+    </>}
+
+    {previewOpen&&draft?.qrisImage&&<Modal title={`Preview QRIS — ${selectedBranch?.name||selectedBranchId}`} onClose={()=>setPreviewOpen(false)} size="lg" footer={<Button onClick={()=>setPreviewOpen(false)}>Tutup</Button>}><div className="max-w-xl mx-auto text-center"><div className="bg-white p-4 rounded-3xl border shadow-sm"><img src={draft.qrisImage} alt="Preview QRIS ukuran besar" className="w-full max-h-[65vh] object-contain"/></div><p className="font-black text-xl mt-4">{draft.merchantName}</p><p className="text-sm text-gray-500 mt-1">{draft.qrisInstruction}</p><p className="text-xs text-emerald-700 font-bold mt-3">Uji pemindaian dengan aplikasi pembayaran sebelum dipakai pada transaksi sungguhan.</p></div></Modal>}
   </div>
 }
+
 function SystemSettings({currentUser,db,online,localReady,cloudReady,cloudSaving,cloudError,pendingSyncCount,syncConflictCount,lastSyncAttemptAt,exportBackup,importBackup,fileRef,syncNow,resetDemo,signOutAccount}){
  const [refreshing,setRefreshing]=useState(false);
  const refresh=async()=>{setRefreshing(true);try{const result=await syncNow();alert(`Sinkronisasi selesai. ${result.count||0} pembaruan terkirim, ${result.pending||0} tersisa.`);}catch(error){alert(error.message)}finally{setRefreshing(false)}};
@@ -141,15 +209,15 @@ function SystemSettings({currentUser,db,online,localReady,cloudReady,cloudSaving
 }
 
 function ReleaseNotesSettings(){
- const groups=[['Hotfix 4.5.1 — Store Manager Cloud',['Memperbaiki Store Manager yang sebelumnya memicu status Cloud bermasalah saat memuat transfer stok.','Transfer keluar dan masuk sekarang difilter memakai sourceBranchId serta destinationBranchId sesuai cabang Manager.','Dua hasil realtime digabung tanpa duplikasi dan tanpa mengubah data lama atau Firestore Rules.']],
-  ['Login Cabang, Nama & PIN',['Login Owner dan Login Karyawan tetap dipisahkan secara tegas.','Login Karyawan sekarang cukup memilih toko/cabang, memasukkan nama login, lalu PIN 4 digit.','Daftar cabang aktif tampil otomatis pada halaman login setelah Owner membuat cabang baru.','Sidik jari atau Face ID hanya dibuka setelah tombol biometrik ditekan; tidak ada popup otomatis.']],
-  ['Karyawan dari Pengaturan',['Tambah, edit, nonaktifkan, ganti PIN, dan hapus karyawan dilakukan dari Pengaturan → Karyawan.','Owner dapat membuat Store Manager atau Kasir untuk cabang mana pun.','Store Manager dapat menambah dan mengelola Kasir hanya pada cabangnya sendiri.','Penghapusan mencabut akses POS; dengan PIN saat ini identitas Firebase Authentication juga dihapus.']],
-  ['Store Manager per Cabang',['Store Manager memiliki akses operasional luas seperti produk, stok, pembelian, pelanggan, kasir, laporan, dan printer pada cabangnya.','Store Manager tidak dapat membuat cabang, mengubah pengaturan toko global, memulihkan backup, mereset cloud, atau mengelola Manager lain.','Data pengguna, cabang, dan audit Manager dibatasi oleh Firestore Rules ke cabang yang ditugaskan.']],
-  ['Sinkronisasi Multi-Perangkat',['Konflik perubahan web dan HP direbase otomatis terhadap dokumen terbaru lalu dicoba kembali hingga enam kali.','Konflik sementara tidak lagi ditampilkan sebagai error cloud permanen atau mengganggu operasional kasir.','Antrean lokal tetap aman saat konflik berulang dan diproses kembali oleh background sync.','Realtime listener tetap memadukan tampilan cloud terbaru dengan perubahan lokal yang belum terkirim.']],
-  ['Firebase Spark & Keamanan',['Menambahkan direktori login karyawan berbasis hash cabang + nama tanpa Cloud Functions.','Menambahkan dokumen publik ter sanitasi khusus daftar nama cabang untuk layar login; listing karyawan tetap diblokir.','Memperketat aturan Owner, Store Manager, Kasir, hak akses khusus, profil, dan cabang.','Tetap memakai Firebase Auth + Firestore Spark tanpa Storage, Functions, Blaze, atau billing.']],
-  ['Stabilitas & Rilis',['Memperbarui versi menjadi 4.5.0 dan cache PWA baru tanpa mengubah key data lokal.','Mempertahankan seluruh modul kasir, stok, pembelian, laporan, printer, nota digital, Android, Web, dan PC PWA.','Menambahkan regression tests untuk login nama + PIN, pilihan cabang, Store Manager, hapus karyawan, dan conflict rebase.']]
+ const groups=[
+  ['QRIS Adaptive v3 per Cabang',['Memperbaiki gambar QRIS besar dengan auto-crop, quiet zone, kompresi adaptif, dan fallback kontras hingga batas aman Firestore.','Menjaga latar putih dan tepi QR agar hasil tetap tajam serta mudah dipindai.','Menampilkan ukuran asli, ukuran hasil, resolusi, persentase penghematan, preview besar, dan status proses tanpa popup alert.','QRIS disimpan pada dokumen terpisah per cabang sehingga perubahan Cabang A tidak memicu konflik pengaturan Cabang B.']],
+  ['Pusat Kontrol Operasional',['Menambahkan skor kesehatan operasional per cabang.','Menampilkan stok rendah/habis, saran jumlah restock, risiko margin, SKU/barcode ganda, piutang/utang jatuh tempo, dan shift terlalu lama.','Menambahkan ekspor CSV serta cetak daftar restock 80 mm.','Menambahkan nilai stok modal, potensi nilai retail, omzet bersih hari ini, dan temuan prioritas.']],
+  ['Multi-Cabang & Store Manager',['Owner dapat memilih profil QRIS setiap cabang.','Store Manager dapat mengatur QRIS cabangnya sendiri tanpa akses ke pajak atau pengaturan global Owner.','Kasir otomatis menerima QRIS cabang yang dipilih saat login.','Cabang baru otomatis memperoleh profil pembayaran dasar dan muncul pada pilihan login.']],
+  ['Login & Aktivasi Toko',['Menghapus tombol setup dari login normal setelah toko terdeteksi.','Aktivasi toko tidak tampil pada login normal; mode pemulihan khusus hanya dapat dibuka dengan parameter ?activate=1 dan tetap memeriksa bahwa belum ada toko.','Login Owner dan Karyawan tetap terpisah; karyawan memakai cabang, nama login, dan PIN.','Biometrik tetap hanya berjalan setelah tombol sidik jari/Face ID ditekan.']],
+  ['Cloud FreeSync v5',['Memisahkan aset QRIS dari settings global untuk mengurangi konflik web–HP.','Mempertahankan rebase konflik, antrean offline, retry bertahap, cache IndexedDB, dan audit log idempotent.','Menambahkan koleksi branchPaymentProfiles dengan Firestore Rules per cabang.','Tetap memakai Firebase Auth + Firestore Spark tanpa Storage, Functions, Blaze, atau billing.']],
+  ['Stabilitas & Kompatibilitas',['Mempertahankan seluruh modul kasir, open bill, refund, stok, pembelian, keuangan, laporan, printer, nota digital, PWA, dan Android.','Menambahkan regression test QRIS, Pusat Kontrol, role Manager, rules, versi, dan retensi fitur.','Dioptimalkan untuk Infinix Note 40 Pro+ serta Huawei MatePad SE 11 pada portrait dan landscape.']]
  ];
- return <div className="max-w-4xl space-y-4"><Card className="p-5 bg-gradient-to-br from-emerald-950 to-slate-950 text-white border-0"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-300">Release Notes</p><h3 className="text-2xl font-black mt-1">Bumi Makmur POS v{APP_VERSION}</h3><p className="text-sm text-emerald-100 mt-2">Store Manager Cloud Sync Hotfix, Branch Login, Name + PIN, dan Multi-Device Conflict Recovery.</p></Card>{groups.map(([title,items])=><Card key={title} className="p-5"><p className="font-black text-gray-900 mb-3">{title}</p><div className="space-y-2">{items.map(item=><div key={item} className="flex gap-3 text-sm text-gray-600"><CheckCircle2 size={17} className="text-emerald-600 shrink-0 mt-0.5"/><span>{item}</span></div>)}</div></Card>)}</div>;
+ return <div className="max-w-4xl space-y-4"><Card className="p-5 bg-gradient-to-br from-emerald-950 to-slate-950 text-white border-0"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-300">Major Release</p><h3 className="text-2xl font-black mt-1">Bumi Makmur POS v{APP_VERSION}</h3><p className="text-sm text-emerald-100 mt-2">Professional Control Center, QRIS Adaptive per Cabang, dan Cloud Conflict Isolation.</p></Card>{groups.map(([title,items])=><Card key={title} className="p-5"><p className="font-black text-gray-900 mb-3">{title}</p><div className="space-y-2">{items.map(item=><div key={item} className="flex gap-3 text-sm text-gray-600"><CheckCircle2 size={17} className="text-emerald-600 shrink-0 mt-0.5"/><span>{item}</span></div>)}</div></Card>)}</div>;
 }
 
 function AuditSettings({db,online,localReady,cloudReady,pendingSyncCount,syncConflictCount,syncNow}){

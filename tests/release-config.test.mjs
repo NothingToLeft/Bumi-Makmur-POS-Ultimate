@@ -7,7 +7,7 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 test('versi project konsisten pada package dan VERSION.txt', async () => {
   const packageJson = JSON.parse(await read('package.json'));
   const version = (await read('VERSION.txt')).trim();
-  assert.equal(packageJson.version, '4.5.1');
+  assert.equal(packageJson.version, '5.0.0');
   assert.equal(version, packageJson.version);
 });
 
@@ -42,6 +42,7 @@ test('workflow mendukung test, web PWA, Android release, dan gabungan', async ()
 test('workflow Firebase hanya deploy rules dan indexes Spark', async () => {
   const workflow = await read('.github/workflows/deploy-firebase.yml');
   assert.match(workflow, /firestore:rules,firestore:indexes/);
+  assert.match(workflow, /firebase-tools@14/);
   assert.doesNotMatch(workflow, /storage|functions|hosting/);
   assert.match(workflow, /google-github-actions\/auth@v3/);
   assert.match(workflow, /actions\/setup-node@v6/);

@@ -1,71 +1,72 @@
-# QA Checklist v4.5.1
+# QA Checklist Bumi Makmur POS v5.0.0
 
 ## A. Build dan deploy
 
-- [ ] Workflow `test-only` hijau: 71 tests, audit statis, dan Vite compile.
-- [ ] Workflow `Deploy Firebase Spark Rules` hijau.
-- [ ] Firestore Rules di Firebase Console menunjukkan versi terbaru.
-- [ ] `android-release` menghasilkan APK/AAB signed v4.5.1.1.
-- [ ] APK v4.5.1 dapat dipasang di atas v4.4 tanpa uninstall.
+- [ ] Backup JSON sudah dibuat dan antrean offline sebelum update = 0.
+- [ ] Workflow `test-only` hijau: 77 tests, audit statis, dan Vite compile.
+- [ ] Workflow `Deploy Firebase Spark Rules` hijau setelah source v5 masuk.
+- [ ] Cloudflare Pages branch `main` berstatus Success dan menampilkan v5.0.0.
+- [ ] `android-release` menghasilkan APK/AAB signed versionCode 50000.
+- [ ] APK dapat dipasang di atas versi lama tanpa uninstall dan data lama tetap ada.
 
-## B. Login Owner
+## B. QRIS Adaptive v3
 
-- [ ] Halaman awal menampilkan pilihan Login Owner dan Login Karyawan.
-- [ ] Login Owner hanya menerima PIN/akun Owner.
-- [ ] PIN karyawan di halaman Owner menghasilkan pesan yang benar.
-- [ ] Masuk Owner dengan email berhasil pada perangkat baru.
-- [ ] Setup Toko Pertama Kali hanya terlihat di halaman Owner.
-- [ ] Biometrik Owner tidak muncul otomatis dan hanya berjalan setelah tombol ditekan.
+- [ ] Unggah PNG/JPG/WebP kecil dan besar hingga 24 MB.
+- [ ] Tidak muncul popup `Gambar masih terlalu besar setelah dikompresi`.
+- [ ] Status proses, ukuran asli/hasil, resolusi, dan penghematan tampil di halaman.
+- [ ] Preview besar tidak terpotong, latar transparan menjadi putih, dan quiet zone tetap terlihat.
+- [ ] Hasil tersimpan setelah menekan **Simpan Profil QRIS Cabang**.
+- [ ] Refresh Web dan buka APK: profil cabang tetap sama.
+- [ ] QRIS berhasil dipindai dari layar HP, tablet, dan PC dengan minimal dua aplikasi pembayaran.
+- [ ] QRIS Cabang A tidak berubah ketika QRIS Cabang B diedit.
+- [ ] Manager hanya dapat mengatur QRIS cabangnya.
+- [ ] Kasir melihat QRIS cabang login yang benar.
 
-## C. Login Karyawan
+## C. Migrasi dan data lama
 
-- [ ] Login Karyawan tidak menampilkan setup toko.
-- [ ] Owner membuat akun dari Pengaturan → Karyawan.
-- [ ] Pilihan toko/cabang menampilkan seluruh cabang aktif.
-- [ ] Karyawan login memakai nama login dan PIN 4 digit tanpa email/password.
-- [ ] Login Manager/Kasir membuka cabang yang ditugaskan.
-- [ ] Biometrik karyawan hanya muncul setelah tombol Sidik Jari / Face ID ditekan.
-- [ ] Akun nonaktif tidak dapat login/sinkronisasi.
+- [ ] Produk, pelanggan, transaksi, stok, karyawan, cabang, dan pengaturan lama tetap ada.
+- [ ] Tidak ada produk/transaksi demo baru masuk ke database nyata.
+- [ ] QRIS lama tetap tampil sebagai fallback sebelum profil baru disimpan.
+- [ ] Backup JSON v4.x dapat dipulihkan dan memperoleh struktur v5 tanpa error.
+- [ ] Tambah cabang setelah update tidak menyebabkan error `branchPaymentProfiles`.
 
-## D. Karyawan & Firestore
+## D. Pusat Kontrol Operasional
 
-- [ ] Karyawan baru langsung muncul setelah tombol Simpan Akun berhasil.
-- [ ] Edit nama, role, cabang, status, dan permission tersimpan.
-- [ ] Ganti PIN memerlukan PIN saat ini dan menyimpan PIN baru.
-- [ ] Hapus akun mencabut profil POS/direktori login; dengan PIN, identitas Auth ikut dihapus.
-- [ ] Manager hanya dapat menambah/mengelola Kasir pada cabangnya.
-- [ ] Owner tetap login setelah membuat akun karyawan.
+- [ ] Owner dan Manager melihat menu **Pusat Kontrol**; Kasir tidak.
+- [ ] Skor kesehatan mengikuti temuan cabang aktif.
+- [ ] Stok rendah/habis dan saran restock sesuai stok minimum serta multiplier.
+- [ ] Nilai stok modal dan potensi retail masuk akal.
+- [ ] Omzet bersih hari ini memperhitungkan refund.
+- [ ] Risiko margin menemukan harga retail ≤ modal.
+- [ ] SKU/barcode ganda terdeteksi.
+- [ ] Piutang/utang jatuh tempo serta shift terlalu lama terdeteksi.
+- [ ] CSV restock dapat dibuka di Excel.
+- [ ] Cetak restock 80 mm terbaca dengan baik.
+
+## E. Login, karyawan, dan role
+
+- [ ] Halaman Login Owner dan Login Karyawan tetap terpisah.
+- [ ] Aktivasi Toko Baru tidak terlihat pada login normal; mode aktivasi hanya dapat dibuka secara khusus.
+- [ ] Karyawan login dengan cabang + nama login + PIN 4 digit.
+- [ ] Biometrik tidak muncul otomatis; hanya setelah tombol ditekan.
+- [ ] Owner dapat tambah/edit/hapus Manager dan Kasir dari Pengaturan.
+- [ ] Manager dapat mengelola Kasir cabangnya, tetapi tidak Manager/cabang/pengaturan global.
+- [ ] Manager melihat transfer masuk dan keluar tanpa banner cloud bermasalah.
+- [ ] Cabang baru muncul pada pilihan login setelah sinkronisasi.
+
+## F. Cloud dan konflik Web–HP
+
+- [ ] Status cloud tersambung dan antrean 0 setelah login.
+- [ ] Ubah produk berbeda dari Web dan HP: keduanya tersinkron.
+- [ ] Ubah dokumen yang sama hampir bersamaan: rebase selesai tanpa duplikasi.
+- [ ] Perubahan QRIS tidak memicu konflik pengaturan toko global.
+- [ ] Mode pesawat dapat melakukan transaksi; setelah online antrean kembali 0.
 - [ ] Tidak ada banner mentah `Missing or insufficient permissions`.
-- [ ] Transaksi, produk, stok, pelanggan, dan karyawan dapat dibaca sesuai role.
-- [ ] Manager hanya melihat data cabang yang ditugaskan.
-- [ ] Kasir tidak dapat mengubah harga, cabang, limit kredit, atau pengaturan Owner.
 
-## E. UI HP/tablet/PC
+## G. Operasional dan tampilan
 
-- [ ] Search icon tidak menutupi placeholder di Transaksi, Produk, Stok, Pemasok, Pelanggan, Pembelian, dan Kasir.
-- [ ] Ikon persen tidak menutupi angka markup produk.
-- [ ] Tombol hapus pencarian muncul saat ada teks.
-- [ ] Input tidak terpotong pada keyboard Android dan font size perangkat.
-- [ ] Header tidak tertutup status bar.
-- [ ] Bottom navigation tidak tertutup gesture/navigation bar.
-- [ ] Modal login dan karyawan dapat di-scroll pada layar kecil.
+- [ ] Kasir, barcode, open bill, split payment, refund, void, pembelian, retur, stok, shift, hutang/piutang, laporan, nota, WhatsApp, printer, dan layar pelanggan diuji.
+- [ ] Search icon/input tidak bertumpuk pada HP/tablet/PC.
 - [ ] Infinix Note 40 Pro+ portrait.
 - [ ] Huawei MatePad SE 11 portrait dan landscape.
 - [ ] PC 1366×768 dan 1920×1080.
-
-## F. Operasional utama
-
-- [ ] Kasir, barcode kamera/manual/USB/Bluetooth keyboard.
-- [ ] Produk, varian, konversi, bundle, markup, dan stok.
-- [ ] Open bill, pembayaran, refund, void, approval.
-- [ ] Pembelian, retur, hutang, piutang, shift, dan laporan.
-- [ ] Nota 58/80 mm, WhatsApp, QRIS, dan nota online.
-- [ ] Mode pesawat tetap dapat transaksi; setelah online antrean kembali 0 tanpa duplikasi.
-- [ ] Ubah data yang sama dari web dan HP; conflict rebase selesai tanpa banner error berulang.
-
-## Hotfix Store Manager
-- [ ] Login Store Manager tidak menampilkan Cloud bermasalah.
-- [ ] Transfer keluar cabang Manager tampil.
-- [ ] Transfer masuk cabang Manager tampil.
-- [ ] Data transfer tidak ganda.
-- [ ] Kasir dan Owner tetap dapat sinkron.

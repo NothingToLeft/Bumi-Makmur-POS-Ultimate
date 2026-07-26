@@ -4,11 +4,11 @@ import { access, readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('v4.5 memakai Firebase Spark Auth dan Firestore tanpa layanan berbayar', async () => {
+test('v5.0 memakai Firebase Spark Auth dan Firestore tanpa layanan berbayar', async () => {
   const pkg = JSON.parse(await read('package.json'));
   const firebase = await read('src/services/firebase.js');
   const firebaseJson = JSON.parse(await read('firebase.json'));
-  assert.equal(pkg.version, '4.5.1');
+  assert.equal(pkg.version, '5.0.0');
   assert.ok(pkg.dependencies.firebase);
   assert.match(firebase, /persistentLocalCache/);
   assert.match(firebase, /persistentMultipleTabManager/);
@@ -21,7 +21,7 @@ test('web app shell mendukung reload offline tanpa memaksa splash atau reload be
   const main = await read('src/main.jsx');
   const sw = await read('public/sw.js');
   assert.match(main, /serviceWorker\.register\('\/sw\.js'\)/);
-  assert.match(sw, /freesync-v4\.5\.1/);
+  assert.match(sw, /freesync-v5\.0\.0/);
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /stale-while-revalidate/i);
   assert.doesNotMatch(sw, /location\.reload/);
@@ -73,12 +73,16 @@ test('login cloud, bootstrap, nama + PIN karyawan, dan hapus akun berjalan tanpa
   assert.doesNotMatch(auth, /sendPasswordResetEmail|httpsCallable|firebase\/functions/);
 });
 
-test('logo dan QRIS dikompres lokal, bukan diunggah ke Firebase Storage', async () => {
+test('logo dan QRIS dikompres adaptif lokal, bukan diunggah ke Firebase Storage', async () => {
   const store = await read('src/services/cloudStore.js');
-  assert.match(store, /canvas\.toDataURL/);
-  assert.match(store, /450_000/);
-  assert.match(store, /180_000/);
-  assert.doesNotMatch(store, /getStorage|uploadBytes|firebase\/storage/);
+  const assets = await read('src/utils/assetProcessing.js');
+  assert.match(store, /processStoreAsset/);
+  assert.match(assets, /targetBytes: 330_000/);
+  assert.match(assets, /targetBytes: 170_000/);
+  assert.match(assets, /whiteBackground: true/);
+  assert.match(assets, /imageSmoothingEnabled = !profile\.preserveSharpEdges/);
+  assert.doesNotMatch(`${store}
+${assets}`, /getStorage|uploadBytes|firebase\/storage/);
 });
 
 test('nota online disimpan sebagai dokumen publik tersanitasi di Firestore', async () => {
