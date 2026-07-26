@@ -1,4 +1,4 @@
-name: Build Bumi Makmur POS v4.3
+name: Build Bumi Makmur POS v4.4
 
 on:
   workflow_dispatch:
@@ -92,7 +92,7 @@ jobs:
         if: ${{ inputs.run_mode == 'web-only' || inputs.run_mode == 'web-and-android' }}
         uses: actions/upload-artifact@v6
         with:
-          name: Bumi-Makmur-POS-v4.3-Web-PC-PWA
+          name: Bumi-Makmur-POS-v4.4-Web-PC-PWA
           path: dist
           if-no-files-found: error
           retention-days: 30
@@ -154,7 +154,7 @@ jobs:
         if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
         uses: actions/upload-artifact@v6
         with:
-          name: Bumi-Makmur-POS-v4.3-Android-Signed
+          name: Bumi-Makmur-POS-v4.4-Android-Signed
           path: |
             android/app/build/outputs/apk/release/app-release.apk
             android/app/build/outputs/bundle/release/app-release.aab
