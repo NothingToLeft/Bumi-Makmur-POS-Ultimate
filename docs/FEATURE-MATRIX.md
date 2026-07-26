@@ -1,4 +1,4 @@
-# Feature Matrix — Bumi Makmur POS FreeSync v4.3
+# Feature Matrix — Bumi Makmur POS FreeSync v4.4
 
 | Area | Implementasi | Status |
 |---|---|---|
@@ -17,6 +17,9 @@
 | Cloud gratis | Firebase Auth + Firestore Spark | Aktif setelah konfigurasi |
 | Transaksi cloud | Firestore transaction, optimistic concurrency, idempotency receipt, audit | Aktif |
 | Keamanan | Auth, PIN PBKDF2, AES-GCM credential vault, role/branch rules, approval | Aktif |
+| Login | Halaman Owner/Karyawan terpisah, role guard, PIN dan biometrik per akun | Aktif |
+| Karyawan | Dibuat Owner dari Pengaturan, Auth sekunder, cabang, role, permission, reset password | Aktif |
+| Error cloud | Pesan Firebase ramah pengguna dan UID guard sebelum listener | Aktif |
 | Nota | Cetak 58/80 mm, logo, pesan, WhatsApp, gambar, nota online Firestore | Aktif |
 | Android | Kamera, biometrik, Bluetooth permission, signed APK/AAB | Aktif |
 | Web | Cloudflare Pages, SPA route, security headers, PWA | Siap deploy |

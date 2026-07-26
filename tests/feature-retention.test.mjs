@@ -7,7 +7,7 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const expectedModules = [
   'dashboard', 'pos', 'openBills', 'transactions', 'products', 'promotions', 'inventory',
   'purchases', 'suppliers', 'customers', 'shifts', 'finance', 'reports', 'orders',
-  'employees', 'branches', 'devices', 'customerDisplay', 'settings'
+  'branches', 'devices', 'customerDisplay', 'settings'
 ];
 
 const expectedScreens = [
@@ -40,6 +40,19 @@ test('fitur premium kasir, stok, nota digital, printer, dan Android tetap dipert
   assert.match(receipt, /WhatsApp/i);
   assert.match(android, /android\.permission\.CAMERA/);
   assert.match(android, /android\.permission\.USE_BIOMETRIC/);
+});
+
+
+
+test('pengelolaan karyawan tersedia langsung di Pengaturan Owner', async () => {
+  const settings = await read('src/screens/DeviceSettingsScreens.jsx');
+  const admin = await read('src/screens/AdminScreens.jsx');
+  const login = await read('src/screens/LoginScreen.jsx');
+  assert.match(settings, /EmployeeManagementPanel/);
+  assert.match(settings, /Karyawan & Hak Akses/);
+  assert.match(admin, /export function EmployeeManagementPanel/);
+  assert.match(login, /Login Owner/);
+  assert.match(login, /Login Karyawan/);
 });
 
 test('seluruh koleksi cloud memiliki wadah data pada seed database', async () => {

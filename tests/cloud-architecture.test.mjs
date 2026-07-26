@@ -4,11 +4,11 @@ import { access, readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('v4.3 memakai Firebase Spark Auth dan Firestore tanpa layanan berbayar', async () => {
+test('v4.4 memakai Firebase Spark Auth dan Firestore tanpa layanan berbayar', async () => {
   const pkg = JSON.parse(await read('package.json'));
   const firebase = await read('src/services/firebase.js');
   const firebaseJson = JSON.parse(await read('firebase.json'));
-  assert.equal(pkg.version, '4.3.0');
+  assert.equal(pkg.version, '4.4.0');
   assert.ok(pkg.dependencies.firebase);
   assert.match(firebase, /persistentLocalCache/);
   assert.match(firebase, /persistentMultipleTabManager/);
@@ -21,7 +21,7 @@ test('web app shell mendukung reload offline tanpa memaksa splash atau reload be
   const main = await read('src/main.jsx');
   const sw = await read('public/sw.js');
   assert.match(main, /serviceWorker\.register\('\/sw\.js'\)/);
-  assert.match(sw, /freesync-v4\.3\.0/);
+  assert.match(sw, /freesync-v4\.4\.0/);
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /stale-while-revalidate/i);
   assert.doesNotMatch(sw, /location\.reload/);

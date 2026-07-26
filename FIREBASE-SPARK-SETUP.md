@@ -1,22 +1,20 @@
-# Firebase Spark — Setup Gratis Bumi Makmur POS v4.3
+# Firebase Spark — Setup Gratis Bumi Makmur POS v4.4
 
-Project Firebase yang dipakai: `bumi-makmur-pos`. Jangan upgrade Blaze dan jangan mengaktifkan billing.
+Project tetap memakai **Firebase Spark/free tier**. Jangan upgrade Blaze dan jangan aktifkan billing.
 
 ## 1. Authentication
 
-Firebase Console → Authentication → Get started → Sign-in method → Email/Password → Enable → Save.
+Firebase Console → Authentication → Sign-in method → Email/Password → Enable.
 
-Jangan aktifkan Email link jika tidak dibutuhkan.
+Owner dan setiap karyawan memiliki akun Auth masing-masing. Pembuatan karyawan dilakukan dari `Pengaturan → Karyawan`; aplikasi memakai instance Auth sekunder agar sesi Owner tidak keluar.
 
 ## 2. Firestore
 
-Firebase Console → Firestore Database → Create database → Production mode → pilih lokasi yang sesuai dan tersedia untuk project.
+Firebase Console → Firestore Database → Create database → Production mode.
 
-Setelah database dibuat, jangan membuat koleksi manual. Setup Owner pertama dari aplikasi akan membuat struktur toko.
+Jangan membuat koleksi manual. Setup Owner pertama membuat dokumen bootstrap, profil Owner, dan seed database.
 
-## 3. GitHub Secrets untuk build
-
-Tambahkan di Repository → Settings → Secrets and variables → Actions:
+## 3. GitHub Secrets build
 
 ```text
 VITE_FIREBASE_API_KEY
@@ -29,15 +27,21 @@ VITE_FIREBASE_STORE_CODE=BUMIMAKMUR
 VITE_PUBLIC_APP_URL=https://NAMA-PROJECT.pages.dev
 ```
 
-`VITE_PUBLIC_APP_URL` boleh diperbarui setelah URL Cloudflare Pages diketahui.
+## 4. Deploy rules v4.4 — wajib
 
-## 4. Deploy rules gratis
-
-Jalankan GitHub Actions:
+Setelah source v4.4 di-upload:
 
 ```text
-Deploy Firebase Spark Rules → Run workflow → main
+Actions → Deploy Firebase Spark Rules → Run workflow
 ```
+
+Rules v4.4 memperbaiki:
+
+- pembacaan bootstrap pertama oleh pengguna yang sudah login;
+- pembacaan profil sendiri sebelum `activeMember()` dapat dievaluasi;
+- pembuatan profil Owner atomik;
+- pembuatan Manager/Kasir oleh Owner;
+- perlindungan agar Owner tidak berubah menjadi karyawan.
 
 Workflow hanya men-deploy:
 
@@ -46,23 +50,28 @@ firestore.rules
 firestore.indexes.json
 ```
 
-Ia tidak men-deploy Functions, Storage, atau Hosting.
+Tidak ada Functions, Storage, Hosting Firebase, Blaze, atau billing.
 
-`FIREBASE_SERVICE_ACCOUNT_JSON` yang sudah dibuat tetap dapat dipakai untuk workflow rules. Jangan commit file JSON tersebut ke repository.
+## 5. Alur akun
 
-## 5. Setup toko pertama
+### Owner
 
-Buka web/APK saat online → `Setup Toko Pertama Kali` → masukkan identitas toko, email Owner, password, dan PIN perangkat.
+1. Pilih `Login Owner`.
+2. Setup Toko Pertama Kali hanya untuk database yang benar-benar baru.
+3. Pada perangkat berikutnya pilih `Masuk Owner dengan Email`.
+4. Setelah terhubung, login harian memakai PIN/biometrik.
 
-Sesudah setup:
+### Karyawan
 
-- akun karyawan dibuat Owner dengan email dan password sementara;
-- karyawan memilih `Hubungkan Akun Cloud` sekali pada perangkatnya;
-- setelah itu login harian memakai PIN 4 digit atau biometrik;
-- saat offline data tetap masuk antrean lokal dan dikirim otomatis ketika online.
+1. Owner masuk → Pengaturan → Karyawan → Karyawan Baru.
+2. Isi nama, email, password sementara, role, dan cabang.
+3. Pada perangkat karyawan pilih `Login Karyawan` → `Hubungkan Perangkat Karyawan`.
+4. Masukkan email/password sementara dan buat PIN 4 digit.
+5. Login harian berikutnya memakai PIN/biometrik.
 
-## Batas desain Spark-only
+## 6. Saat muncul masalah izin
 
-- Logo dan QRIS dikompres sebagai Data URL dengan batas ketat agar dokumen Firestore tetap kecil.
-- Nota online tersimpan sebagai dokumen Firestore yang sudah disanitasi dan tidak berisi harga modal.
-- Operasi sensitif dilindungi Authentication, role/branch Security Rules, audit log, dan approval Manager/Owner.
+- Pastikan workflow Deploy Firebase Spark Rules sudah hijau.
+- Pastikan akun masuk melalui halaman role yang benar.
+- Pastikan kode toko, `VITE_FIREBASE_STORE_ID`, dan project Firebase sama.
+- Gunakan Pengaturan → Cloud & Backup untuk melihat status sinkronisasi.

@@ -205,7 +205,7 @@ function ProductForm({ product, categories, units, products, onClose, onSave }) 
                 <div key={tier.id} className="p-3 bg-white rounded-2xl border border-gray-200">
                   <p className="font-bold text-sm text-gray-800 mb-2">Harga {tier.label}</p>
                   <Field label="Markup (%)">
-                    <div className="relative"><Percent size={17} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"/><Input type="number" inputMode="decimal" min="0" max="1000" step="0.1" value={markups[tier.id] || ''} onChange={event => changeMarkup(tier.id, event.target.value)} className="pr-10" placeholder="0"/></div>
+                    <div className="relative"><Percent size={17} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/><Input type="number" inputMode="decimal" min="0" max="1000" step="0.1" value={markups[tier.id] || ''} onChange={event => changeMarkup(tier.id, event.target.value)} className="field-input-trailing" placeholder="0"/></div>
                   </Field>
                   <Field label={`Harga ${tier.label}`}><MoneyInput value={form.prices[tier.id]} onValueChange={value => changeSellingPrice(tier.id, value)}/></Field>
                   <p className="text-[11px] text-emerald-700 font-bold mt-2">Untung {formatRp(profit)} per {form.baseUnit}</p>

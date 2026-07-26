@@ -1,14 +1,17 @@
-# Android Signing — Bumi Makmur POS v4.3
+# Android Signing — Bumi Makmur POS v4.4
 
-Android hanya menerima update jika package ID dan sertifikat signing sama. Package ID tetap:
+Package ID tetap:
 
 ```text
 app.bumimakmur.pos
 ```
 
+Version name: `4.4.0`  
+Version code: `40400`
+
 ## Gunakan keystore lama
 
-Jangan membuat keystore baru jika release sebelumnya sudah pernah dibuat. Pertahankan:
+Android hanya menerima update di atas APK v4.3 bila package ID dan sertifikat signing sama. Pertahankan secrets:
 
 ```text
 ANDROID_KEYSTORE_BASE64
@@ -17,25 +20,17 @@ ANDROID_KEY_ALIAS
 ANDROID_KEY_PASSWORD
 ```
 
-Workflow **Build Bumi Makmur POS v4.3** dengan mode `android-release` atau `web-and-android` memakai key tersebut.
-
-## Bila belum pernah memiliki release key
-
-1. Jalankan **Generate Android Signing Key** satu kali.
-2. Download artifact sebelum masa simpan 1 hari habis.
-3. Simpan `.jks` minimal di dua tempat aman.
-4. Masukkan empat nilai dari `SIGNING-SECRETS.txt` sebagai Repository secrets.
-5. Jangan commit `.jks` atau isi secrets.
+Workflow **Build Bumi Makmur POS v4.4** mode `android-release` atau `web-and-android` memakai key tersebut.
 
 ## Output
 
 Artifact:
 
 ```text
-Bumi-Makmur-POS-v4.3-Android-Signed
+Bumi-Makmur-POS-v4.4-Android-Signed
 ```
 
-Isinya:
+Berisi:
 
 ```text
 app-release.apk
@@ -43,4 +38,4 @@ app-release.aab
 SHA256SUMS.txt
 ```
 
-Jika APK lama memakai debug certificate, backup JSON dan pastikan antrean sinkron kosong sebelum uninstall satu kali. Setelah release key tetap digunakan, update berikutnya dapat dipasang tanpa uninstall.
+Jangan uninstall APK lama sebelum mencoba update. Bila Android menolak pemasangan, hentikan dan periksa signature; jangan langsung menghapus data aplikasi.

@@ -59,11 +59,15 @@ service cloud.firestore {
     }
 
     match /stores/{storeId}/system/bootstrap {
-      allow read: if activeMember(storeId);
+      // Signed-in user must be able to check the bootstrap document before the
+      // first Owner profile exists. Listing remains blocked.
+      allow get: if signedIn();
+      allow list: if false;
       allow create: if signedIn()
         && !exists(/databases/$(database)/documents/stores/$(storeId)/system/bootstrap)
         && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.storeId == storeId;
+        && request.resource.data.storeId == storeId
+        && request.resource.data.storeCode is string;
       allow update, delete: if owner(storeId);
     }
 
@@ -74,22 +78,43 @@ service cloud.firestore {
     }
 
     match /stores/{storeId}/users/{uid} {
-      allow read: if activeMember(storeId) && (
+      // A user may fetch only their own profile before activeMember() can be
+      // evaluated. Owner and Manager may read profiles according to scope.
+      allow get: if (
+        (signedIn() && uid == request.auth.uid)
+        || (activeMember(storeId) && owner(storeId))
+        || (activeMember(storeId) && manager(storeId) && resource.data.branchId == profile(storeId).branchId)
+      );
+      allow list: if activeMember(storeId) && (
         owner(storeId)
-        || uid == request.auth.uid
         || (manager(storeId) && resource.data.branchId == profile(storeId).branchId)
       );
-      allow create: if owner(storeId)
-        || (
+      allow create: if (
+          owner(storeId)
+          && uid == request.resource.data.uid
+          && request.resource.data.storeId == storeId
+          && request.resource.data.role in ['manager', 'kasir']
+          && request.resource.data.active is bool
+        ) || (
           signedIn()
           && uid == request.auth.uid
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.storeId == storeId
           && request.resource.data.role == 'owner'
+          && request.resource.data.active == true
           && getAfter(/databases/$(database)/documents/stores/$(storeId)/system/bootstrap).data.ownerUid == request.auth.uid
         );
-      allow update: if owner(storeId);
-      allow delete: if owner(storeId) && uid != request.auth.uid;
+      allow update: if owner(storeId) && (
+        (uid == request.auth.uid
+          && resource.data.role == 'owner'
+          && request.resource.data.role == 'owner'
+          && request.resource.data.uid == request.auth.uid)
+        || (uid != request.auth.uid
+          && request.resource.data.uid == uid
+          && request.resource.data.storeId == storeId
+          && request.resource.data.role in ['manager', 'kasir'])
+      );
+      allow delete: if owner(storeId) && uid != request.auth.uid && resource.data.role != 'owner';
     }
 
     match /stores/{storeId}/mutationReceipts/{mutationId} {

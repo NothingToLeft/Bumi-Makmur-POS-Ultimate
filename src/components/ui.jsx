@@ -97,8 +97,29 @@ export function EmptyState({ icon: Icon = AlertCircle, title = 'Belum ada data',
   return <Card className="p-10 text-center flex flex-col items-center justify-center text-gray-400"><Icon size={48} className="mb-4 opacity-50"/><p className="font-bold text-gray-600">{title}</p>{subtitle && <p className="text-sm mt-1 max-w-md">{subtitle}</p>}{action && <div className="mt-4">{action}</div>}</Card>;
 }
 
-export function SearchBox({ value, onChange, placeholder = 'Cari...' }) {
-  return <div className="relative flex-1 min-w-[180px]"><Search size={19} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><Input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} className="pl-10"/></div>;
+export function SearchBox({ value, onChange, placeholder = 'Cari...', ariaLabel, onKeyDown, className = '', inputProps = {} }) {
+  return (
+    <div className={`search-field flex-1 min-w-0 ${className}`}>
+      <Search size={20} className="search-field-icon" aria-hidden="true"/>
+      <input
+        {...inputProps}
+        type="search"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        aria-label={ariaLabel || placeholder}
+        autoComplete="off"
+        spellCheck="false"
+        className={`field-input search-field-input ${inputProps.className || ''}`}
+      />
+      {value && (
+        <button type="button" onClick={() => onChange('')} className="search-field-clear" aria-label="Hapus pencarian">
+          <X size={17}/>
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function Money({ value, className = '' }) { return <span className={className}>{formatRp(value)}</span>; }

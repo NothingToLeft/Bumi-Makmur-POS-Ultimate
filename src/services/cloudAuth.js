@@ -34,7 +34,7 @@ function requireFirebase() {
 
 const normalizeEmail = value => String(value || '').trim().toLowerCase();
 const normalizeCode = value => String(value || DEFAULT_STORE_CODE).trim().toUpperCase().replace(/\s+/g, '');
-const profileRef = uid => doc(firestore, 'stores', STORE_ID, 'users', uid);
+const profileRef = (uid, storeId = STORE_ID) => doc(firestore, 'stores', storeId, 'users', uid);
 
 function normalizeProfile(uid, data = {}) {
   return {
@@ -52,7 +52,7 @@ function normalizeProfile(uid, data = {}) {
   };
 }
 
-export async function connectCloudAccount({ email, password }) {
+export async function connectCloudAccount({ email, password, expectedRole = 'any' }) {
   requireFirebase();
   await authPersistenceReady;
   const cleanEmail = normalizeEmail(email);
@@ -64,6 +64,14 @@ export async function connectCloudAccount({ email, password }) {
     throw new Error('Akun Firebase ada, tetapi profil POS belum dibuat oleh Owner.');
   }
   const profile = normalizeProfile(credential.user.uid, snapshot.data());
+  if (expectedRole === 'owner' && profile.role !== 'owner') {
+    await signOut(auth);
+    throw new Error('Akun ini bukan akun Owner. Gunakan halaman Login Karyawan.');
+  }
+  if (expectedRole === 'employee' && profile.role === 'owner') {
+    await signOut(auth);
+    throw new Error('Akun Owner harus masuk melalui halaman Login Owner.');
+  }
   if (!profile.active) {
     await signOut(auth);
     throw new Error('Akun karyawan sedang dinonaktifkan.');
@@ -111,7 +119,7 @@ export async function bootstrapCloudStore(payload) {
         businessName: String(payload.businessName || 'BUMI MAKMUR').trim(),
         ownerUid: uid,
         createdAt: serverTimestamp(),
-        architecture: 'spark-only-v4.3'
+        architecture: 'spark-only-v4.4'
       });
     }
 
@@ -152,7 +160,10 @@ export async function upsertCloudEmployee(data) {
   const ownerProfile = await getCloudSessionProfile();
   if (!ownerProfile || ownerProfile.role !== 'owner') throw new Error('Hanya Owner yang dapat mengelola akun karyawan cloud.');
 
+  if (data.role === 'owner') throw new Error('Akun Owner tidak dibuat dari menu karyawan.');
+
   if (data.id) {
+    if (data.id === ownerProfile.id) throw new Error('Profil Owner tidak dapat diubah dari menu karyawan.');
     const ref = profileRef(data.id);
     await updateDoc(ref, {
       name: String(data.name || '').trim(),

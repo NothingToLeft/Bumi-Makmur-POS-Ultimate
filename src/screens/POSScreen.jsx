@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, ScanLine, ShoppingCart, Plus, Minus, Trash2, Package, Save, ReceiptText, Star, User, SlidersHorizontal, QrCode, CreditCard, Banknote, WalletCards, Printer, X, MessageCircle, Copy, Share2, CheckCircle2 } from 'lucide-react';
+import { ScanLine, ShoppingCart, Plus, Minus, Trash2, Package, Save, ReceiptText, Star, User, SlidersHorizontal, QrCode, CreditCard, Banknote, WalletCards, Printer, X, MessageCircle, Copy, Share2, CheckCircle2 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { formatRp, generateId, localDateKey } from '../utils/helpers.js';
-import { Badge, Button, Card, Field, Input, Modal, MoneyInput, Select, Textarea } from '../components/ui.jsx';
+import { Badge, Button, Card, Field, Input, Modal, MoneyInput, SearchBox, Select, Textarea } from '../components/ui.jsx';
 import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
 import { copyReceiptText, getReceiptLogo, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
 import { findProductByCode, isEditableTarget } from '../utils/barcode.js';
@@ -235,7 +235,22 @@ export default function POSScreen() {
     <div className="h-full flex bg-gray-50 relative overflow-hidden generic-bg">
       <div className={`flex-1 flex flex-col min-w-0 ${mobileCart ? 'hidden md:flex' : 'flex'}`}>
         <div className="bg-white p-3 md:p-4 border-b border-gray-100 card-element space-y-3">
-          <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/><Input value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { const exact = findProductByCode(scoped.products, search); if (exact) { event.preventDefault(); addCodeToCart(search); } } }} placeholder="Cari nama, SKU, atau barcode..." className="pl-10"/></div><Button variant="secondary" onClick={() => setScannerOpen(true)} className="px-3"><ScanLine size={20}/></Button><Button variant="secondary" onClick={() => setCustomOpen(true)} className="px-3"><Plus size={20}/></Button></div>
+          <div className="flex gap-2">
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder="Cari nama, SKU, atau barcode..."
+              onKeyDown={event => {
+                if (event.key !== 'Enter') return;
+                const exact = findProductByCode(scoped.products, search);
+                if (!exact) return;
+                event.preventDefault();
+                addCodeToCart(search);
+              }}
+            />
+            <Button variant="secondary" onClick={() => setScannerOpen(true)} className="px-3" aria-label="Buka pemindai barcode"><ScanLine size={20}/></Button>
+            <Button variant="secondary" onClick={() => setCustomOpen(true)} className="px-3" aria-label="Tambah item manual"><Plus size={20}/></Button>
+          </div>
           {scanNotice && <div className={`text-xs font-bold px-3 py-2 rounded-xl ${scanNotice.includes('tidak ditemukan') ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>{scanNotice}</div>}
           <div className="flex gap-2 overflow-x-auto no-scrollbar"><button onClick={() => setFavoritesOnly(value => !value)} className={`min-h-[40px] px-3 rounded-full border font-bold text-xs flex items-center gap-1 ${favoritesOnly ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-white text-gray-600 border-gray-200'}`}><Star size={15} fill={favoritesOnly?'currentColor':'none'}/> Favorit</button>{['Semua', ...db.categories].map(item => <button key={item} onClick={() => setCategory(item)} className={`min-h-[40px] px-4 rounded-full border font-bold text-xs whitespace-nowrap ${category === item ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-white text-gray-600 border-gray-200'}`}>{item}</button>)}</div>
         </div>

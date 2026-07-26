@@ -1,10 +1,10 @@
 import {
   LayoutDashboard, ShoppingCart, ReceiptText, Package, Boxes, Truck, ContactRound,
-  Users, Clock3, WalletCards, BarChart3, ShoppingBag, UserCog, Store, Printer,
+  Users, Clock3, WalletCards, BarChart3, ShoppingBag, Store, Printer,
   MonitorSmartphone, Settings, ListChecks, Tags
 } from 'lucide-react';
 
-export const APP_VERSION = '4.3.0';
+export const APP_VERSION = '4.4.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -23,7 +23,6 @@ export const MODULES = [
   { id: 'finance', label: 'Keuangan', icon: WalletCards, permission: 'finance.view' },
   { id: 'reports', label: 'Laporan', icon: BarChart3, permission: 'reports.view' },
   { id: 'orders', label: 'Pesanan Online', icon: ShoppingBag, permission: 'orders.view' },
-  { id: 'employees', label: 'Karyawan', icon: UserCog, permission: 'employees.view' },
   { id: 'branches', label: 'Cabang', icon: Store, permission: 'branches.view' },
   { id: 'devices', label: 'Printer & Perangkat', icon: Printer, permission: 'devices.view' },
   { id: 'customerDisplay', label: 'Layar Pelanggan', icon: MonitorSmartphone, permission: 'display.view' },

@@ -1,4 +1,10 @@
 # Dokumentasi Aktif
 
-Gunakan hanya dokumentasi v4.3 di root project dan file dalam folder ini.
-Dokumentasi migrasi lama yang memakai Cloud Functions, Firebase Storage, atau Blaze telah dihapus agar tidak membingungkan. Project aktif tetap **Firebase Spark-only**.
+Gunakan dokumentasi **v4.4** di root project dan file dalam folder ini.
+
+Project aktif tetap:
+
+- Firebase Authentication + Cloud Firestore pada Spark/free tier;
+- tanpa Cloud Functions, Firebase Storage, Blaze, atau billing;
+- Cloudflare Pages untuk web/PWA;
+- Capacitor + GitHub Actions untuk APK/AAB.

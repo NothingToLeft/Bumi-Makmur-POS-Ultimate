@@ -113,7 +113,7 @@ body {
 .setup-input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.12); }
 
 
-/* v4.3 typography, icon and receipt precision */
+/* v4.4 typography, icon and receipt precision */
 :root { font-synthesis: none; text-rendering: optimizeLegibility; }
 .font-black { letter-spacing: -0.018em; }
 .font-bold { letter-spacing: -0.006em; }
@@ -125,3 +125,109 @@ body {
   .receipt-overlay .print-area { border-radius: 1.35rem 1.35rem 0 0; }
   .receipt-premium-header { padding: 1rem; }
 }
+
+/* v4.4 professional mobile input, login and safe-area audit */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { min-height: 100dvh; }
+button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+input, select, textarea { min-width: 0; }
+.field-input {
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  padding: 0.75rem 0.9rem;
+  line-height: 1.35;
+  font-size: 1rem;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.85rem;
+  color: #0f172a;
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+.field-input::placeholder { color: #94a3b8; opacity: 1; }
+.field-input:focus { border-color: #10b981; background: #fff; box-shadow: 0 0 0 4px rgba(16,185,129,.12); }
+.field-input.field-input-trailing { padding-right: 2.75rem !important; }
+
+.search-field { position: relative; width: 100%; }
+.search-field-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+  z-index: 2;
+}
+.search-field .search-field-input {
+  padding-left: 3.1rem !important;
+  padding-right: 3rem !important;
+  min-height: 52px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.search-field .search-field-input::-webkit-search-decoration,
+.search-field .search-field-input::-webkit-search-cancel-button,
+.search-field .search-field-input::-webkit-search-results-button,
+.search-field .search-field-input::-webkit-search-results-decoration { display: none; }
+.search-field-clear {
+  position: absolute;
+  right: .55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  background: transparent;
+  z-index: 3;
+}
+.search-field-clear:active { background: #e2e8f0; }
+
+.login-page-shell { min-height: 100dvh; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.login-card { max-height: calc(100dvh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom))); overflow-y: auto; overscroll-behavior: contain; }
+.login-role-card {
+  min-height: 88px;
+  border-radius: 1.15rem;
+  border: 1px solid #dbe4ee;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.login-role-card:active { transform: scale(.985); }
+.login-role-card small { display: block; margin-top: .2rem; line-height: 1.35; font-size: .75rem; opacity: .82; }
+.login-role-card.owner-card { color: #065f46; background: linear-gradient(135deg,#ecfdf5,#f8fffc); border-color: #a7f3d0; }
+.login-role-card.employee-card { color: #1e40af; background: linear-gradient(135deg,#eff6ff,#f8fbff); border-color: #bfdbfe; }
+.login-role-icon { width: 48px; height: 48px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,.82); box-shadow: 0 8px 20px rgba(15,23,42,.08); }
+.pin-key { height: 58px; border-radius: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; color: #0f172a; font-size: 1.25rem; line-height: 1; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.pin-key:disabled { opacity: .45; }
+
+.cloud-notice {
+  position: absolute;
+  left: 50%;
+  top: max(8px, env(safe-area-inset-top));
+  transform: translateX(-50%);
+  z-index: 125;
+  width: min(calc(100% - 24px), 620px);
+  border-radius: 1rem;
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+  box-shadow: 0 14px 34px rgba(15,23,42,.15);
+}
+
+@media (max-width: 480px) {
+  .login-card { border-radius: 1.5rem; }
+  .login-role-card { min-height: 82px; padding: .85rem; }
+  .pin-key { height: 56px; }
+  .premium-page-header { padding: 1rem; }
+  .premium-page-header h1 { font-size: 1.35rem; line-height: 1.25; white-space: normal; }
+  .premium-page-header p { font-size: .8rem; line-height: 1.45; }
+}
+
+.theme-dark .search-field-icon { color: #cbd5e1; }
+.theme-dark .search-field-clear { color: #cbd5e1; }

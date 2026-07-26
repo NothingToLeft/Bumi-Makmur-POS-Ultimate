@@ -1,17 +1,36 @@
-BUMI MAKMUR POS v4.3 — LANGKAH BERIKUTNYA
+BUMI MAKMUR POS v4.4 — URUTAN UPDATE
 
-1. Backup JSON dari aplikasi lama, lalu ekstrak ZIP v4.3.
-2. Upload seluruh isi ke repository GitHub yang sama dan commit:
-   "Spark FreeSync v4.3 Web PC Android audited release"
-3. Actions > Build Bumi Makmur POS v4.3 > Run workflow > test-only.
-   Hasil wajib: 59 tests lulus, audit lulus, Vite compile lulus.
-4. Actions > Deploy Firebase Spark Rules > Run workflow.
-   Workflow hanya deploy Firestore Rules/Indexes; tidak ada Functions/Storage/Blaze.
-5. Hubungkan repository ke Cloudflare Pages sesuai CLOUDFLARE-PAGES-SETUP.md,
-   lalu jalankan web-and-android setelah URL Pages dan signing secrets siap.
+1. BACKUP
+   - Dari APK lama, unduh Backup JSON.
+   - Pastikan antrean offline = 0.
+   - Jangan uninstall APK lama.
+
+2. UPDATE GITHUB
+   - Ekstrak ZIP v4.4.
+   - Upload seluruh isi folder project ke repository GitHub yang sama.
+   - Timpa file lama dan commit:
+     "Bumi Makmur POS v4.4 professional login employee access UI audit"
+
+3. TEST SOURCE
+   Actions > Build Bumi Makmur POS v4.4 > Run workflow > test-only
+   Target: 65 tests lulus, audit lulus, Vite compile lulus.
+
+4. DEPLOY FIRESTORE RULES — WAJIB SEBELUM MENGUJI KARYAWAN
+   Actions > Deploy Firebase Spark Rules > Run workflow
+   Workflow hanya deploy Firestore Rules/Indexes pada Firebase Spark.
+
+5. BUILD APK
+   Actions > Build Bumi Makmur POS v4.4 > Run workflow > android-release
+   Download artifact Bumi-Makmur-POS-v4.4-Android-Signed.
+
+6. INSTAL
+   - Pasang app-release.apk di atas APK v4.3.
+   - Jangan uninstall, agar data lokal dan identitas perangkat tetap tersedia.
+   - Login Owner lalu buka Pengaturan > Karyawan untuk membuat akun.
 
 JANGAN:
-- upgrade Firebase Blaze atau mengaktifkan billing;
-- deploy Cloud Functions/Storage;
-- membuat signing key baru bila keystore lama masih tersedia;
-- commit service-account JSON, .env, JKS, APK, atau AAB.
+- membuat repository baru;
+- membuat keystore baru bila keystore lama masih ada;
+- upgrade Firebase Blaze atau menambahkan billing;
+- deploy Cloud Functions atau Firebase Storage;
+- commit .env, service account JSON, JKS, APK, AAB, atau password.

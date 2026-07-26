@@ -1,50 +1,61 @@
-# QA Checklist v4.3
+# QA Checklist v4.4
 
-## Build dan konfigurasi
+## A. Build dan deploy
 
-- [ ] `test-only` hijau: 59 tests, audit statis, dan Vite compile.
-- [ ] `web-only` menghasilkan artifact `dist`.
-- [ ] Cloudflare Pages deploy hijau.
-- [ ] Firebase Authorized Domain berisi domain Pages.
-- [ ] Deploy Firebase Spark Rules hijau.
-- [ ] Android release memakai keystore lama dan signature terverifikasi.
+- [ ] Workflow `test-only` hijau: 65 tests, audit statis, dan Vite compile.
+- [ ] Workflow `Deploy Firebase Spark Rules` hijau.
+- [ ] Firestore Rules di Firebase Console menunjukkan versi terbaru.
+- [ ] `android-release` menghasilkan APK/AAB signed v4.4.
+- [ ] APK v4.4 dapat dipasang di atas v4.3 tanpa uninstall.
 
-## Login dan offline
+## B. Login Owner
 
-- [ ] Setup Owner pertama berhasil.
-- [ ] Owner membuat Manager/Kasir dengan email.
-- [ ] Hubungkan akun cloud dan PIN perangkat berhasil.
-- [ ] PIN salah tidak membuat layar stuck.
-- [ ] Biometrik berhasil dan fallback PIN bekerja.
-- [ ] Mode pesawat tetap dapat transaksi.
-- [ ] Setelah internet kembali, antrean menjadi 0 tanpa transaksi ganda.
-- [ ] Splash tidak muncul lagi saat background sync.
+- [ ] Halaman awal menampilkan pilihan Login Owner dan Login Karyawan.
+- [ ] Login Owner hanya menerima PIN/akun Owner.
+- [ ] PIN karyawan di halaman Owner menghasilkan pesan yang benar.
+- [ ] Masuk Owner dengan email berhasil pada perangkat baru.
+- [ ] Setup Toko Pertama Kali hanya terlihat di halaman Owner.
+- [ ] Biometrik Owner hanya muncul pada halaman Owner.
 
-## Kasir
+## C. Login Karyawan
 
-- [ ] Produk, barcode kamera/manual/USB/Bluetooth keyboard, SKU Enter-to-add, kategori, varian, konversi, bundle, modifier.
-- [ ] Input Rupiah dan markup persen benar.
-- [ ] Open bill, split bill/payment, diskon, promo, pajak, poin.
-- [ ] Tunai/kembalian, QRIS/e-wallet, transfer, kartu, tempo.
-- [ ] Stok tidak negatif dan transaksi ganda ditolak.
-- [ ] Nota preview, cetak, WhatsApp, share image, nota online.
+- [ ] Login Karyawan tidak menampilkan setup toko.
+- [ ] Owner membuat akun dari Pengaturan → Karyawan.
+- [ ] Karyawan menghubungkan perangkat memakai email/password sementara.
+- [ ] Karyawan membuat PIN 4 digit dan konfirmasi PIN.
+- [ ] Login berikutnya berhasil menggunakan PIN.
+- [ ] Biometrik karyawan hanya muncul pada halaman Karyawan.
+- [ ] Akun nonaktif tidak dapat login/sinkronisasi.
 
-## Inventori dan keuangan
+## D. Karyawan & Firestore
 
-- [ ] Pembelian, stok masuk, harga modal, hutang dan cicilan.
-- [ ] Retur pembelian tidak melebihi stok.
-- [ ] Adjustment, opname, transfer cabang.
-- [ ] Piutang, limit kredit, pembayaran dan riwayat.
-- [ ] Shift, modal awal, kas masuk/keluar, selisih.
-- [ ] Refund/void memerlukan approval sesuai role.
-- [ ] Omzet, HPP neto setelah refund/restock, pembelian bersih setelah retur, laba, stok, hutang/piutang sesuai data uji.
+- [ ] Karyawan baru langsung muncul setelah tombol Simpan Akun berhasil.
+- [ ] Edit nama, role, cabang, status, dan permission tersimpan.
+- [ ] Reset password mengirim email Firebase.
+- [ ] Owner tetap login setelah membuat akun karyawan.
+- [ ] Tidak ada banner mentah `Missing or insufficient permissions`.
+- [ ] Transaksi, produk, stok, pelanggan, dan karyawan dapat dibaca sesuai role.
+- [ ] Manager hanya melihat data cabang yang ditugaskan.
+- [ ] Kasir tidak dapat mengubah harga, cabang, limit kredit, atau pengaturan Owner.
 
-## Perangkat
+## E. UI HP/tablet/PC
 
+- [ ] Search icon tidak menutupi placeholder di Transaksi, Produk, Stok, Pemasok, Pelanggan, Pembelian, dan Kasir.
+- [ ] Ikon persen tidak menutupi angka markup produk.
+- [ ] Tombol hapus pencarian muncul saat ada teks.
+- [ ] Input tidak terpotong pada keyboard Android dan font size perangkat.
+- [ ] Header tidak tertutup status bar.
+- [ ] Bottom navigation tidak tertutup gesture/navigation bar.
+- [ ] Modal login dan karyawan dapat di-scroll pada layar kecil.
 - [ ] Infinix Note 40 Pro+ portrait.
-- [ ] Huawei MatePad SE 11 portrait/landscape.
+- [ ] Huawei MatePad SE 11 portrait dan landscape.
 - [ ] PC 1366×768 dan 1920×1080.
-- [ ] PWA dapat dipasang dan dibuka standalone.
-- [ ] Kamera permission hanya meminta sesuai kebutuhan.
-- [ ] Logo BM dan font tidak terpotong.
-- [ ] Struk 58 mm dan 80 mm terbaca.
+
+## F. Operasional utama
+
+- [ ] Kasir, barcode kamera/manual/USB/Bluetooth keyboard.
+- [ ] Produk, varian, konversi, bundle, markup, dan stok.
+- [ ] Open bill, pembayaran, refund, void, approval.
+- [ ] Pembelian, retur, hutang, piutang, shift, dan laporan.
+- [ ] Nota 58/80 mm, WhatsApp, QRIS, dan nota online.
+- [ ] Mode pesawat tetap dapat transaksi; setelah online antrean kembali 0 tanpa duplikasi.
