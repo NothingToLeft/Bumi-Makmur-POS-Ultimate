@@ -10,7 +10,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 );
 
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && import.meta.env.PROD && !window.bmDesktop?.isDesktop) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(error => {
       console.warn('Service worker hybrid gagal didaftarkan.', error);

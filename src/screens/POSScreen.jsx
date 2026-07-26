@@ -36,6 +36,7 @@ export default function POSScreen() {
   const scannerLastKeyAtRef = useRef(0);
   const scannerBufferTimerRef = useRef(null);
   const scanNoticeTimerRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
     const handleLoad = event => {
@@ -143,6 +144,28 @@ export default function POSScreen() {
   };
 
   useEffect(() => {
+    const handleDesktopShortcuts = event => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === 'F2') { event.preventDefault(); searchInputRef.current?.focus(); searchInputRef.current?.select(); return; }
+      if (event.key === 'F4') { event.preventDefault(); if (cart.length && !paymentOpen) setPaymentOpen(true); return; }
+      if (event.key === 'F8') { event.preventDefault(); if (cart.length && !holdOpen) setHoldOpen(true); return; }
+      if (event.key === 'F9') { event.preventDefault(); if (!scannerOpen) setScannerOpen(true); return; }
+      if (event.key === 'Escape') {
+        if (paymentOpen) setPaymentOpen(false);
+        else if (holdOpen) setHoldOpen(false);
+        else if (splitOpen) setSplitOpen(false);
+        else if (scannerOpen) setScannerOpen(false);
+        else if (customOpen) setCustomOpen(false);
+        else if (editingLine) setEditingLine(null);
+        else if (choosingProduct) setChoosingProduct(null);
+        else if (mobileCart) setMobileCart(false);
+      }
+    };
+    window.addEventListener('keydown', handleDesktopShortcuts);
+    return () => window.removeEventListener('keydown', handleDesktopShortcuts);
+  }, [cart.length, paymentOpen, holdOpen, splitOpen, scannerOpen, customOpen, editingLine, choosingProduct, mobileCart]);
+
+  useEffect(() => {
     const resetBufferSoon = () => {
       window.clearTimeout(scannerBufferTimerRef.current);
       scannerBufferTimerRef.current = window.setTimeout(() => { scannerBufferRef.current = ''; }, 180);
@@ -243,10 +266,12 @@ export default function POSScreen() {
     <div className="h-full flex bg-gray-50 relative overflow-hidden generic-bg">
       <div className={`flex-1 flex flex-col min-w-0 ${mobileCart ? 'hidden md:flex' : 'flex'}`}>
         <div className="bg-white p-3 md:p-4 border-b border-gray-100 card-element space-y-3">
+          <div className="hidden xl:flex items-center gap-2 text-[11px] font-bold text-gray-500 desktop-shortcut-strip"><span>Shortcut:</span><kbd>F2</kbd><span>Cari</span><kbd>F4</kbd><span>Bayar</span><kbd>F8</kbd><span>Tahan</span><kbd>F9</kbd><span>Scan</span><kbd>Esc</kbd><span>Tutup</span></div>
           <div className="flex gap-2">
             <SearchBox
               value={search}
               onChange={setSearch}
+              inputProps={{ ref: searchInputRef }}
               placeholder="Cari nama, SKU, atau barcode..."
               onKeyDown={event => {
                 if (event.key !== 'Enter') return;

@@ -1,11 +1,7 @@
-# Native Android Notes v5.0.0
+# Native Android Notes v5.1.0
 
 - Package ID: `app.bumimakmur.pos`
-- Version name: `5.0.0`
-- Version code: `50000`
-- Target: Infinix Note 40 Pro+, Huawei MatePad SE 11, serta Android HP/tablet umum.
-- Mode data: Hybrid offline + Firebase Spark auto-sync.
-- Permission: internet, network state, camera, notification, biometric, Bluetooth legacy/modern, USB host optional.
-- Kamera diminta saat startup bila pengaturan aktif.
-- Biometrik menyimpan role perangkat (`owner` atau `employee`) agar tidak muncul pada halaman login yang salah.
-- Release ditandatangani dengan keystore tetap dan diverifikasi memakai `apksigner`.
+- Version name: `5.1.0`
+- Tetap memakai keystore rilis yang sama.
+- Kamera digunakan untuk kasir dan scan barcode saat input produk baru.
+- Instal langsung di atas versi lama; jangan uninstall.

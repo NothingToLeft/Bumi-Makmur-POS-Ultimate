@@ -41,6 +41,8 @@ import { normalizeDbShape } from '../utils/dbShape.js';
 const PosContext = createContext(null);
 const DEVICE_SETTINGS_KEY = 'bm_pos_device_security_v1';
 const LOGIN_DIRECTORY_KEY = 'bm_pos_public_login_directory_v1';
+const CUSTOMER_DISPLAY_KEY = 'bm_pos_customer_display_v1';
+const CUSTOMER_DISPLAY_CHANNEL = 'bm-pos-customer-display';
 const clone = value => typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const nowISO = () => new Date().toISOString();
 const money = value => Math.max(0, Math.round(Number(value) || 0));
@@ -136,6 +138,32 @@ export function PosProvider({ children }) {
       window.removeEventListener('offline', onOffline);
     };
   }, []);
+
+  useEffect(() => {
+    const activeBranchId = currentUserRef.current?.role === 'owner'
+      ? (deviceSettings.activeBranchId || db.configs.activeBranchId || MAIN_BRANCH_ID)
+      : (currentUserRef.current?.branchId || MAIN_BRANCH_ID);
+    const activeBranch = db.branches.find(item => item.id === activeBranchId);
+    const activeCampaign = db.campaigns.find(item => item.active !== false);
+    const snapshot = {
+      ...customerDisplay,
+      companyName: db.configs.companyName || 'BUMI MAKMUR',
+      branchName: activeBranch?.name || '',
+      message: customerDisplay.message || activeCampaign?.message || '',
+      online,
+      updatedAt: nowISO()
+    };
+    try {
+      localStorage.setItem(CUSTOMER_DISPLAY_KEY, JSON.stringify(snapshot));
+      if (typeof BroadcastChannel !== 'undefined') {
+        const channel = new BroadcastChannel(CUSTOMER_DISPLAY_CHANNEL);
+        channel.postMessage(snapshot);
+        channel.close();
+      }
+    } catch (error) {
+      console.warn('Layar pelanggan tidak dapat diperbarui pada perangkat ini.', error);
+    }
+  }, [customerDisplay, db.configs.companyName, db.configs.activeBranchId, db.branches, db.campaigns, deviceSettings.activeBranchId, online]);
 
   useEffect(() => {
     localStorage.setItem(DEVICE_SETTINGS_KEY, JSON.stringify(deviceSettings));
@@ -760,6 +788,49 @@ export function PosProvider({ children }) {
     next.configs = { ...next.configs, ...patch };
     return next.configs;
     });
+  };
+
+
+  const saveStoreIdentity = async payload => {
+    if (currentUserRef.current?.role !== 'owner') throw new Error('Hanya Owner yang dapat mengganti identitas toko.');
+    const companyName = String(payload?.companyName || '').trim();
+    if (companyName.length < 2) throw new Error('Nama toko minimal 2 karakter.');
+    if (companyName.length > 80) throw new Error('Nama toko maksimal 80 karakter.');
+    const previousName = String(dbRef.current?.configs?.companyName || 'BUMI MAKMUR').trim();
+    const result = commit('SETTING_UPDATE', `Identitas toko: ${companyName}`, next => {
+      const previousWhatsappNote = String(next.configs?.receiptWhatsappNote || '');
+      const previousGlobalMerchant = String(next.configs?.qrisMerchantName || '').trim();
+      const globalMerchantFollowsName = !previousGlobalMerchant || previousGlobalMerchant.toLowerCase() === previousName.toLowerCase();
+      const escapedPreviousName = previousName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      next.configs = {
+        ...next.configs,
+        companyName,
+        address: String(payload?.address || '').trim(),
+        phone: String(payload?.phone || '').trim(),
+        qrisMerchantName: globalMerchantFollowsName ? companyName : next.configs.qrisMerchantName,
+        receiptWhatsappNote: previousName && previousWhatsappNote.toLowerCase().includes(previousName.toLowerCase())
+          ? previousWhatsappNote.replace(new RegExp(escapedPreviousName, 'gi'), companyName)
+          : previousWhatsappNote
+      };
+      next.branchPaymentProfiles = (next.branchPaymentProfiles || []).map(profile => {
+        const merchantName = String(profile.merchantName || '').trim();
+        const followsStoreName = !merchantName || merchantName.toLowerCase() === previousName.toLowerCase();
+        return followsStoreName ? { ...profile, merchantName: companyName, updatedAt: nowISO(), updatedBy: currentUserRef.current.id } : profile;
+      });
+      return next.configs;
+    });
+
+    if (navigator.onLine && auth?.currentUser?.uid === currentUserRef.current.id) {
+      try {
+        const directory = await publishPublicLoginDirectory(dbRef.current, currentUserRef.current.storeId || STORE_ID);
+        const nextDirectory = { ...directory, storeCode: currentUserRef.current.storeCode || storeCode };
+        setLoginDirectory(nextDirectory);
+        localStorage.setItem(LOGIN_DIRECTORY_KEY, JSON.stringify(nextDirectory));
+      } catch (error) {
+        console.warn('Nama toko sudah tersimpan, tetapi judul pada layar login menunggu sinkronisasi.', error);
+      }
+    }
+    return result;
   };
 
   const setActiveBranch = id => {
@@ -1589,7 +1660,7 @@ export function PosProvider({ children }) {
     branchId, branch, customerDisplay, setCustomerDisplay,
     deviceSettings, updateDeviceSettings, login, loginEmployee, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     loginDirectory, loginDirectoryLoading, refreshLoginDirectory,
-    hasPermission, setConfig, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
+    hasPermission, setConfig, saveStoreIdentity, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,

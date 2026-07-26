@@ -154,7 +154,7 @@ export default function LoginScreen() {
           <div className="flex items-center justify-center gap-3 mb-4">
             <img src="/logo-bm.svg" alt="Logo Bumi Makmur" className="w-16 h-16 rounded-[1.25rem] shadow-xl ring-1 ring-emerald-100"/>
             <div className="text-left min-w-0">
-              <h1 className="font-black text-2xl tracking-tight text-gray-900">BUMI MAKMUR</h1>
+              <h1 className="font-black text-2xl tracking-tight text-gray-900">{loginDirectory?.businessName || 'BUMI MAKMUR'}</h1>
               <p className="text-xs text-gray-500">POS Professional v{APP_VERSION}</p>
             </div>
           </div>

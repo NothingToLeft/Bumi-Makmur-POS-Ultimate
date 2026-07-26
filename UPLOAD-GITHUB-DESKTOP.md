@@ -1,73 +1,39 @@
-# Upload v5.0 melalui GitHub Desktop
+# Upload v5.1 melalui GitHub Desktop
 
-Metode ini disarankan untuk paket source lengkap karena jumlah file memang banyak dan seluruh folder harus ikut diperbarui.
+## Sebelum mengganti source
 
-## Sebelum menyalin file
+1. Pada aplikasi lama, buka Pengaturan → Sistem → Backup JSON.
+2. Pastikan status cloud tersambung dan antrean offline `0`.
+3. Tutup aplikasi Web/PC/Android yang sedang melakukan input.
 
-1. Di Bumi Makmur POS versi lama, unduh **Backup Hybrid ke JSON**.
-2. Pastikan **Antrean Offline = 0** dan status sinkronisasi terakhir berhasil.
-3. Tutup aplikasi/PWA di HP, tablet, dan PC agar tidak ada perubahan baru selama update.
+## Menyalin source lengkap
 
-## Menimpa source lokal
+1. Ekstrak `Bumi-Makmur-POS-FreeSync-v5.1-Desktop-Windows-Web-Android.zip`.
+2. Buka repository lokal `Bumi-Makmur-POS-Ultimate` melalui GitHub Desktop.
+3. Pilih **Repository → Show in Explorer**.
+4. Salin seluruh isi folder v5.1 ke root repository tersebut dan pilih **Replace**.
 
-1. Ekstrak ZIP `Bumi-Makmur-POS-FreeSync-v5.0-Professional-Control-Center-Web-PC-Android.zip`.
-2. Buka folder hasil ekstrak sampai terlihat langsung folder/file berikut:
-
-```text
-.github/
-src/
-public/
-tests/
-package.json
-firestore.rules
-```
-
-3. Buka folder repository lokal `Bumi-Makmur-POS-Ultimate` yang dipakai GitHub Desktop.
-4. Salin **seluruh isi** folder v5.0 ke root repository lokal tersebut.
-5. Pilih **Replace the files in the destination** untuk menimpa source v4.x.
-
-Jangan menyalin folder pembungkus v5.0 sebagai satu subfolder baru. File `package.json` dan folder `src` harus tetap berada langsung di root repository.
+Jangan memasukkan folder v5.1 sebagai subfolder. `package.json`, `src`, `.github`, dan `electron` harus langsung berada di root repository.
 
 ## Commit dan push
 
-1. Buka GitHub Desktop dan tunggu sampai semua perubahan terbaca.
-2. Banyak file berubah adalah normal karena v5.0 merupakan pembaruan source lengkap, bukan patch kecil.
-3. Isi Summary:
+Banyak file berubah adalah normal karena ini rilis source lengkap untuk Windows, Web, dan Android.
+
+Pesan commit yang disarankan:
 
 ```text
-Bumi Makmur POS v5.0 Professional Control Center and QRIS Adaptive v3
+Bumi Makmur POS v5.1 Desktop Windows, Dynamic Store Identity, and Product Barcode Scan
 ```
 
-4. Klik **Commit to main**.
-5. Klik **Push origin**.
+Klik **Commit to main**, lalu **Push origin**.
 
-Jangan ikut menambahkan file rahasia atau hasil build lokal berikut:
+## Pemeriksaan dan rilis
 
-```text
-.env
-*.jks
-*.keystore
-*.apk
-*.aab
-node_modules/
-dist/
-gha-creds-*.json
-```
+1. `Actions → Build Bumi Makmur POS v5.1.0 → test-only`.
+2. Pastikan test, audit, dan Vite build hijau.
+3. Cloudflare Pages akan memperbarui Web otomatis.
+4. Untuk Android jalankan mode `android-release`.
+5. Untuk PC jalankan `Actions → Build Bumi Makmur POS Desktop v5.1 → windows-release`.
+6. Unduh artifact Windows yang berisi EXE, MSI, dan checksum.
 
-## Urutan GitHub Actions
-
-1. Jalankan **Build Bumi Makmur POS v5.0.0 → test-only**.
-2. Pastikan 77 test, audit statis, dan Vite build semuanya hijau.
-3. Jalankan **Deploy Firebase Spark Rules**. Ini wajib karena v5.0 menambahkan `branchPaymentProfiles` untuk QRIS per cabang.
-4. Tunggu Cloudflare Pages deployment `main` berstatus **Success**.
-5. Jalankan **android-release** memakai keystore/signing secrets lama.
-6. Instal APK v5.0 langsung di atas versi sebelumnya. Jangan uninstall.
-
-## Pemeriksaan pertama setelah update
-
-- Login Owner dan pastikan data lama masih ada.
-- Pastikan tombol setup toko tidak muncul pada login normal.
-- Unggah dan simpan QRIS pada setiap cabang.
-- Uji QRIS dengan minimal dua aplikasi pembayaran.
-- Login Store Manager dan pastikan cloud, transfer stok, QRIS cabang, serta pengelolaan Kasir normal.
-- Ubah satu data uji dari Web dan HP, lalu pastikan Antrean Offline kembali 0.
+Firestore Rules v5.0 tetap kompatibel dengan fitur v5.1. Deploy rules hanya diperlukan ketika `firestore.rules` berubah pada commit Anda.

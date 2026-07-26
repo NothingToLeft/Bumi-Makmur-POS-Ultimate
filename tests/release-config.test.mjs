@@ -7,7 +7,7 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 test('versi project konsisten pada package dan VERSION.txt', async () => {
   const packageJson = JSON.parse(await read('package.json'));
   const version = (await read('VERSION.txt')).trim();
-  assert.equal(packageJson.version, '5.0.0');
+  assert.equal(packageJson.version, '5.1.0');
   assert.equal(version, packageJson.version);
 });
 

@@ -1,16 +1,19 @@
-# Instal Bumi Makmur POS di PC Windows
+# Bumi Makmur POS pada PC Windows
 
-1. Deploy versi web melalui Cloudflare Pages.
-2. Buka URL pada Microsoft Edge atau Google Chrome.
-3. Klik ikon instal aplikasi di address bar atau menu `Apps → Install Bumi Makmur POS`.
-4. Centang pin ke taskbar/desktop bila tersedia.
-5. Login akun cloud sekali, lalu buat PIN perangkat.
+## Pilihan utama: Desktop EXE/MSI
 
-Fitur PC:
+1. Buka GitHub Actions.
+2. Jalankan **Build Bumi Makmur POS Desktop v5.1 → windows-release**.
+3. Unduh artifact `Bumi-Makmur-POS-Desktop-v5.1-Windows`.
+4. Instal file `.exe` untuk penggunaan biasa, atau `.msi` untuk administrasi Windows.
+5. Login cloud sekali lalu gunakan PIN perangkat.
 
-- sidebar desktop penuh;
-- tabel dan laporan layar lebar;
-- keyboard/mouse;
-- scanner barcode USB/Bluetooth yang bertindak sebagai keyboard; barcode/SKU langsung masuk ke keranjang setelah Enter;
-- cetak browser/PDF dan profil printer;
-- persistent cache untuk penggunaan saat koneksi terputus.
+Desktop Edition menyediakan shortcut kasir, scanner USB/Bluetooth, layar pelanggan kedua, cache lokal, dan sinkronisasi Firebase Spark.
+
+## Pilihan ringan: PWA
+
+1. Buka URL Cloudflare Pages pada Edge/Chrome.
+2. Klik ikon **Install App** di address bar.
+3. Pin ke desktop atau taskbar.
+
+PWA tidak membutuhkan installer, tetapi fitur pengelolaan jendela/monitor kedua lebih lengkap pada Desktop Edition.

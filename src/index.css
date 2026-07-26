@@ -231,3 +231,44 @@ input, select, textarea { min-width: 0; }
 
 .theme-dark .search-field-icon { color: #cbd5e1; }
 .theme-dark .search-field-clear { color: #cbd5e1; }
+
+/* Desktop Windows v5.1 */
+.desktop-shortcut-strip kbd {
+  min-width: 28px;
+  padding: 3px 7px;
+  border-radius: 7px;
+  border: 1px solid rgb(209 213 219);
+  background: linear-gradient(180deg, #fff, #f3f4f6);
+  box-shadow: 0 1px 0 rgb(156 163 175);
+  color: rgb(31 41 55);
+  text-align: center;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+body.is-electron {
+  overscroll-behavior: none;
+  user-select: none;
+}
+body.is-electron input,
+body.is-electron textarea,
+body.is-electron [contenteditable="true"] {
+  user-select: text;
+}
+body.is-electron .app-shell-premium {
+  background: #f4f7f6;
+}
+body.is-electron .sidebar-premium {
+  box-shadow: 14px 0 34px rgba(6, 78, 59, .09);
+}
+@media (min-width: 1440px) {
+  body.is-electron .sidebar-premium { width: 270px; }
+  body.is-electron .page-header { padding-left: 28px; padding-right: 28px; }
+}
+
+.desktop-customer-display {
+  font-variant-numeric: tabular-nums;
+}
+.desktop-customer-display * {
+  cursor: default;
+}

@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "5.0.0",
+  "version": "5.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -18,7 +18,12 @@
     "firebase:deploy:hosting": "echo \"Hosting utama memakai Cloudflare Pages; jalankan npm run build lalu deploy folder dist.\"",
     "web:build": "npm run build",
     "pc:preview": "npm run build && npm run preview",
-    "audit:static": "node scripts/audit-project.mjs"
+    "audit:static": "node scripts/audit-project.mjs",
+    "desktop:dev": "npm run build && electron .",
+    "desktop:pack": "npm run build && electron-builder --dir --win --x64",
+    "desktop:dist": "npm run build && electron-builder --win --x64",
+    "desktop:dist:nsis": "npm run build && electron-builder --win nsis --x64",
+    "desktop:dist:msi": "npm run build && electron-builder --win msi --x64"
   },
   "dependencies": {
     "@capacitor/android": "7.4.3",
@@ -36,7 +41,72 @@
     "autoprefixer": "10.4.20",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.17",
-    "vite": "6.0.7"
+    "vite": "6.0.7",
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v5.0 Professional Control Center: Android, Web, dan PC PWA dengan Firebase Spark FreeSync, QRIS adaptif per cabang, audit operasional, dan offline queue."
+  "description": "Bumi Makmur POS v5.1 Desktop Edition: Windows EXE/MSI, Web, Android, Firebase Spark FreeSync, nama toko dinamis, scanner barcode produk baru, layar pelanggan kedua, dan shortcut kasir.",
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "app.bumimakmur.pos.desktop",
+    "productName": "Bumi Makmur POS Desktop",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release/windows",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "name": "bumi-makmur-pos-desktop"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Bumi-Makmur-POS-Desktop-v${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Bumi Makmur POS Desktop",
+      "deleteAppDataOnUninstall": false
+    },
+    "msi": {
+      "oneClick": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "copyright": "Copyright © 2026 Bumi Makmur"
+  },
+  "allowScripts": {
+    "@firebase/util": true,
+    "protobufjs": true,
+    "google-logging-utils": true,
+    "re2": true,
+    "esbuild": true,
+    "electron": true,
+    "app-builder-bin": true
+  },
+  "author": "Bumi Makmur",
+  "license": "UNLICENSED"
 }

@@ -3,12 +3,12 @@ setlocal
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Node.js belum terpasang. Instal Node.js LTS terlebih dahulu.
+  echo Node.js belum terpasang. Gunakan installer EXE/MSI dari GitHub Actions untuk pemakaian normal.
   pause
   exit /b 1
 )
 if not exist node_modules (
-  echo Menginstal dependency...
+  echo Menginstal dependency pengembangan...
   call npm install --no-audit --no-fund
   if errorlevel 1 (
     echo Instalasi gagal. Periksa koneksi internet lalu jalankan ulang.
@@ -16,6 +16,6 @@ if not exist node_modules (
     exit /b 1
   )
 )
-echo Menjalankan BUMI MAKMUR POS...
-call npm run dev
+echo Menjalankan Bumi Makmur POS Desktop v5.1 dalam mode pengembangan...
+call npm run desktop:dev
 endlocal

@@ -1,0 +1,109 @@
+name: Build Bumi Makmur POS Desktop v5.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: Mode build
+        required: true
+        default: windows-release
+        type: choice
+        options:
+          - test-only
+          - windows-release
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install dependencies
+        shell: pwsh
+        run: npm install --no-audit --no-fund
+
+      - name: Core tests
+        run: npm run test:core
+
+      - name: Static audit
+        run: npm run audit:static
+
+      - name: Validate Firebase configuration for desktop release
+        if: ${{ inputs.build_mode == 'windows-release' }}
+        shell: pwsh
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_STORE_ID: ${{ secrets.VITE_FIREBASE_STORE_ID }}
+          VITE_FIREBASE_STORE_CODE: ${{ secrets.VITE_FIREBASE_STORE_CODE }}
+          VITE_PUBLIC_APP_URL: ${{ secrets.VITE_PUBLIC_APP_URL }}
+        run: |
+          $required = @(
+            'VITE_FIREBASE_API_KEY','VITE_FIREBASE_AUTH_DOMAIN','VITE_FIREBASE_PROJECT_ID',
+            'VITE_FIREBASE_MESSAGING_SENDER_ID','VITE_FIREBASE_APP_ID',
+            'VITE_FIREBASE_STORE_ID','VITE_FIREBASE_STORE_CODE'
+          )
+          foreach ($key in $required) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($key))) {
+              Write-Error "$key belum diisi pada GitHub Secrets."
+              exit 1
+            }
+          }
+          @"
+          VITE_FIREBASE_API_KEY=$env:VITE_FIREBASE_API_KEY
+          VITE_FIREBASE_AUTH_DOMAIN=$env:VITE_FIREBASE_AUTH_DOMAIN
+          VITE_FIREBASE_PROJECT_ID=$env:VITE_FIREBASE_PROJECT_ID
+          VITE_FIREBASE_MESSAGING_SENDER_ID=$env:VITE_FIREBASE_MESSAGING_SENDER_ID
+          VITE_FIREBASE_APP_ID=$env:VITE_FIREBASE_APP_ID
+          VITE_FIREBASE_STORE_ID=$env:VITE_FIREBASE_STORE_ID
+          VITE_FIREBASE_STORE_CODE=$env:VITE_FIREBASE_STORE_CODE
+          VITE_PUBLIC_APP_URL=$env:VITE_PUBLIC_APP_URL
+          "@ | Set-Content -Encoding utf8 .env.production
+
+      - name: Compile Vite source in test-only mode
+        if: ${{ inputs.build_mode == 'test-only' }}
+        run: npm run build
+
+      - name: Build Windows EXE and MSI
+        if: ${{ inputs.build_mode == 'windows-release' }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run desktop:dist
+
+      - name: Generate SHA-256 checksums
+        if: ${{ inputs.build_mode == 'windows-release' }}
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem release/windows -File | Where-Object { $_.Extension -in '.exe', '.msi' }
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($file.Name)"
+          }
+          $lines | Set-Content release/windows/SHA256SUMS.txt
+
+      - name: Upload Windows installers
+        if: ${{ inputs.build_mode == 'windows-release' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: Bumi-Makmur-POS-Desktop-v5.1-Windows
+          path: |
+            release/windows/*.exe
+            release/windows/*.msi
+            release/windows/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
