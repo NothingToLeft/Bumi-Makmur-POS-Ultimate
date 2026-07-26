@@ -18,6 +18,35 @@ service cloud.firestore {
     function manager(storeId) { return activeMember(storeId) && profile(storeId).role == 'manager'; }
     function cashier(storeId) { return activeMember(storeId) && profile(storeId).role == 'kasir'; }
     function ownerOrManager(storeId) { return owner(storeId) || manager(storeId); }
+    function managerOwnBranch(storeId, branchId) {
+      return manager(storeId) && branchId == profile(storeId).branchId;
+    }
+    function canManageEmployee(storeId, role, branchId) {
+      return owner(storeId) || (managerOwnBranch(storeId, branchId) && role == 'kasir');
+    }
+    function cashierPermissionsSafe(data) {
+      return !('permissions' in data)
+        || (data.permissions is list && data.permissions.hasOnly([
+          'pos.use', 'transactions.view', 'products.view', 'customers.view',
+          'customers.manage', 'shifts.view', 'shifts.manage', 'openBills.view',
+          'orders.view', 'display.view'
+        ]));
+    }
+    function validEmployeeDirectory(data) {
+      return data.keys().hasOnly([
+          'uid', 'storeId', 'storeCode', 'branchId', 'loginName', 'loginAlias',
+          'role', 'active', 'schemaVersion', 'updatedAt'
+        ])
+        && data.uid is string
+        && data.storeId is string
+        && data.storeCode is string
+        && data.branchId is string
+        && data.loginName is string
+        && data.loginAlias is string
+        && data.role in ['manager', 'kasir']
+        && data.active is bool
+        && data.schemaVersion == 2;
+    }
     function existingBranchAllowed(storeId) {
       return owner(storeId)
         || !('branchId' in resource.data)
@@ -33,6 +62,38 @@ service cloud.firestore {
         && exists(userPath(storeId, request.resource.data.approvedBy))
         && get(userPath(storeId, request.resource.data.approvedBy)).data.active == true
         && get(userPath(storeId, request.resource.data.approvedBy)).data.role in ['owner', 'manager'];
+    }
+
+    // Direktori login hanya dapat diambil berdasarkan ID hash cabang + nama.
+    // Listing diblokir agar nama seluruh karyawan tidak dapat dipanen publik.
+    match /employeeLoginDirectory/{directoryId} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn()
+        && validEmployeeDirectory(request.resource.data)
+        && canManageEmployee(
+          request.resource.data.storeId,
+          request.resource.data.role,
+          request.resource.data.branchId
+        )
+        && getAfter(userPath(request.resource.data.storeId, request.resource.data.uid)).data.uid == request.resource.data.uid
+        && getAfter(userPath(request.resource.data.storeId, request.resource.data.uid)).data.role == request.resource.data.role
+        && getAfter(userPath(request.resource.data.storeId, request.resource.data.uid)).data.branchId == request.resource.data.branchId;
+      allow update: if signedIn()
+        && validEmployeeDirectory(request.resource.data)
+        && resource.data.storeId == request.resource.data.storeId
+        && canManageEmployee(resource.data.storeId, resource.data.role, resource.data.branchId)
+        && canManageEmployee(
+          request.resource.data.storeId,
+          request.resource.data.role,
+          request.resource.data.branchId
+        )
+        && getAfter(userPath(request.resource.data.storeId, request.resource.data.uid)).data.uid == request.resource.data.uid
+        && getAfter(userPath(request.resource.data.storeId, request.resource.data.uid)).data.role == request.resource.data.role
+        && getAfter(userPath(request.resource.data.storeId, request.resource.data.uid)).data.branchId == request.resource.data.branchId;
+      allow delete: if signedIn()
+        && resource.data.storeId is string
+        && canManageEmployee(resource.data.storeId, resource.data.role, resource.data.branchId);
     }
 
     // Nota publik berisi data penjualan yang sudah disanitasi; harga modal dan data internal dilarang.
@@ -73,28 +134,38 @@ service cloud.firestore {
 
     match /stores/{storeId}/system/settings {
       allow read: if activeMember(storeId);
-      allow create, update: if ownerOrManager(storeId);
+      allow create, update, delete: if owner(storeId);
+    }
+
+    // Daftar cabang aktif yang aman untuk layar login. Dokumen hanya memuat
+    // nama toko/cabang, bukan data transaksi atau profil karyawan.
+    match /stores/{storeId}/public/login {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if owner(storeId)
+        && request.resource.data.storeId == storeId
+        && request.resource.data.branches is list;
       allow delete: if owner(storeId);
     }
 
     match /stores/{storeId}/users/{uid} {
-      // A user may fetch only their own profile before activeMember() can be
-      // evaluated. Owner and Manager may read profiles according to scope.
+      // Pengguna selalu boleh membaca profilnya sendiri. Owner melihat seluruh
+      // karyawan; Store Manager hanya melihat Kasir pada cabangnya sendiri.
       allow get: if (
         (signedIn() && uid == request.auth.uid)
-        || (activeMember(storeId) && owner(storeId))
-        || (activeMember(storeId) && manager(storeId) && resource.data.branchId == profile(storeId).branchId)
-      );
-      allow list: if activeMember(storeId) && (
-        owner(storeId)
+        || owner(storeId)
         || (manager(storeId) && resource.data.branchId == profile(storeId).branchId)
       );
+      allow list: if owner(storeId)
+        || (manager(storeId) && resource.data.branchId == profile(storeId).branchId);
+
       allow create: if (
-          owner(storeId)
-          && uid == request.resource.data.uid
+          uid == request.resource.data.uid
           && request.resource.data.storeId == storeId
           && request.resource.data.role in ['manager', 'kasir']
           && request.resource.data.active is bool
+          && canManageEmployee(storeId, request.resource.data.role, request.resource.data.branchId)
+          && (owner(storeId) || cashierPermissionsSafe(request.resource.data))
         ) || (
           signedIn()
           && uid == request.auth.uid
@@ -104,17 +175,27 @@ service cloud.firestore {
           && request.resource.data.active == true
           && getAfter(/databases/$(database)/documents/stores/$(storeId)/system/bootstrap).data.ownerUid == request.auth.uid
         );
-      allow update: if owner(storeId) && (
-        (uid == request.auth.uid
+
+      allow update: if (
+          owner(storeId)
+          && uid == request.auth.uid
           && resource.data.role == 'owner'
           && request.resource.data.role == 'owner'
-          && request.resource.data.uid == request.auth.uid)
-        || (uid != request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+        ) || (
+          uid != request.auth.uid
           && request.resource.data.uid == uid
           && request.resource.data.storeId == storeId
-          && request.resource.data.role in ['manager', 'kasir'])
-      );
-      allow delete: if owner(storeId) && uid != request.auth.uid && resource.data.role != 'owner';
+          && resource.data.role in ['manager', 'kasir']
+          && request.resource.data.role in ['manager', 'kasir']
+          && canManageEmployee(storeId, resource.data.role, resource.data.branchId)
+          && canManageEmployee(storeId, request.resource.data.role, request.resource.data.branchId)
+          && (owner(storeId) || cashierPermissionsSafe(request.resource.data))
+        );
+
+      allow delete: if uid != request.auth.uid
+        && resource.data.role in ['manager', 'kasir']
+        && canManageEmployee(storeId, resource.data.role, resource.data.branchId);
     }
 
     match /stores/{storeId}/mutationReceipts/{mutationId} {
@@ -126,13 +207,16 @@ service cloud.firestore {
     }
 
     match /stores/{storeId}/auditLogs/{id} {
-      allow read: if ownerOrManager(storeId);
-      allow create: if activeMember(storeId) && request.resource.data.userId == request.auth.uid;
+      allow read: if owner(storeId)
+        || (manager(storeId) && resource.data.branchId == profile(storeId).branchId);
+      allow create: if activeMember(storeId)
+        && request.resource.data.userId == request.auth.uid
+        && (owner(storeId) || request.resource.data.branchId == profile(storeId).branchId);
       allow update, delete: if false;
     }
 
     match /stores/{storeId}/branches/{id} {
-      allow read: if activeMember(storeId);
+      allow read: if owner(storeId) || (activeMember(storeId) && id == profile(storeId).branchId);
       allow create, update, delete: if owner(storeId);
     }
 

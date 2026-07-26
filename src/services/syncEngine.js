@@ -173,25 +173,27 @@ function rebaseValue(before, after, remote, collectionName, path = '') {
   return clone(after);
 }
 
+export function rebaseOperationAgainstRemoteData(operation, actual) {
+  if (!operation) return null;
+  if (operation.type === 'delete') {
+    if (actual === null) return null;
+    return { ...clone(operation), beforeData: clone(actual) };
+  }
+  if (actual === null) return { ...clone(operation), beforeData: null };
+  if (operation.beforeData === null && stableEqual(actual, operation.afterData)) return null;
+  const afterData = operation.beforeData === null
+    ? { ...clone(actual), ...clone(operation.afterData) }
+    : rebaseValue(operation.beforeData, operation.afterData, actual, operation.collectionName);
+  if (stableEqual(actual, afterData)) return null;
+  return { ...clone(operation), beforeData: clone(actual), afterData: cleanUndefined(afterData) };
+}
+
 export function rebaseOperationsAgainstRemote(operations, remoteDb) {
   const rebased = [];
   for (const operation of operations || []) {
     const actual = rowFromDb(remoteDb, operation.collectionName, operation.id);
-    if (operation.type === 'delete') {
-      if (actual === null) continue;
-      rebased.push({ ...clone(operation), beforeData: clone(actual) });
-      continue;
-    }
-    if (actual === null) {
-      rebased.push({ ...clone(operation), beforeData: null });
-      continue;
-    }
-    if (operation.beforeData === null && stableEqual(actual, operation.afterData)) continue;
-    const afterData = operation.beforeData === null
-      ? { ...clone(actual), ...clone(operation.afterData) }
-      : rebaseValue(operation.beforeData, operation.afterData, actual, operation.collectionName);
-    if (stableEqual(actual, afterData)) continue;
-    rebased.push({ ...clone(operation), beforeData: clone(actual), afterData: cleanUndefined(afterData) });
+    const next = rebaseOperationAgainstRemoteData(operation, actual);
+    if (next) rebased.push(next);
   }
   return rebased;
 }

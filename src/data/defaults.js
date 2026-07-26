@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Tags
 } from 'lucide-react';
 
-export const APP_VERSION = '4.4.0';
+export const APP_VERSION = '4.5.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -36,7 +36,8 @@ export const ROLE_PERMISSIONS = {
     'products.view', 'products.manage', 'promotions.view', 'promotions.manage', 'inventory.view', 'inventory.manage', 'purchases.view',
     'purchases.manage', 'suppliers.view', 'suppliers.manage', 'customers.view', 'customers.manage',
     'shifts.view', 'shifts.manage', 'finance.view', 'finance.manage', 'reports.view', 'orders.view',
-    'orders.manage', 'devices.view', 'devices.manage', 'display.view', 'display.manage', 'settings.view', 'settings.manage'
+    'orders.manage', 'devices.view', 'devices.manage', 'display.view', 'display.manage',
+    'settings.view', 'employees.view', 'employees.manage'
   ],
   kasir: [
     'pos.use', 'transactions.view', 'products.view', 'customers.view', 'customers.manage',

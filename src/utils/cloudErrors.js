@@ -18,7 +18,7 @@ export function friendlyCloudError(error, fallback = 'Layanan cloud belum dapat 
     return 'Email atau password tidak cocok. Periksa kembali akun Firebase yang digunakan.';
   }
   if (code.includes('email-already-in-use')) {
-    return 'Email tersebut sudah dipakai akun lain. Gunakan email berbeda atau kirim reset password.';
+    return 'Identitas akun tersebut sudah digunakan. Gunakan nama login lain atau periksa akun yang sudah ada.';
   }
   if (code.includes('network-request-failed') || code.includes('unavailable') || /network|offline|failed to fetch/.test(message)) {
     return 'Koneksi ke Firebase terputus. Aplikasi tetap dapat digunakan offline dan akan mencoba sinkronisasi lagi otomatis.';
@@ -33,7 +33,7 @@ export function friendlyCloudError(error, fallback = 'Layanan cloud belum dapat 
     return 'Data tersebut sudah tersedia di cloud. Muat ulang data sebelum mencoba lagi.';
   }
   if (code.includes('aborted') || /telah berubah di perangkat lain/.test(message)) {
-    return 'Data berubah di perangkat lain. Sistem sedang menggabungkan perubahan dan akan mencoba kembali.';
+    return 'Sinkronisasi latar belakang sedang menyelaraskan perubahan terbaru. Operasional dapat dilanjutkan.';
   }
 
   // Pesan aplikasi yang sudah ramah boleh diteruskan, tetapi jangan tampilkan pesan mentah Firebase.

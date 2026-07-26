@@ -1,12 +1,12 @@
-# QA Checklist v4.4
+# QA Checklist v4.5
 
 ## A. Build dan deploy
 
-- [ ] Workflow `test-only` hijau: 65 tests, audit statis, dan Vite compile.
+- [ ] Workflow `test-only` hijau: 71 tests, audit statis, dan Vite compile.
 - [ ] Workflow `Deploy Firebase Spark Rules` hijau.
 - [ ] Firestore Rules di Firebase Console menunjukkan versi terbaru.
-- [ ] `android-release` menghasilkan APK/AAB signed v4.4.
-- [ ] APK v4.4 dapat dipasang di atas v4.3 tanpa uninstall.
+- [ ] `android-release` menghasilkan APK/AAB signed v4.5.
+- [ ] APK v4.5 dapat dipasang di atas v4.4 tanpa uninstall.
 
 ## B. Login Owner
 
@@ -15,23 +15,25 @@
 - [ ] PIN karyawan di halaman Owner menghasilkan pesan yang benar.
 - [ ] Masuk Owner dengan email berhasil pada perangkat baru.
 - [ ] Setup Toko Pertama Kali hanya terlihat di halaman Owner.
-- [ ] Biometrik Owner hanya muncul pada halaman Owner.
+- [ ] Biometrik Owner tidak muncul otomatis dan hanya berjalan setelah tombol ditekan.
 
 ## C. Login Karyawan
 
 - [ ] Login Karyawan tidak menampilkan setup toko.
 - [ ] Owner membuat akun dari Pengaturan → Karyawan.
-- [ ] Karyawan menghubungkan perangkat memakai email/password sementara.
-- [ ] Karyawan membuat PIN 4 digit dan konfirmasi PIN.
-- [ ] Login berikutnya berhasil menggunakan PIN.
-- [ ] Biometrik karyawan hanya muncul pada halaman Karyawan.
+- [ ] Pilihan toko/cabang menampilkan seluruh cabang aktif.
+- [ ] Karyawan login memakai nama login dan PIN 4 digit tanpa email/password.
+- [ ] Login Manager/Kasir membuka cabang yang ditugaskan.
+- [ ] Biometrik karyawan hanya muncul setelah tombol Sidik Jari / Face ID ditekan.
 - [ ] Akun nonaktif tidak dapat login/sinkronisasi.
 
 ## D. Karyawan & Firestore
 
 - [ ] Karyawan baru langsung muncul setelah tombol Simpan Akun berhasil.
 - [ ] Edit nama, role, cabang, status, dan permission tersimpan.
-- [ ] Reset password mengirim email Firebase.
+- [ ] Ganti PIN memerlukan PIN saat ini dan menyimpan PIN baru.
+- [ ] Hapus akun mencabut profil POS/direktori login; dengan PIN, identitas Auth ikut dihapus.
+- [ ] Manager hanya dapat menambah/mengelola Kasir pada cabangnya.
 - [ ] Owner tetap login setelah membuat akun karyawan.
 - [ ] Tidak ada banner mentah `Missing or insufficient permissions`.
 - [ ] Transaksi, produk, stok, pelanggan, dan karyawan dapat dibaca sesuai role.
@@ -59,3 +61,4 @@
 - [ ] Pembelian, retur, hutang, piutang, shift, dan laporan.
 - [ ] Nota 58/80 mm, WhatsApp, QRIS, dan nota online.
 - [ ] Mode pesawat tetap dapat transaksi; setelah online antrean kembali 0 tanpa duplikasi.
+- [ ] Ubah data yang sama dari web dan HP; conflict rebase selesai tanpa banner error berulang.

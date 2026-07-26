@@ -25,9 +25,12 @@ test('hak akses khusus divalidasi di klien dan profil Firestore', async () => {
   assert.match(context, /Hak akses .* tidak tersedia untuk akun ini/);
   assert.match(auth, /permissions: Array\.isArray/);
   assert.match(rules, /profile\(storeId\)\.role/);
-  for (const permission of ['devices.manage', 'display.manage', 'settings.manage']) {
+  for (const permission of ['devices.manage', 'display.manage', 'employees.manage']) {
     assert.match(defaults, new RegExp(permission.replace('.', '\\.')));
   }
+  assert.match(context, /settings\.manage/);
+  const managerBlock = defaults.match(/manager:\s*\[([\s\S]*?)\],\s*kasir:/)?.[1] || '';
+  assert.doesNotMatch(managerBlock, /settings\.manage|branches\.manage/);
 });
 
 test('kasir hanya melihat layar pelanggan dan tidak dapat mengubah kampanye', async () => {

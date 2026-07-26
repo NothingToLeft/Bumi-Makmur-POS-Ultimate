@@ -1,3 +1,5 @@
+import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
+
 const CACHE_DB_NAME = 'bumi-makmur-pos-hybrid-cache';
 const CACHE_DB_VERSION = 1;
 const CACHE_STORE = 'cache';
@@ -312,17 +314,28 @@ export async function cacheOfflineCredential(storeCode, pin, profile, cloudCrede
   return true;
 }
 
-export async function verifyOfflineLogin(storeCode, pin) {
+export async function verifyOfflineLogin(storeCode, pin, options = {}) {
   if (!/^\d{4}$/.test(String(pin || ''))) return null;
   const key = normalizeStoreKey(storeCode);
+  const expectedRole = String(options.expectedRole || 'any');
+  const expectedLoginName = normalizeEmployeeLoginName(options.loginName || '');
+  const expectedBranchId = String(options.branchId || '');
   const credentials = (await cacheGet(`credentials:${key}`)) || [];
   for (const record of credentials) {
     if (!record?.active || !record?.profile?.id) continue;
     if (record.expiresAt && new Date(record.expiresAt).getTime() < Date.now()) continue;
+    const profile = record.profile;
+    if (expectedRole === 'owner' && profile.role !== 'owner') continue;
+    if (expectedRole === 'employee' && profile.role === 'owner') continue;
+    if (expectedLoginName) {
+      const profileLoginName = normalizeEmployeeLoginName(profile.loginName || profile.name || '');
+      if (profileLoginName !== expectedLoginName) continue;
+    }
+    if (expectedBranchId && profile.branchId !== expectedBranchId) continue;
     const candidate = await hashPin(pin, record.pinSalt, record.pinIterations || 180000);
     if (candidate === record.pinHash) {
       return {
-        profile: clone(record.profile),
+        profile: clone(profile),
         cloudCredential: await decryptCloudCredential(key, pin, record.cloudCredential)
       };
     }
@@ -330,9 +343,19 @@ export async function verifyOfflineLogin(storeCode, pin) {
   return null;
 }
 
-export async function verifyOfflinePin(storeCode, pin) {
-  const result = await verifyOfflineLogin(storeCode, pin);
+export async function verifyOfflinePin(storeCode, pin, options = {}) {
+  const result = await verifyOfflineLogin(storeCode, pin, options);
   return result?.profile || null;
+}
+
+export async function removeOfflineCredential(storeCode, userId) {
+  const key = normalizeStoreKey(storeCode);
+  const credentials = (await cacheGet(`credentials:${key}`)) || [];
+  const next = credentials.filter(item => item?.id !== userId);
+  await cachePut(`credentials:${key}`, next);
+  const lastProfile = await cacheGet(`last-profile:${key}`);
+  if (lastProfile?.id === userId) await cacheDelete(`last-profile:${key}`);
+  return credentials.length !== next.length;
 }
 
 export async function getCachedOfflineProfile(storeCode, userId = '') {

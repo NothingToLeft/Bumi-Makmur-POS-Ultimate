@@ -1,8 +1,8 @@
-# Native Android Notes v4.4
+# Native Android Notes v4.5
 
 - Package ID: `app.bumimakmur.pos`
-- Version name: `4.4.0`
-- Version code: `40400`
+- Version name: `4.5.0`
+- Version code: `40500`
 - Target: Infinix Note 40 Pro+, Huawei MatePad SE 11, serta Android HP/tablet umum.
 - Mode data: Hybrid offline + Firebase Spark auto-sync.
 - Permission: internet, network state, camera, notification, biometric, Bluetooth legacy/modern, USB host optional.

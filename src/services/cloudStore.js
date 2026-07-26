@@ -8,6 +8,7 @@ import {
   onSnapshot,
   query,
   runTransaction,
+  serverTimestamp,
   setDoc,
   Timestamp,
   where,
@@ -26,6 +27,7 @@ import {
   applyOperationsToDb,
   buildDiffOperations,
   cleanUndefined,
+  rebaseOperationAgainstRemoteData,
   rebaseOperationsAgainstRemote,
   stableJson
 } from './syncEngine.js';
@@ -36,11 +38,12 @@ export {
   applyOperationsToDb,
   buildDiffOperations,
   cleanUndefined,
+  rebaseOperationAgainstRemoteData,
   rebaseOperationsAgainstRemote,
   stableJson
 };
 
-const GLOBAL_COLLECTIONS = new Set(['branches', 'printerProfiles', 'campaigns', 'auditLogs']);
+const GLOBAL_COLLECTIONS = new Set(['printerProfiles', 'campaigns']);
 const CASHIER_COLLECTIONS = new Set([
   'branches', 'products', 'promotions', 'customers', 'sales', 'heldSales',
   'stockMovements', 'receivables', 'refunds', 'shifts', 'cashMovements',
@@ -69,6 +72,10 @@ function settingsRef(storeId = STORE_ID) {
   return doc(firestore, 'stores', storeId, 'system', 'settings');
 }
 
+function publicLoginRef(storeId = STORE_ID) {
+  return doc(firestore, 'stores', storeId, 'public', 'login');
+}
+
 function operationRef(operation, storeId = STORE_ID) {
   return operation.collectionName === '__settings__'
     ? settingsRef(storeId)
@@ -83,6 +90,39 @@ function buildQuery(name, profile, storeId = STORE_ID) {
   return query(base, where('branchId', '==', profile.branchId));
 }
 
+
+export async function loadPublicLoginDirectory(storeId = STORE_ID) {
+  requireCloud();
+  const snapshot = await getDocFromServer(publicLoginRef(storeId));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data() || {};
+  return {
+    storeId,
+    storeCode: String(data.storeCode || ''),
+    businessName: String(data.businessName || 'BUMI MAKMUR'),
+    branches: Array.isArray(data.branches)
+      ? data.branches.filter(item => item?.id && item?.active !== false).map(item => ({ id: String(item.id), name: String(item.name || item.id), active: true }))
+      : []
+  };
+}
+
+export async function publishPublicLoginDirectory(db, storeId = STORE_ID) {
+  requireCloud();
+  if (!auth?.currentUser) throw new Error('Sesi cloud belum tersedia untuk memperbarui daftar cabang login.');
+  const branches = (db?.branches || [])
+    .filter(item => item?.id && item.active !== false)
+    .slice(0, 100)
+    .map(item => ({ id: String(item.id), name: String(item.name || item.id), active: true }));
+  await setDoc(publicLoginRef(storeId), {
+    storeId,
+    storeCode: String(db?.configs?.storeCode || ''),
+    businessName: String(db?.configs?.companyName || 'BUMI MAKMUR'),
+    branches,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+  return { storeId, businessName: String(db?.configs?.companyName || 'BUMI MAKMUR'), branches };
+}
+
 export async function loadCloudDb(seed, profile, storeId = STORE_ID) {
   requireCloud();
   const settingsSnapshot = await getDocFromServer(settingsRef(storeId));
@@ -93,6 +133,11 @@ export async function loadCloudDb(seed, profile, storeId = STORE_ID) {
   }
   const rows = await Promise.all(
     CLOUD_ENTITY_COLLECTIONS.map(async name => {
+      if (name === 'branches' && profile && profile.role !== 'owner') {
+        if (!profile.branchId) return [name, []];
+        const branchSnapshot = await getDocFromServer(doc(firestore, 'stores', storeId, 'branches', profile.branchId));
+        return [name, branchSnapshot.exists() ? [{ id: branchSnapshot.id, ...branchSnapshot.data() }] : []];
+      }
       const targetQuery = buildQuery(name, profile, storeId);
       if (!targetQuery) return [name, []];
       const snapshot = await getDocsFromServer(targetQuery);
@@ -110,6 +155,7 @@ export function subscribeCloudDb(seed, profile, onChange, onError, storeId = STO
   const unsubscribers = [];
 
   unsubscribers.push(onSnapshot(settingsRef(storeId), { includeMetadataChanges: true }, snapshot => {
+    if (snapshot.metadata.hasPendingWrites) return;
     if (snapshot.exists()) {
       const settings = snapshot.data();
       for (const key of SETTINGS_KEYS) if (settings[key] !== undefined) state[key] = settings[key];
@@ -118,9 +164,20 @@ export function subscribeCloudDb(seed, profile, onChange, onError, storeId = STO
   }, onError));
 
   for (const name of CLOUD_ENTITY_COLLECTIONS) {
+    if (name === 'branches' && profile && profile.role !== 'owner') {
+      if (!profile.branchId) continue;
+      const targetRef = doc(firestore, 'stores', storeId, 'branches', profile.branchId);
+      unsubscribers.push(onSnapshot(targetRef, { includeMetadataChanges: true }, snapshot => {
+        if (snapshot.metadata.hasPendingWrites) return;
+        state = { ...state, branches: snapshot.exists() ? [{ id: snapshot.id, ...snapshot.data() }] : [] };
+        emit();
+      }, onError));
+      continue;
+    }
     const targetQuery = buildQuery(name, profile, storeId);
     if (!targetQuery) continue;
     unsubscribers.push(onSnapshot(targetQuery, { includeMetadataChanges: true }, snapshot => {
+      if (snapshot.metadata.hasPendingWrites) return;
       state = { ...state, [name]: snapshot.docs.map(item => ({ id: item.id, ...item.data() })) };
       emit();
     }, onError));
@@ -135,6 +192,20 @@ function currentData(snapshot) {
 function conflictMessage(operation) {
   const label = operation.collectionName === '__settings__' ? 'pengaturan' : `${operation.collectionName}/${operation.id}`;
   return `Data ${label} telah berubah di perangkat lain. Perubahan lokal akan digabungkan lalu dicoba kembali.`;
+}
+
+
+export async function refreshOperationsAgainstCloud(operations, storeId = STORE_ID) {
+  requireCloud();
+  if (!operations?.length) return [];
+  const refs = operations.map(operation => operationRef(operation, storeId));
+  const snapshots = await Promise.all(refs.map(ref => getDocFromServer(ref)));
+  const refreshed = [];
+  operations.forEach((operation, index) => {
+    const next = rebaseOperationAgainstRemoteData(operation, currentData(snapshots[index]));
+    if (next) refreshed.push(next);
+  });
+  return refreshed;
 }
 
 export async function persistOperations(operations, storeId = STORE_ID, context = {}) {

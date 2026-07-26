@@ -1,63 +1,67 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, BriefcaseBusiness, Cloud, Fingerprint, KeyRound, Link2, Loader2,
   ScanFace, ServerCog, ShieldCheck, Store, Trash2, UserRound, UserRoundPlus,
   UsersRound, WifiOff, X
 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
-import { APP_VERSION } from '../data/defaults.js';
+import { APP_VERSION, MAIN_BRANCH_ID } from '../data/defaults.js';
 import { authenticateBiometric, getBiometricAvailability } from '../services/nativeDevice.js';
-import { Field, Input } from '../components/ui.jsx';
+import { Field, Input, Select } from '../components/ui.jsx';
 import { friendlyCloudError } from '../utils/cloudErrors.js';
 
 const ROLE_CONFIG = {
   owner: {
     title: 'Login Owner',
-    subtitle: 'Akses penuh, pengaturan toko, laporan, dan akun karyawan.',
+    subtitle: 'Akses seluruh cabang, laporan, pengaturan, dan pengelolaan akun.',
     icon: BriefcaseBusiness,
-    accent: 'emerald',
     expectedRole: 'owner'
   },
   employee: {
     title: 'Login Karyawan',
-    subtitle: 'Untuk Store Manager dan Kasir menggunakan PIN perangkat.',
+    subtitle: 'Store Manager dan Kasir masuk dengan cabang, nama, dan PIN.',
     icon: UsersRound,
-    accent: 'blue',
     expectedRole: 'employee'
   }
 };
 
 export default function LoginScreen() {
   const {
-    login, connectAccount, loginWithBiometric, bootstrapStore,
-    deviceSettings, updateDeviceSettings, cloudConfigured, online,
-    clearCloudError
+    login, loginEmployee, connectAccount, loginWithBiometric, bootstrapStore,
+    deviceSettings, updateDeviceSettings, cloudConfigured, online, clearCloudError,
+    loginDirectory, loginDirectoryLoading, refreshLoginDirectory
   } = usePos();
   const [mode, setMode] = useState('choose');
   const [pin, setPin] = useState('');
+  const [employeeName, setEmployeeName] = useState('');
+  const [selectedBranchId, setSelectedBranchId] = useState(deviceSettings.activeBranchId || MAIN_BRANCH_ID);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [busyLabel, setBusyLabel] = useState('Memeriksa PIN perangkat...');
+  const [busyLabel, setBusyLabel] = useState('Memeriksa akun...');
   const [biometric, setBiometric] = useState({ available: false, status: 'checking' });
   const [showSetup, setShowSetup] = useState(false);
-  const [showConnect, setShowConnect] = useState(false);
-  const autoPromptedRef = useRef('');
+  const [showOwnerConnect, setShowOwnerConnect] = useState(false);
 
+  const branches = useMemo(() => {
+    const rows = (loginDirectory?.branches || []).filter(item => item?.id && item.active !== false);
+    return rows.length ? rows : [{ id: MAIN_BRANCH_ID, name: 'Pusat BUMI MAKMUR', active: true }];
+  }, [loginDirectory]);
   const activeRole = ROLE_CONFIG[mode] || null;
-  const biometricEnabled = Boolean(
-    deviceSettings.biometricEnabled &&
-    deviceSettings.biometricUserId &&
-    biometric.available
-  );
+  const biometricEnabled = Boolean(deviceSettings.biometricEnabled && deviceSettings.biometricUserId && biometric.available);
   const biometricMatchesMode = !deviceSettings.biometricRole || deviceSettings.biometricRole === mode;
 
   useEffect(() => {
+    void refreshLoginDirectory();
     let active = true;
     void getBiometricAvailability().then(result => {
       if (active) setBiometric(result || { available: false, status: 'unknown' });
     });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!branches.some(branch => branch.id === selectedBranchId)) setSelectedBranchId(branches[0]?.id || MAIN_BRANCH_ID);
+  }, [branches, selectedBranchId]);
 
   const selectMode = nextMode => {
     clearCloudError?.();
@@ -73,50 +77,43 @@ export default function LoginScreen() {
   };
 
   const runBiometric = async () => {
-    if (!activeRole || !biometricEnabled || busy) return;
+    if (!activeRole || !biometricEnabled || !biometricMatchesMode || busy) return;
     setBusy(true);
-    setBusyLabel('Menunggu verifikasi biometrik...');
+    setBusyLabel('Menunggu sidik jari atau pengenalan wajah...');
     setError('');
     try {
       const result = await authenticateBiometric({
         title: activeRole.title,
-        subtitle: 'Gunakan sidik jari atau pengenalan wajah perangkat.'
+        subtitle: 'Verifikasi biometrik hanya dimulai setelah tombol ini ditekan.'
       });
       if (!result?.success) {
         if (!result?.cancelled) setError(result?.error || 'Biometrik tidak berhasil. Gunakan PIN.');
         return;
       }
-      const loginResult = await loginWithBiometric(deviceSettings.biometricUserId, activeRole.expectedRole);
+      const loginResult = await loginWithBiometric(deviceSettings.biometricUserId, activeRole.expectedRole, { branchId: selectedBranchId });
       if (!loginResult.success) setError(loginResult.message || 'Akun biometrik tidak tersedia untuk halaman ini.');
     } catch (biometricError) {
       setError(biometricError?.message || 'Biometrik gagal. Gunakan PIN.');
     } finally {
       setBusy(false);
-      setBusyLabel('Memeriksa PIN perangkat...');
+      setBusyLabel('Memeriksa akun...');
     }
   };
 
   useEffect(() => {
-    if (
-      mode === 'choose' || !biometricEnabled || !biometricMatchesMode ||
-      !deviceSettings.biometricAutoPrompt || autoPromptedRef.current === mode
-    ) return undefined;
-    autoPromptedRef.current = mode;
-    const timer = window.setTimeout(() => { void runBiometric(); }, 450);
-    return () => window.clearTimeout(timer);
-  }, [mode, biometricEnabled, biometricMatchesMode, deviceSettings.biometricAutoPrompt]);
-
-  useEffect(() => {
     if (!activeRole || pin.length !== 4) return undefined;
+    if (mode === 'employee' && !employeeName.trim()) return undefined;
     let cancelled = false;
     const verify = async () => {
       setBusy(true);
       setBusyLabel(online ? `Membuka ${activeRole.title.replace('Login ', '')}...` : 'Membuka data offline...');
       setError('');
       try {
-        const result = await login(pin, activeRole.expectedRole);
+        const result = mode === 'employee'
+          ? await loginEmployee({ loginName: employeeName, pin, branchId: selectedBranchId })
+          : await login(pin, 'owner', { branchId: selectedBranchId });
         if (!cancelled && !result.success) {
-          setError(result.message || 'PIN tidak dikenali.');
+          setError(result.message || 'Data login tidak dikenali.');
           setPin('');
         }
       } catch (loginError) {
@@ -130,13 +127,20 @@ export default function LoginScreen() {
     };
     void verify();
     return () => { cancelled = true; };
-  }, [pin, activeRole, login, online]);
+  }, [pin, mode, employeeName, selectedBranchId, activeRole, login, loginEmployee, online]);
 
   const press = value => {
     if (pin.length < 4 && !busy) {
       setPin(previous => previous + value);
       setError('');
     }
+  };
+
+  const chooseBranch = value => {
+    setSelectedBranchId(value);
+    updateDeviceSettings({ activeBranchId: value });
+    setPin('');
+    setError('');
   };
 
   return (
@@ -163,14 +167,18 @@ export default function LoginScreen() {
               pin={pin}
               error={error}
               busy={busy}
-              storeCode={deviceSettings.storeCode || ''}
-              onStoreCodeChange={value => updateDeviceSettings({ storeCode: value.toUpperCase().replace(/\s+/g, '') })}
+              branches={branches}
+              selectedBranchId={selectedBranchId}
+              onBranchChange={chooseBranch}
+              directoryLoading={loginDirectoryLoading}
+              employeeName={employeeName}
+              onEmployeeNameChange={value => { setEmployeeName(value); setPin(''); setError(''); }}
               onPress={press}
               onErase={() => { setPin(value => value.slice(0, -1)); setError(''); }}
               onBack={goBack}
               biometricEnabled={biometricEnabled && biometricMatchesMode}
               onBiometric={() => void runBiometric()}
-              onConnect={() => setShowConnect(true)}
+              onOwnerConnect={() => setShowOwnerConnect(true)}
               onSetup={() => setShowSetup(true)}
               online={online}
               cloudConfigured={cloudConfigured}
@@ -180,16 +188,15 @@ export default function LoginScreen() {
 
         <div className="px-5 sm:px-7 py-4 bg-slate-50 border-t border-slate-100 text-xs text-slate-600 flex gap-2">
           <ShieldCheck size={18} className="text-emerald-700 shrink-0"/>
-          <p><b className="text-slate-800">Firebase Spark gratis.</b> Transaksi tetap dapat berjalan offline setelah perangkat berhasil dihubungkan sekali.</p>
+          <p><b className="text-slate-800">Firebase Spark gratis.</b> Karyawan cukup memakai nama dan PIN setelah akun dibuat Owner atau Store Manager.</p>
         </div>
       </div>
 
-      {showConnect && activeRole && (
-        <ConnectAccountModal
-          mode={mode}
-          role={activeRole}
-          onClose={() => setShowConnect(false)}
+      {showOwnerConnect && (
+        <ConnectOwnerModal
+          onClose={() => setShowOwnerConnect(false)}
           onConnect={connectAccount}
+          branchId={selectedBranchId}
         />
       )}
       {showSetup && (
@@ -210,7 +217,7 @@ function ConnectionStatus({ online }) {
       {online ? <Cloud size={20} className="shrink-0"/> : <WifiOff size={20} className="shrink-0"/>}
       <div>
         <p className="font-bold text-sm">{online ? 'Internet tersedia' : 'Mode offline aktif'}</p>
-        <p className="text-xs leading-relaxed">{online ? 'Login cloud dan sinkronisasi siap digunakan.' : 'Gunakan PIN akun yang sebelumnya sudah tersimpan di perangkat ini.'}</p>
+        <p className="text-xs leading-relaxed">{online ? 'Login cloud dan sinkronisasi siap digunakan.' : 'Login offline tersedia untuk akun yang sebelumnya sudah tersimpan pada perangkat ini.'}</p>
       </div>
     </div>
   );
@@ -220,163 +227,114 @@ function LoginChooser({ onSelect, cloudConfigured }) {
   return (
     <div>
       <div className="text-center mb-4">
-        <h2 className="font-black text-xl text-gray-900">Masuk sebagai siapa?</h2>
-        <p className="text-sm text-gray-500 mt-1">Owner dan karyawan memakai halaman login yang berbeda.</p>
+        <h2 className="font-black text-xl text-gray-900">Pilih jenis akun</h2>
+        <p className="text-sm text-gray-500 mt-1">Owner dan karyawan memiliki alur login terpisah.</p>
       </div>
       <div className="space-y-3">
         <button onClick={() => onSelect('owner')} className="login-role-card owner-card w-full text-left">
           <span className="login-role-icon"><BriefcaseBusiness size={26}/></span>
-          <span className="flex-1 min-w-0">
-            <b className="block text-base">Login Owner</b>
-            <small>Pengaturan, laporan, karyawan, cabang, dan seluruh data toko.</small>
-          </span>
+          <span className="flex-1 min-w-0"><b className="block text-base">Login Owner</b><small>Seluruh cabang, laporan, pengaturan, dan hak akses.</small></span>
           <Store size={21} className="shrink-0 opacity-60"/>
         </button>
         <button onClick={() => onSelect('employee')} className="login-role-card employee-card w-full text-left">
           <span className="login-role-icon"><UsersRound size={26}/></span>
-          <span className="flex-1 min-w-0">
-            <b className="block text-base">Login Karyawan</b>
-            <small>Store Manager atau Kasir dengan PIN 4 digit dan biometrik.</small>
-          </span>
+          <span className="flex-1 min-w-0"><b className="block text-base">Login Karyawan</b><small>Pilih cabang, masukkan nama, lalu PIN 4 digit.</small></span>
           <UserRound size={21} className="shrink-0 opacity-60"/>
         </button>
       </div>
-      {!cloudConfigured && (
-        <p className="mt-4 text-xs font-bold text-orange-800 bg-orange-50 border border-orange-100 p-3 rounded-xl">
-          Konfigurasi Firebase belum terpasang pada build ini. Mode lokal tetap tersedia untuk pengujian.
-        </p>
-      )}
+      {!cloudConfigured && <p className="mt-4 text-xs font-bold text-orange-800 bg-orange-50 border border-orange-100 p-3 rounded-xl">Konfigurasi Firebase belum terpasang pada build ini. Mode lokal hanya untuk pengujian.</p>}
     </div>
   );
 }
 
 function RoleLogin({
-  mode, role, pin, error, busy, storeCode, onStoreCodeChange, onPress, onErase,
-  onBack, biometricEnabled, onBiometric, onConnect, onSetup, online, cloudConfigured
+  mode, role, pin, error, busy, branches, selectedBranchId, onBranchChange, directoryLoading,
+  employeeName, onEmployeeNameChange, onPress, onErase, onBack, biometricEnabled,
+  onBiometric, onOwnerConnect, onSetup, online, cloudConfigured
 }) {
   const RoleIcon = role.icon;
   const isOwner = mode === 'owner';
   return (
     <div>
-      <button onClick={onBack} className="inline-flex items-center gap-2 min-h-[42px] text-sm font-bold text-gray-600 mb-2">
-        <ArrowLeft size={18}/> Pilih jenis login
-      </button>
-
+      <button onClick={onBack} className="inline-flex items-center gap-2 min-h-[42px] text-sm font-bold text-gray-600 mb-2"><ArrowLeft size={18}/> Pilih jenis login</button>
       <div className={`rounded-2xl p-4 mb-4 flex gap-3 ${isOwner ? 'bg-emerald-50 text-emerald-900' : 'bg-blue-50 text-blue-900'}`}>
         <span className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${isOwner ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'}`}><RoleIcon size={23}/></span>
         <div><h2 className="font-black text-lg">{role.title}</h2><p className="text-xs leading-relaxed mt-0.5">{role.subtitle}</p></div>
       </div>
 
-      <Field label="Kode Toko">
-        <Input
-          value={storeCode}
-          onChange={event => onStoreCodeChange(event.target.value)}
-          placeholder="BUMIMAKMUR"
-          autoCapitalize="characters"
-          autoCorrect="off"
-          spellCheck="false"
-          className="font-bold tracking-wider uppercase"
-          disabled={busy}
-        />
+      <Field label="Toko / Cabang" hint={directoryLoading ? 'Memuat daftar cabang...' : 'Cabang menentukan data dan stok yang dibuka.'}>
+        <Select value={selectedBranchId} onChange={event => onBranchChange(event.target.value)} disabled={busy || directoryLoading}>
+          {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+        </Select>
       </Field>
+
+      {!isOwner && (
+        <Field label="Nama Login Karyawan" hint="Gunakan nama login yang dibuat dari Pengaturan Owner/Manager.">
+          <Input value={employeeName} onChange={event => onEmployeeNameChange(event.target.value)} placeholder="Contoh: andi kasir" autoComplete="username" disabled={busy}/>
+        </Field>
+      )}
 
       <div className="mt-4 text-center">
         <p className="text-xs font-bold text-gray-500 mb-3">Masukkan PIN 4 digit {isOwner ? 'Owner' : 'Karyawan'}</p>
         <div className="flex justify-center gap-4 mb-4" aria-label={`${pin.length} dari 4 digit PIN terisi`}>
-          {[0, 1, 2, 3].map(index => <span key={index} className={`w-3 h-3 rounded-full ${index < pin.length ? (isOwner ? 'bg-emerald-600' : 'bg-blue-600') : 'bg-gray-200'}`}/>)}
+          {[0,1,2,3].map(index => <span key={index} className={`w-3 h-3 rounded-full ${index < pin.length ? (isOwner ? 'bg-emerald-600' : 'bg-blue-600') : 'bg-gray-200'}`}/>)}
         </div>
         {error && <ErrorBox text={error}/>} 
-        <PinPad onPress={onPress} onErase={onErase} busy={busy} accent={isOwner ? 'emerald' : 'blue'}/>
+        <PinPad onPress={onPress} onErase={onErase} busy={busy || (!isOwner && !employeeName.trim())} accent={isOwner ? 'emerald' : 'blue'}/>
       </div>
 
       {biometricEnabled && (
         <button onClick={onBiometric} disabled={busy} className={`mt-4 w-full min-h-[54px] rounded-2xl font-bold flex items-center justify-center gap-3 disabled:opacity-60 ${isOwner ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-blue-50 border border-blue-200 text-blue-800'}`}>
-          <Fingerprint size={23}/><ScanFace size={23}/><span>Buka dengan Biometrik</span>
+          <Fingerprint size={23}/><ScanFace size={23}/><span>Masuk dengan Sidik Jari / Face ID</span>
         </button>
       )}
+      <p className="text-[11px] text-center text-gray-500 mt-2">Biometrik tidak akan muncul otomatis. Verifikasi hanya dimulai setelah tombol ditekan.</p>
 
-      <div className="mt-4 pt-4 border-t border-gray-100">
-        <button onClick={onConnect} disabled={busy || !online || !cloudConfigured} className="w-full min-h-[50px] rounded-xl text-sm font-bold text-blue-700 bg-blue-50 border border-blue-100 flex items-center justify-center gap-2 disabled:opacity-40">
-          <Link2 size={18}/> {isOwner ? 'Masuk Owner dengan Email' : 'Hubungkan Perangkat Karyawan'}
-        </button>
-        {isOwner && (
-          <button onClick={onSetup} disabled={busy || !online || !cloudConfigured} className="mt-2 w-full min-h-[48px] rounded-xl text-sm font-bold text-gray-700 bg-gray-50 border border-gray-200 flex items-center justify-center gap-2 disabled:opacity-40">
-            <ServerCog size={18}/> Setup Toko Pertama Kali
-          </button>
-        )}
-        <p className="text-[11px] text-gray-500 mt-2 text-center leading-relaxed">
-          {isOwner
-            ? 'Email Owner digunakan saat perangkat baru atau sesi cloud perlu dihubungkan ulang.'
-            : 'Karyawan memakai email dan password sementara satu kali, lalu membuat PIN perangkat sendiri.'}
-        </p>
-      </div>
+      {isOwner && (
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <button onClick={onOwnerConnect} disabled={busy || !online || !cloudConfigured} className="w-full min-h-[50px] rounded-xl text-sm font-bold text-blue-700 bg-blue-50 border border-blue-100 flex items-center justify-center gap-2 disabled:opacity-40"><Link2 size={18}/> Masuk Owner dengan Email</button>
+          <button onClick={onSetup} disabled={busy || !online || !cloudConfigured} className="mt-2 w-full min-h-[48px] rounded-xl text-sm font-bold text-gray-700 bg-gray-50 border border-gray-200 flex items-center justify-center gap-2 disabled:opacity-40"><ServerCog size={18}/> Setup Toko Pertama Kali</button>
+          <p className="text-[11px] text-gray-500 mt-2 text-center leading-relaxed">Email Owner hanya diperlukan pada perangkat baru atau saat sesi cloud perlu dihubungkan ulang.</p>
+        </div>
+      )}
     </div>
   );
 }
 
 function PinPad({ onPress, onErase, busy, accent }) {
   const activeClass = accent === 'blue' ? 'active:bg-blue-100' : 'active:bg-emerald-100';
-  return (
-    <div className="grid grid-cols-3 gap-3">
-      {[1,2,3,4,5,6,7,8,9].map(value => (
-        <button key={value} disabled={busy} onClick={() => onPress(String(value))} className={`pin-key ${activeClass}`}>{value}</button>
-      ))}
-      <div aria-hidden="true"/>
-      <button disabled={busy} onClick={() => onPress('0')} className={`pin-key ${activeClass}`}>0</button>
-      <button disabled={busy} onClick={onErase} aria-label="Hapus digit terakhir" className="pin-key bg-orange-50 border-orange-100 text-orange-600"><Trash2 size={22}/></button>
-    </div>
-  );
+  return <div className="grid grid-cols-3 gap-3">{[1,2,3,4,5,6,7,8,9].map(value => <button key={value} disabled={busy} onClick={() => onPress(String(value))} className={`pin-key ${activeClass}`}>{value}</button>)}<div aria-hidden="true"/><button disabled={busy} onClick={() => onPress('0')} className={`pin-key ${activeClass}`}>0</button><button disabled={busy} onClick={onErase} aria-label="Hapus digit terakhir" className="pin-key bg-orange-50 border-orange-100 text-orange-600"><Trash2 size={22}/></button></div>;
 }
 
 function BusyOverlay({ label }) {
   return <div className="absolute inset-0 bg-white/95 z-20 flex flex-col items-center justify-center p-6 text-center"><Loader2 className="animate-spin text-emerald-600" size={42}/><p className="font-bold mt-3 text-gray-700">{label}</p></div>;
 }
 
-function ConnectAccountModal({ mode, role, onClose, onConnect }) {
-  const isOwner = mode === 'owner';
+function ConnectOwnerModal({ onClose, onConnect, branchId }) {
   const [form, setForm] = useState({ email: '', password: '', pin: '', confirmPin: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async () => {
-    if (!form.email || !form.password) return setError('Email dan password wajib diisi.');
-    if (!/^\d{4}$/.test(form.pin)) return setError('Buat PIN perangkat 4 digit.');
+    if (!form.email || !form.password) return setError('Email dan password Owner wajib diisi.');
+    if (!/^\d{4}$/.test(form.pin)) return setError('Buat PIN Owner 4 digit pada perangkat ini.');
     if (form.pin !== form.confirmPin) return setError('Konfirmasi PIN tidak sama.');
     setBusy(true); setError('');
-    try {
-      await onConnect({ ...form, expectedRole: role.expectedRole });
-      onClose();
-    } catch (connectError) {
-      setError(friendlyCloudError(connectError, 'Akun cloud gagal dihubungkan.'));
-    } finally {
-      setBusy(false);
-    }
+    try { await onConnect({ ...form, branchId }); onClose(); }
+    catch (connectError) { setError(friendlyCloudError(connectError, 'Akun Owner gagal dihubungkan.')); }
+    finally { setBusy(false); }
   };
-  return (
-    <ModalShell
-      title={isOwner ? 'Masuk Owner dengan Email' : 'Hubungkan Perangkat Karyawan'}
-      subtitle={isOwner ? 'Gunakan akun Owner Firebase' : 'Gunakan akun yang dibuat Owner dari menu Pengaturan'}
-      onClose={onClose}
-    >
-      {error && <ErrorBox text={error}/>} 
-      <Field label={isOwner ? 'Email Owner' : 'Email Karyawan'}><Input type="email" autoComplete="username" value={form.email} onChange={event => setForm({...form,email:event.target.value})} placeholder="nama@contoh.com"/></Field>
-      <Field label="Password Firebase"><Input type="password" autoComplete="current-password" value={form.password} onChange={event => setForm({...form,password:event.target.value})}/></Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="PIN Perangkat"><Input type="password" inputMode="numeric" maxLength="4" value={form.pin} onChange={event => setForm({...form,pin:event.target.value.replace(/\D/g,'')})} placeholder="4 digit"/></Field>
-        <Field label="Ulangi PIN"><Input type="password" inputMode="numeric" maxLength="4" value={form.confirmPin} onChange={event => setForm({...form,confirmPin:event.target.value.replace(/\D/g,'')})} placeholder="4 digit"/></Field>
-      </div>
-      <div className="p-3 rounded-xl bg-slate-50 border text-xs text-slate-600 flex gap-2"><KeyRound size={17} className="shrink-0"/><p>PIN hanya disimpan secara aman pada perangkat ini. Password tidak ditampilkan di halaman login harian.</p></div>
-      <button onClick={submit} disabled={busy} className="w-full min-h-[52px] bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-        {busy ? <Loader2 className="animate-spin"/> : <KeyRound size={18}/>} Hubungkan & Masuk
-      </button>
-    </ModalShell>
-  );
+  return <ModalShell title="Masuk Owner dengan Email" subtitle="Digunakan sekali pada perangkat baru" onClose={onClose}>
+    {error && <ErrorBox text={error}/>} 
+    <Field label="Email Owner"><Input type="email" autoComplete="username" value={form.email} onChange={event => setForm({...form,email:event.target.value})} placeholder="owner@contoh.com"/></Field>
+    <Field label="Password Firebase"><Input type="password" autoComplete="current-password" value={form.password} onChange={event => setForm({...form,password:event.target.value})}/></Field>
+    <div className="grid grid-cols-2 gap-3"><Field label="PIN Owner"><Input type="password" inputMode="numeric" maxLength="4" value={form.pin} onChange={event => setForm({...form,pin:event.target.value.replace(/\D/g,'')})} placeholder="4 digit"/></Field><Field label="Ulangi PIN"><Input type="password" inputMode="numeric" maxLength="4" value={form.confirmPin} onChange={event => setForm({...form,confirmPin:event.target.value.replace(/\D/g,'')})} placeholder="4 digit"/></Field></div>
+    <div className="p-3 rounded-xl bg-slate-50 border text-xs text-slate-600 flex gap-2"><KeyRound size={17} className="shrink-0"/><p>PIN Owner disimpan aman pada perangkat untuk login harian. Password Firebase tidak ditampilkan kembali.</p></div>
+    <button onClick={submit} disabled={busy} className="w-full min-h-[52px] bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">{busy ? <Loader2 className="animate-spin"/> : <KeyRound size={18}/>} Hubungkan & Masuk</button>
+  </ModalShell>;
 }
 
 function BootstrapModal({ onClose, onBootstrap, configured, initialStoreCode }) {
-  const [form, setForm] = useState({
-    storeCode: initialStoreCode || 'BUMIMAKMUR', businessName: 'BUMI MAKMUR', branchName: 'Bumi Makmur Pusat',
-    branchAddress: '', branchPhone: '', ownerName: 'Bapak Owner', ownerEmail: '', ownerPassword: '', ownerPin: ''
-  });
+  const [form, setForm] = useState({ storeCode: initialStoreCode || 'BUMIMAKMUR', businessName: 'BUMI MAKMUR', branchName: 'Bumi Makmur Pusat', branchAddress: '', branchPhone: '', ownerName: 'Bapak Owner', ownerEmail: '', ownerPassword: '', ownerPin: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async () => {
@@ -402,19 +360,12 @@ function BootstrapModal({ onClose, onBootstrap, configured, initialStoreCode }) 
       <Field label="Password Owner (min. 6)"><Input type="password" value={form.ownerPassword} onChange={event=>setForm({...form,ownerPassword:event.target.value})}/></Field>
       <Field label="PIN Harian 4 Digit"><Input type="password" inputMode="numeric" maxLength="4" value={form.ownerPin} onChange={event=>setForm({...form,ownerPin:event.target.value.replace(/\D/g,'')})}/></Field>
     </div>
-    <button onClick={submit} disabled={busy} className="w-full mt-4 min-h-[52px] bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-      {busy ? <Loader2 className="animate-spin"/> : <UserRoundPlus size={18}/>} Buat Toko & Owner
-    </button>
+    <button onClick={submit} disabled={busy} className="w-full mt-4 min-h-[52px] bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50">{busy ? <Loader2 className="animate-spin"/> : <UserRoundPlus size={18}/>} Buat Toko & Owner</button>
   </ModalShell>;
 }
 
 function ModalShell({ title, subtitle, onClose, wide = false, children }) {
-  return <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4">
-    <div className={`bg-white w-full ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-t-3xl md:rounded-3xl shadow-2xl overflow-hidden max-h-[94vh] flex flex-col`}>
-      <div className="p-5 border-b flex justify-between items-center shrink-0"><div className="pr-3"><p className="font-black text-lg">{title}</p><p className="text-xs text-gray-500 mt-0.5">{subtitle}</p></div><button onClick={onClose} aria-label="Tutup" className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center shrink-0"><X/></button></div>
-      <div className="p-5 space-y-3 overflow-y-auto pb-safe">{children}</div>
-    </div>
-  </div>;
+  return <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4"><div className={`bg-white w-full ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-t-3xl md:rounded-3xl shadow-2xl overflow-hidden max-h-[94vh] flex flex-col`}><div className="p-5 border-b flex justify-between items-center shrink-0"><div className="pr-3"><p className="font-black text-lg">{title}</p><p className="text-xs text-gray-500 mt-0.5">{subtitle}</p></div><button onClick={onClose} aria-label="Tutup" className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center shrink-0"><X/></button></div><div className="p-5 space-y-3 overflow-y-auto pb-safe">{children}</div></div></div>;
 }
 
 function ErrorBox({ text }) {

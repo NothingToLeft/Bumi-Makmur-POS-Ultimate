@@ -4,11 +4,11 @@ import { access, readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('v4.4 memakai Firebase Spark Auth dan Firestore tanpa layanan berbayar', async () => {
+test('v4.5 memakai Firebase Spark Auth dan Firestore tanpa layanan berbayar', async () => {
   const pkg = JSON.parse(await read('package.json'));
   const firebase = await read('src/services/firebase.js');
   const firebaseJson = JSON.parse(await read('firebase.json'));
-  assert.equal(pkg.version, '4.4.0');
+  assert.equal(pkg.version, '4.5.0');
   assert.ok(pkg.dependencies.firebase);
   assert.match(firebase, /persistentLocalCache/);
   assert.match(firebase, /persistentMultipleTabManager/);
@@ -21,7 +21,7 @@ test('web app shell mendukung reload offline tanpa memaksa splash atau reload be
   const main = await read('src/main.jsx');
   const sw = await read('public/sw.js');
   assert.match(main, /serviceWorker\.register\('\/sw\.js'\)/);
-  assert.match(sw, /freesync-v4\.4\.0/);
+  assert.match(sw, /freesync-v4\.5\.0/);
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /stale-while-revalidate/i);
   assert.doesNotMatch(sw, /location\.reload/);
@@ -62,15 +62,15 @@ test('mutasi Firestore langsung bersifat atomik, idempotent, dan conflict-aware'
   assert.doesNotMatch(store, /httpsCallable|firebase\/functions/);
 });
 
-test('login cloud, bootstrap, karyawan, dan reset password berjalan tanpa Cloud Functions', async () => {
+test('login cloud, bootstrap, nama + PIN karyawan, dan hapus akun berjalan tanpa Cloud Functions', async () => {
   const auth = await read('src/services/cloudAuth.js');
-  for (const token of ['signInWithEmailAndPassword', 'createUserWithEmailAndPassword', 'sendPasswordResetEmail', 'runTransaction']) {
+  for (const token of ['signInWithEmailAndPassword', 'createUserWithEmailAndPassword', 'updatePassword', 'deleteUser', 'runTransaction']) {
     assert.match(auth, new RegExp(token));
   }
+  assert.match(auth, /connectEmployeeWithNamePin/);
+  assert.match(auth, /employeeLoginDirectory/);
   assert.match(auth, /secondaryApp/);
-  assert.match(auth, /deleteUser/);
-  assert.match(auth, /akun Firebase Auth yatim/i);
-  assert.doesNotMatch(auth, /httpsCallable|firebase\/functions/);
+  assert.doesNotMatch(auth, /sendPasswordResetEmail|httpsCallable|firebase\/functions/);
 });
 
 test('logo dan QRIS dikompres lokal, bukan diunggah ke Firebase Storage', async () => {

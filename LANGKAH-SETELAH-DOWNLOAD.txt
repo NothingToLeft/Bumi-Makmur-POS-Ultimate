@@ -1,32 +1,42 @@
-BUMI MAKMUR POS v4.4 — URUTAN UPDATE
+BUMI MAKMUR POS v4.5 — URUTAN UPDATE
 
 1. BACKUP
-   - Dari APK lama, unduh Backup JSON.
+   - Dari aplikasi lama, unduh Backup JSON.
    - Pastikan antrean offline = 0.
    - Jangan uninstall APK lama.
 
 2. UPDATE GITHUB
-   - Ekstrak ZIP v4.4.
+   - Ekstrak ZIP v4.5.
    - Upload seluruh isi folder project ke repository GitHub yang sama.
    - Timpa file lama dan commit:
-     "Bumi Makmur POS v4.4 professional login employee access UI audit"
+     "Bumi Makmur POS v4.5 branch login name pin manager sync"
 
 3. TEST SOURCE
-   Actions > Build Bumi Makmur POS v4.4 > Run workflow > test-only
-   Target: 65 tests lulus, audit lulus, Vite compile lulus.
+   Actions > Build Bumi Makmur POS v4.5 > Run workflow > test-only
+   Target: 71 tests lulus, audit lulus, dan Vite compile lulus.
 
-4. DEPLOY FIRESTORE RULES — WAJIB SEBELUM MENGUJI KARYAWAN
+4. DEPLOY FIRESTORE RULES — WAJIB
    Actions > Deploy Firebase Spark Rules > Run workflow
-   Workflow hanya deploy Firestore Rules/Indexes pada Firebase Spark.
+   Tahap ini memasang aturan direktori login, pilihan cabang, dan batas Store Manager.
 
 5. BUILD APK
-   Actions > Build Bumi Makmur POS v4.4 > Run workflow > android-release
-   Download artifact Bumi-Makmur-POS-v4.4-Android-Signed.
+   Actions > Build Bumi Makmur POS v4.5 > Run workflow > android-release
+   Download artifact Bumi-Makmur-POS-v4.5-Android-Signed.
 
 6. INSTAL
-   - Pasang app-release.apk di atas APK v4.3.
-   - Jangan uninstall, agar data lokal dan identitas perangkat tetap tersedia.
-   - Login Owner lalu buka Pengaturan > Karyawan untuk membuat akun.
+   - Pasang app-release.apk di atas APK v4.4.
+   - Jangan uninstall agar data lokal dan identitas perangkat tetap tersedia.
+
+7. AKTIFKAN DIREKTORI CABANG
+   - Login Owner sekali setelah update.
+   - Pastikan internet aktif dan tunggu cloud terhubung.
+   - Cabang aktif akan diterbitkan ke pilihan login web/HP.
+
+8. KELOLA KARYAWAN
+   - Buka Pengaturan > Karyawan.
+   - Akun lama perlu diedit dan diberi nama login + PIN baru untuk migrasi.
+   - Owner dapat membuat Manager/Kasir.
+   - Manager hanya dapat membuat/mengelola Kasir cabangnya sendiri.
 
 JANGAN:
 - membuat repository baru;

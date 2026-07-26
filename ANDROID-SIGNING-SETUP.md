@@ -1,4 +1,4 @@
-# Android Signing — Bumi Makmur POS v4.4
+# Android Signing — Bumi Makmur POS v4.5
 
 Package ID tetap:
 
@@ -6,8 +6,8 @@ Package ID tetap:
 app.bumimakmur.pos
 ```
 
-Version name: `4.4.0`  
-Version code: `40400`
+Version name: `4.5.0`  
+Version code: `40500`
 
 ## Gunakan keystore lama
 
@@ -20,14 +20,14 @@ ANDROID_KEY_ALIAS
 ANDROID_KEY_PASSWORD
 ```
 
-Workflow **Build Bumi Makmur POS v4.4** mode `android-release` atau `web-and-android` memakai key tersebut.
+Workflow **Build Bumi Makmur POS v4.5** mode `android-release` atau `web-and-android` memakai key tersebut.
 
 ## Output
 
 Artifact:
 
 ```text
-Bumi-Makmur-POS-v4.4-Android-Signed
+Bumi-Makmur-POS-v4.5-Android-Signed
 ```
 
 Berisi:

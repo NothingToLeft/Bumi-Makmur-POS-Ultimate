@@ -9,6 +9,9 @@ test('halaman login memisahkan Owner dan Karyawan secara tegas', async () => {
   const context = await read('src/store/PosContext.jsx');
   assert.match(login, /Login Owner/);
   assert.match(login, /Login Karyawan/);
+  assert.match(login, /Toko \/ Cabang/);
+  assert.match(login, /Nama Login Karyawan/);
+  assert.match(login, /Biometrik tidak akan muncul otomatis/);
   assert.match(login, /expectedRole: 'owner'/);
   assert.match(login, /expectedRole: 'employee'/);
   assert.match(context, /PIN tersebut milik karyawan/);
@@ -20,8 +23,11 @@ test('akun karyawan dikelola dari Pengaturan dan dibuat lewat Auth sekunder', as
   const admin = await read('src/screens/AdminScreens.jsx');
   const auth = await read('src/services/cloudAuth.js');
   assert.match(settings, /EmployeeManagementPanel/);
-  assert.match(settings, /Karyawan & Hak Akses/);
+  assert.match(settings, /\['employees','Karyawan'\]/);
+  assert.match(admin, /Karyawan & Hak Akses/);
   assert.match(admin, /Karyawan Baru/);
+  assert.match(admin, /Hapus Permanen/);
+  assert.match(admin, /Store Manager dapat membuat dan mengelola Kasir/);
   assert.match(auth, /initializeApp\(firebaseConfig, secondaryName\)/);
   assert.match(auth, /createUserWithEmailAndPassword\(secondaryAuth/);
   assert.doesNotMatch(auth, /firebase\/functions|httpsCallable/);

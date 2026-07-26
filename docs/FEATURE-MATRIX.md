@@ -1,4 +1,4 @@
-# Feature Matrix — Bumi Makmur POS FreeSync v4.4
+# Feature Matrix — Bumi Makmur POS FreeSync v4.5
 
 | Area | Implementasi | Status |
 |---|---|---|
@@ -13,12 +13,12 @@
 | Multi-cabang | Data scope dan branch switch Owner per perangkat | Aktif |
 | Offline | IndexedDB, Firestore persistent cache, PIN offline, durable mutation queue | Aktif setelah pairing pertama |
 | Auto-sync | Otomatis saat online, manual sync, retry bertahap, queue status | Aktif |
-| Konflik | Delta stock/balance/points dan merge payment/return arrays | Aktif |
+| Konflik | Delta/array merge, targeted cloud rebase, retry lintas web–HP tanpa error permanen | Aktif |
 | Cloud gratis | Firebase Auth + Firestore Spark | Aktif setelah konfigurasi |
 | Transaksi cloud | Firestore transaction, optimistic concurrency, idempotency receipt, audit | Aktif |
 | Keamanan | Auth, PIN PBKDF2, AES-GCM credential vault, role/branch rules, approval | Aktif |
-| Login | Halaman Owner/Karyawan terpisah, role guard, PIN dan biometrik per akun | Aktif |
-| Karyawan | Dibuat Owner dari Pengaturan, Auth sekunder, cabang, role, permission, reset password | Aktif |
+| Login | Owner/Karyawan terpisah, pilihan cabang, nama + PIN, biometrik eksplisit | Aktif |
+| Karyawan | Tambah/edit/hapus dari Pengaturan, Auth sekunder, PIN, role, cabang, batas Manager | Aktif |
 | Error cloud | Pesan Firebase ramah pengguna dan UID guard sebelum listener | Aktif |
 | Nota | Cetak 58/80 mm, logo, pesan, WhatsApp, gambar, nota online Firestore | Aktif |
 | Android | Kamera, biometrik, Bluetooth permission, signed APK/AAB | Aktif |

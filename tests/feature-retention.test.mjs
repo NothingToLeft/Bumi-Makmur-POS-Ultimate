@@ -49,7 +49,8 @@ test('pengelolaan karyawan tersedia langsung di Pengaturan Owner', async () => {
   const admin = await read('src/screens/AdminScreens.jsx');
   const login = await read('src/screens/LoginScreen.jsx');
   assert.match(settings, /EmployeeManagementPanel/);
-  assert.match(settings, /Karyawan & Hak Akses/);
+  assert.match(settings, /\['employees','Karyawan'\]/);
+  assert.match(admin, /Karyawan & Hak Akses/);
   assert.match(admin, /export function EmployeeManagementPanel/);
   assert.match(login, /Login Owner/);
   assert.match(login, /Login Karyawan/);
