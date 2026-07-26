@@ -11,7 +11,6 @@ jobs:
   deploy-rules:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -28,14 +27,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           if [ -z "${FIREBASE_PROJECT_ID:-}" ]; then
             echo "::error::VITE_FIREBASE_PROJECT_ID belum tersedia."
             exit 1
           fi
-
-          printf '{"projects":{"default":"%s"}}\n' \
-            "$FIREBASE_PROJECT_ID" > .firebaserc
+          printf '{"projects":{"default":"%s"}}\n' "$FIREBASE_PROJECT_ID" > .firebaserc
 
       - name: Install tools and run tests
         run: |
@@ -43,8 +39,6 @@ jobs:
           npm run test:core
           npm run audit:static
 
-      # Autentikasi dilakukan setelah audit agar file gha-creds sementara
-      # tidak dianggap sebagai secret yang tersimpan di source code.
       - name: Authenticate Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -53,11 +47,7 @@ jobs:
       - name: Deploy Firestore rules and indexes only
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-        run: |
-          npx firebase-tools deploy \
-            --project "$FIREBASE_PROJECT_ID" \
-            --only firestore:rules,firestore:indexes \
-            --non-interactive
+        run: npx firebase-tools deploy --project "$FIREBASE_PROJECT_ID" --only firestore:rules,firestore:indexes --non-interactive
 
       - name: Remove temporary Google credentials
         if: always()
