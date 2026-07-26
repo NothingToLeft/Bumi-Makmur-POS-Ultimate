@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v4.5
+# Bumi Makmur POS FreeSync v4.5.1
 
-Satu source code untuk **Android HP/tablet, web, dan aplikasi PC PWA**. Rilis v4.5 memusatkan perbaikan pada login cabang + nama + PIN, manajemen karyawan dari Pengaturan, Store Manager per cabang, biometrik eksplisit, dan sinkronisasi web–HP yang lebih tahan konflik.
+Satu source code untuk **Android HP/tablet, web, dan aplikasi PC PWA**. Rilis v4.5.1 adalah hotfix khusus sinkronisasi Store Manager, sambil mempertahankan login cabang + nama + PIN, pengelolaan karyawan, biometrik eksplisit, dan sinkronisasi web–HP.
 
 ## Arsitektur tanpa biaya
 
@@ -12,7 +12,7 @@ Satu source code untuk **Android HP/tablet, web, dan aplikasi PC PWA**. Rilis v4
 - PWA dapat dipasang di Windows melalui Chrome/Edge.
 - **Tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.**
 
-## Perubahan utama v4.5
+## Perubahan utama v4.5.1
 
 - Login Owner dan Karyawan tetap terpisah.
 - Karyawan cukup memilih **toko/cabang**, memasukkan **nama login**, lalu **PIN 4 digit**.
@@ -22,7 +22,7 @@ Satu source code untuk **Android HP/tablet, web, dan aplikasi PC PWA**. Rilis v4
 - Store Manager dapat mengelola Kasir pada cabangnya sendiri, tetapi tidak dapat membuat cabang atau mengubah pengaturan global Owner.
 - Cabang baru otomatis masuk ke pilihan login setelah sinkronisasi.
 - Konflik perubahan dari web dan HP direbase otomatis dan dicoba kembali tanpa memenuhi layar dengan error cloud.
-- Firestore Rules membatasi profil, cabang, audit, dan hak pengelolaan karyawan sesuai role.
+- Store Manager sekarang memuat transfer keluar dan masuk menggunakan field cabang yang benar (`sourceBranchId` dan `destinationBranchId`), sehingga Firestore tidak lagi menolak sinkronisasi.
 
 ## Fitur operasional yang dipertahankan
 
@@ -38,7 +38,7 @@ Satu source code untuk **Android HP/tablet, web, dan aplikasi PC PWA**. Rilis v4
 
 ## Pemeriksaan source
 
-- **71/71 core tests lulus.**
+- **72/72 core tests lulus.**
 - **53 file JS/JSX/MJS** lolos pemeriksaan sintaks.
 - Relative import, JSON, secret scan, dan larangan layanan berbayar lolos audit statis.
 
@@ -59,12 +59,12 @@ Workflow GitHub:
 ## Urutan update wajib
 
 1. Backup JSON dari aplikasi lama dan pastikan antrean offline kosong.
-2. Upload isi ZIP v4.5 ke repository GitHub yang sama.
-3. Jalankan **Build Bumi Makmur POS v4.5 → test-only**.
-4. Jalankan **Deploy Firebase Spark Rules** sebelum menguji login nama + PIN.
-5. Setelah hijau, jalankan **android-release** memakai keystore lama.
-6. Pasang APK v4.5 di atas APK v4.4; jangan uninstall.
-7. Login Owner sekali agar daftar cabang login publik diperbarui.
-8. Buka `Pengaturan → Karyawan`, migrasikan akun lama atau buat akun baru, lalu uji login Karyawan.
+2. Upload isi ZIP v4.5.1 ke repository GitHub yang sama.
+3. Jalankan **Build Bumi Makmur POS v4.5.1 → test-only**.
+4. Firestore Rules v4.5 yang sudah hijau tetap kompatibel; **tidak perlu deploy rules ulang** untuk hotfix ini.
+5. Setelah test-only hijau, jalankan **android-release** memakai keystore lama.
+6. Pasang APK v4.5.1 langsung di atas APK v4.5; jangan uninstall.
+7. Cloudflare Pages akan memperbarui versi web otomatis setelah commit masuk ke branch `main`.
+8. Logout lalu login ulang sebagai Store Manager dan pastikan status berubah menjadi **Cloud tersambung**.
 
 > PIN demo lokal hanya untuk pemeriksaan source: Owner `1608`, Manager `2468`, Kasir `1234`. Pada penggunaan cloud, buat akun dari Pengaturan dan gunakan nama login + PIN yang ditentukan Owner/Manager.

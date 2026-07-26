@@ -1,46 +1,12 @@
-BUMI MAKMUR POS v4.5 — URUTAN UPDATE
+BUMI MAKMUR POS v4.5.1 — HOTFIX CLOUD STORE MANAGER
 
-1. BACKUP
-   - Dari aplikasi lama, unduh Backup JSON.
-   - Pastikan antrean offline = 0.
-   - Jangan uninstall APK lama.
-
-2. UPDATE GITHUB
-   - Ekstrak ZIP v4.5.
-   - Upload seluruh isi folder project ke repository GitHub yang sama.
-   - Timpa file lama dan commit:
-     "Bumi Makmur POS v4.5 branch login name pin manager sync"
-
-3. TEST SOURCE
-   Actions > Build Bumi Makmur POS v4.5 > Run workflow > test-only
-   Target: 71 tests lulus, audit lulus, dan Vite compile lulus.
-
-4. DEPLOY FIRESTORE RULES — WAJIB
-   Actions > Deploy Firebase Spark Rules > Run workflow
-   Tahap ini memasang aturan direktori login, pilihan cabang, dan batas Store Manager.
-
-5. BUILD APK
-   Actions > Build Bumi Makmur POS v4.5 > Run workflow > android-release
-   Download artifact Bumi-Makmur-POS-v4.5-Android-Signed.
-
-6. INSTAL
-   - Pasang app-release.apk di atas APK v4.4.
-   - Jangan uninstall agar data lokal dan identitas perangkat tetap tersedia.
-
-7. AKTIFKAN DIREKTORI CABANG
-   - Login Owner sekali setelah update.
-   - Pastikan internet aktif dan tunggu cloud terhubung.
-   - Cabang aktif akan diterbitkan ke pilihan login web/HP.
-
-8. KELOLA KARYAWAN
-   - Buka Pengaturan > Karyawan.
-   - Akun lama perlu diedit dan diberi nama login + PIN baru untuk migrasi.
-   - Owner dapat membuat Manager/Kasir.
-   - Manager hanya dapat membuat/mengelola Kasir cabangnya sendiri.
-
-JANGAN:
-- membuat repository baru;
-- membuat keystore baru bila keystore lama masih ada;
-- upgrade Firebase Blaze atau menambahkan billing;
-- deploy Cloud Functions atau Firebase Storage;
-- commit .env, service account JSON, JKS, APK, AAB, atau password.
+1. Backup JSON dari aplikasi dan jangan uninstall APK lama.
+2. Ekstrak ZIP v4.5.1 lalu upload seluruh isinya ke repository GitHub yang sama.
+3. Commit ke branch main.
+4. Jalankan Actions > Build Bumi Makmur POS v4.5.1 > test-only.
+5. Jika hijau, Cloudflare Pages akan memperbarui web otomatis.
+6. Firestore Rules v4.5 yang sudah hijau tidak perlu dideploy ulang.
+7. Jalankan android-release, unduh artifact Bumi-Makmur-POS-v4.5.1-Android-Signed.
+8. Instal APK di atas v4.5 tanpa uninstall.
+9. Logout Store Manager, login ulang memakai cabang + nama + PIN.
+10. Status yang diharapkan: Cloud tersambung, antrean offline 0, dan data cabang Manager tampil.

@@ -67,3 +67,13 @@ test('konflik lintas perangkat direbase otomatis tanpa dijadikan error permanen'
   assert.match(context, /setCloudError\(''\)/);
   assert.match(cloudStore, /rebaseOperationAgainstRemoteData/);
 });
+
+
+test('Store Manager memuat transfer stok dari cabang sumber dan tujuan tanpa query branchId yang ditolak rules', async () => {
+  const store = await read('src/services/cloudStore.js');
+  assert.match(store, /managerStockTransferQueries/);
+  assert.match(store, /where\('sourceBranchId', '==', profile\.branchId\)/);
+  assert.match(store, /where\('destinationBranchId', '==', profile\.branchId\)/);
+  assert.match(store, /mergeRowsById\(transferRows\.source, transferRows\.destination\)/);
+  assert.match(store, /name === 'stockTransfers' && profile\?\.role === 'manager'/);
+});

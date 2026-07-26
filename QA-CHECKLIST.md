@@ -1,12 +1,12 @@
-# QA Checklist v4.5
+# QA Checklist v4.5.1
 
 ## A. Build dan deploy
 
 - [ ] Workflow `test-only` hijau: 71 tests, audit statis, dan Vite compile.
 - [ ] Workflow `Deploy Firebase Spark Rules` hijau.
 - [ ] Firestore Rules di Firebase Console menunjukkan versi terbaru.
-- [ ] `android-release` menghasilkan APK/AAB signed v4.5.
-- [ ] APK v4.5 dapat dipasang di atas v4.4 tanpa uninstall.
+- [ ] `android-release` menghasilkan APK/AAB signed v4.5.1.1.
+- [ ] APK v4.5.1 dapat dipasang di atas v4.4 tanpa uninstall.
 
 ## B. Login Owner
 
@@ -62,3 +62,10 @@
 - [ ] Nota 58/80 mm, WhatsApp, QRIS, dan nota online.
 - [ ] Mode pesawat tetap dapat transaksi; setelah online antrean kembali 0 tanpa duplikasi.
 - [ ] Ubah data yang sama dari web dan HP; conflict rebase selesai tanpa banner error berulang.
+
+## Hotfix Store Manager
+- [ ] Login Store Manager tidak menampilkan Cloud bermasalah.
+- [ ] Transfer keluar cabang Manager tampil.
+- [ ] Transfer masuk cabang Manager tampil.
+- [ ] Data transfer tidak ganda.
+- [ ] Kasir dan Owner tetap dapat sinkron.

@@ -1,5 +1,19 @@
 # Changelog Bumi Makmur POS
 
+## 4.5.1 — Store Manager Cloud Sync Hotfix
+
+### Sinkronisasi Store Manager
+- Memperbaiki Store Manager yang mendapat pesan `Cloud bermasalah` setelah login.
+- Akar masalah: koleksi transfer stok sebelumnya difilter memakai `branchId`, padahal dokumennya memakai `sourceBranchId` dan `destinationBranchId`.
+- Store Manager sekarang memuat transfer keluar dan transfer masuk cabangnya melalui dua query Firestore yang sesuai Security Rules.
+- Hasil dua query digabung berdasarkan ID sehingga tidak muncul data ganda.
+- Listener realtime Store Manager memakai cakupan cabang yang sama dengan proses pemuatan awal.
+
+### Diagnostik
+- Error listener realtime sekarang mencatat nama koleksi yang gagal di console agar gangguan cloud berikutnya lebih cepat ditemukan.
+- Tidak mengubah Firestore Rules, struktur database, PIN, cabang, maupun data lokal.
+- Owner dan Kasir tetap memakai perilaku sinkronisasi yang sama.
+
 ## 4.5.0 — Branch Login, Name + PIN, Store Manager & Multi-Device Sync
 
 ### Login Owner dan Karyawan

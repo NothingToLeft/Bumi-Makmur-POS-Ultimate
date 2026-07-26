@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "4.5.0",
+  "version": "4.5.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -39,5 +39,5 @@
     "vite": "6.0.7",
     "firebase-tools": "^14.0.0"
   },
-  "description": "Bumi Makmur POS v4.5 Professional FreeSync: Android, Web, dan PC PWA dengan Firebase Auth + Firestore Spark, offline queue, dan hosting Cloudflare Pages."
+  "description": "Bumi Makmur POS v4.5.1 Professional FreeSync: Android, Web, dan PC PWA dengan Firebase Auth + Firestore Spark, offline queue, dan hosting Cloudflare Pages."
 }

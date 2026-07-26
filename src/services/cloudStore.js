@@ -90,6 +90,53 @@ function buildQuery(name, profile, storeId = STORE_ID) {
   return query(base, where('branchId', '==', profile.branchId));
 }
 
+function snapshotRows(snapshot) {
+  return snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+}
+
+function mergeRowsById(...groups) {
+  const merged = new Map();
+  for (const rows of groups) {
+    for (const row of rows || []) merged.set(String(row.id), row);
+  }
+  return [...merged.values()];
+}
+
+function managerStockTransferQueries(profile, storeId = STORE_ID) {
+  if (!profile || profile.role !== 'manager' || !profile.branchId) return [];
+  const base = collectionRef('stockTransfers', storeId);
+  return [
+    query(base, where('sourceBranchId', '==', profile.branchId)),
+    query(base, where('destinationBranchId', '==', profile.branchId))
+  ];
+}
+
+async function loadCollectionRows(name, profile, storeId = STORE_ID) {
+  if (name === 'branches' && profile && profile.role !== 'owner') {
+    if (!profile.branchId) return [];
+    const branchSnapshot = await getDocFromServer(doc(firestore, 'stores', storeId, 'branches', profile.branchId));
+    return branchSnapshot.exists() ? [{ id: branchSnapshot.id, ...branchSnapshot.data() }] : [];
+  }
+
+  if (name === 'stockTransfers' && profile?.role === 'manager') {
+    const transferQueries = managerStockTransferQueries(profile, storeId);
+    if (!transferQueries.length) return [];
+    const snapshots = await Promise.all(transferQueries.map(target => getDocsFromServer(target)));
+    return mergeRowsById(...snapshots.map(snapshotRows));
+  }
+
+  const targetQuery = buildQuery(name, profile, storeId);
+  if (!targetQuery) return [];
+  return snapshotRows(await getDocsFromServer(targetQuery));
+}
+
+function collectionErrorHandler(name, onError) {
+  return error => {
+    console.error(`Sinkronisasi koleksi ${name} gagal.`, error);
+    onError?.(error);
+  };
+}
+
 
 export async function loadPublicLoginDirectory(storeId = STORE_ID) {
   requireCloud();
@@ -132,17 +179,7 @@ export async function loadCloudDb(seed, profile, storeId = STORE_ID) {
     for (const key of SETTINGS_KEYS) if (settings[key] !== undefined) result[key] = settings[key];
   }
   const rows = await Promise.all(
-    CLOUD_ENTITY_COLLECTIONS.map(async name => {
-      if (name === 'branches' && profile && profile.role !== 'owner') {
-        if (!profile.branchId) return [name, []];
-        const branchSnapshot = await getDocFromServer(doc(firestore, 'stores', storeId, 'branches', profile.branchId));
-        return [name, branchSnapshot.exists() ? [{ id: branchSnapshot.id, ...branchSnapshot.data() }] : []];
-      }
-      const targetQuery = buildQuery(name, profile, storeId);
-      if (!targetQuery) return [name, []];
-      const snapshot = await getDocsFromServer(targetQuery);
-      return [name, snapshot.docs.map(item => ({ id: item.id, ...item.data() }))];
-    })
+    CLOUD_ENTITY_COLLECTIONS.map(async name => [name, await loadCollectionRows(name, profile, storeId)])
   );
   for (const [name, items] of rows) result[name] = items;
   return result;
@@ -164,6 +201,7 @@ export function subscribeCloudDb(seed, profile, onChange, onError, storeId = STO
   }, onError));
 
   for (const name of CLOUD_ENTITY_COLLECTIONS) {
+    const handleError = collectionErrorHandler(name, onError);
     if (name === 'branches' && profile && profile.role !== 'owner') {
       if (!profile.branchId) continue;
       const targetRef = doc(firestore, 'stores', storeId, 'branches', profile.branchId);
@@ -171,16 +209,35 @@ export function subscribeCloudDb(seed, profile, onChange, onError, storeId = STO
         if (snapshot.metadata.hasPendingWrites) return;
         state = { ...state, branches: snapshot.exists() ? [{ id: snapshot.id, ...snapshot.data() }] : [] };
         emit();
-      }, onError));
+      }, handleError));
       continue;
     }
+
+    if (name === 'stockTransfers' && profile?.role === 'manager') {
+      const transferQueries = managerStockTransferQueries(profile, storeId);
+      const transferRows = { source: [], destination: [] };
+      const updateTransfers = scope => snapshot => {
+        if (snapshot.metadata.hasPendingWrites) return;
+        transferRows[scope] = snapshotRows(snapshot);
+        state = { ...state, stockTransfers: mergeRowsById(transferRows.source, transferRows.destination) };
+        emit();
+      };
+      if (transferQueries[0]) {
+        unsubscribers.push(onSnapshot(transferQueries[0], { includeMetadataChanges: true }, updateTransfers('source'), handleError));
+      }
+      if (transferQueries[1]) {
+        unsubscribers.push(onSnapshot(transferQueries[1], { includeMetadataChanges: true }, updateTransfers('destination'), handleError));
+      }
+      continue;
+    }
+
     const targetQuery = buildQuery(name, profile, storeId);
     if (!targetQuery) continue;
     unsubscribers.push(onSnapshot(targetQuery, { includeMetadataChanges: true }, snapshot => {
       if (snapshot.metadata.hasPendingWrites) return;
-      state = { ...state, [name]: snapshot.docs.map(item => ({ id: item.id, ...item.data() })) };
+      state = { ...state, [name]: snapshotRows(snapshot) };
       emit();
-    }, onError));
+    }, handleError));
   }
   return () => unsubscribers.forEach(unsubscribe => unsubscribe());
 }

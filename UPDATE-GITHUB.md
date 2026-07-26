@@ -1,21 +1,14 @@
-# Update GitHub ke v4.5
+# Update GitHub ke v4.5.1
 
-1. Backup JSON dan pastikan antrean offline 0.
-2. Ekstrak ZIP v4.5.
-3. Upload seluruh isi ke repository lama dan timpa file yang sama.
-4. Jangan upload `node_modules`, `.env`, JKS, APK, AAB, atau service-account JSON.
-5. Commit:
-
-```text
-Bumi Makmur POS v4.5 professional login employee access UI audit
-```
-
-6. Jalankan berurutan:
+1. Backup data aplikasi ke JSON.
+2. Ekstrak ZIP v4.5.1.
+3. Upload seluruh isi folder ke repository `Bumi-Makmur-POS-Ultimate`, timpa file v4.5.
+4. Commit ke branch `main` dengan pesan:
 
 ```text
-Build Bumi Makmur POS v4.5 → test-only
-Deploy Firebase Spark Rules
-Build Bumi Makmur POS v4.5 → android-release
+Bumi Makmur POS v4.5.1 fix Store Manager cloud stock transfer scope
 ```
 
-Jangan membuat repository atau keystore baru.
+5. Jalankan **Build Bumi Makmur POS v4.5.1 → test-only**.
+6. Tidak perlu deploy ulang Firestore Rules karena rules v4.5 sudah kompatibel.
+7. Jalankan **android-release** untuk APK baru. Cloudflare Pages memperbarui web otomatis.
