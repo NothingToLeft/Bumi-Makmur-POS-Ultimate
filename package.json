@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "5.1.0",
+  "version": "5.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -45,7 +45,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v5.1 Desktop Edition: Windows EXE/MSI, Web, Android, Firebase Spark FreeSync, nama toko dinamis, scanner barcode produk baru, layar pelanggan kedua, dan shortcut kasir.",
+  "description": "Bumi Makmur POS v5.1.1: Desktop Windows EXE/MSI, Android APK/AAB, GitHub Releases otomatis, Web/PWA, Firebase Spark FreeSync, nama toko dinamis, dan scan barcode produk.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

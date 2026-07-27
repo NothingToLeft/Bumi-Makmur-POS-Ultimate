@@ -1,5 +1,17 @@
 # Changelog Bumi Makmur POS
 
+## v5.1.1 — GitHub Releases Otomatis
+
+### Distribusi profesional
+- Menambahkan publikasi otomatis installer Windows EXE/MSI ke menu GitHub Releases.
+- Menambahkan publikasi otomatis APK/AAB Android ke Release yang sama.
+- Release memakai tag versi dari `package.json` dan nama rilis yang konsisten.
+- Build ulang versi yang sama memperbarui aset melalui `--clobber`, bukan membuat duplikat.
+- Menyertakan checksum SHA-256 dan release notes pada hasil build.
+- Actions Artifacts tetap tersedia sebagai cadangan selama 30 hari.
+
+---
+
 ## v5.1.0 — Desktop Windows, Identitas Toko Dinamis, dan Scan Barcode Produk
 
 ### Desktop Windows

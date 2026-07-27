@@ -28,3 +28,8 @@ Unduh artifact `Bumi-Makmur-POS-Desktop-v5.1-Windows`.
 ## Catatan
 
 Installer belum ditandatangani sertifikat komersial sehingga SmartScreen dapat memperingatkan publisher tidak dikenal. Gunakan artifact dari repository sendiri dan cocokkan checksum.
+
+
+## GitHub Releases
+
+Setelah workflow `windows-release` berhasil, installer `.exe`, `.msi`, checksum, dan catatan rilis otomatis tersedia pada menu **Releases** repository. Workflow `android-release` menambahkan APK dan AAB ke tag versi yang sama. Actions Artifact tetap tersedia sebagai cadangan.

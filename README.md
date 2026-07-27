@@ -1,4 +1,4 @@
-# Bumi Makmur POS FreeSync v5.1.0
+# Bumi Makmur POS FreeSync v5.1.1
 
 Satu source code untuk **Windows Desktop, Web/PWA, Android HP, dan tablet**. Rilis v5.1 berfokus pada pengalaman PC profesional, identitas toko yang dapat diganti Owner, input produk melalui scan barcode, dan layar pelanggan kedua—tanpa mengurangi fitur v5.0.
 
@@ -57,7 +57,7 @@ Kasir, open bill, split bill, refund, multi-harga, stok, transfer antarcabang, p
 ### Pemeriksaan umum/Android
 
 ```text
-Actions → Build Bumi Makmur POS v5.1.0 → test-only
+Actions → Build Bumi Makmur POS v5.1.1 → test-only
 ```
 
 Setelah hijau, Cloudflare Pages memperbarui Web otomatis. Firestore Rules v5.0 tetap kompatibel; jalankan **Deploy Firebase Spark Rules** hanya apabila file `firestore.rules` ikut berubah di repository.
@@ -65,7 +65,7 @@ Setelah hijau, Cloudflare Pages memperbarui Web otomatis. Firestore Rules v5.0 t
 Untuk Android:
 
 ```text
-Actions → Build Bumi Makmur POS v5.1.0 → android-release
+Actions → Build Bumi Makmur POS v5.1.1 → android-release
 ```
 
 Instal APK langsung di atas versi lama. Jangan uninstall agar data lokal tetap tersimpan.
@@ -98,3 +98,8 @@ Artifact berisi installer `.exe`, `.msi`, dan `SHA256SUMS.txt`.
 ## Batasan keamanan installer Windows
 
 Installer lokal belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada instalasi pertama. Pastikan file berasal dari artifact GitHub repository sendiri dan cocokkan SHA-256.
+
+
+## GitHub Releases
+
+Setelah workflow `windows-release` berhasil, installer `.exe`, `.msi`, checksum, dan catatan rilis otomatis tersedia pada menu **Releases** repository. Workflow `android-release` menambahkan APK dan AAB ke tag versi yang sama. Actions Artifact tetap tersedia sebagai cadangan.

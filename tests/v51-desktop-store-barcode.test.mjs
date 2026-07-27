@@ -9,7 +9,7 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   const main = await read('electron/main.cjs');
   const preload = await read('electron/preload.cjs');
   const workflow = await read('.github/workflows/build-windows.yml');
-  assert.equal(pkg.version, '5.1.0');
+  assert.equal(pkg.version, '5.1.1');
   assert.equal(pkg.main, 'electron/main.cjs');
   assert.ok(pkg.devDependencies.electron);
   assert.ok(pkg.devDependencies['electron-builder']);
@@ -68,4 +68,21 @@ test('kasir desktop memiliki shortcut dan layar pelanggan kedua', async () => {
   assert.match(pos, /event\.key === 'F9'/);
   assert.match(context, /BroadcastChannel/);
   assert.match(settings, /Buka Layar 2/);
+});
+
+
+test('installer Windows dan Android dipublikasikan otomatis ke GitHub Releases', async () => {
+  const windowsWorkflow = await read('.github/workflows/build-windows.yml');
+  const androidWorkflow = await read('.github/workflows/build-android.yml');
+  for (const workflow of [windowsWorkflow, androidWorkflow]) {
+    assert.match(workflow, /contents:\s*write/);
+    assert.match(workflow, /gh release create/);
+    assert.match(workflow, /gh release upload/);
+    assert.match(workflow, /--clobber/);
+    assert.match(workflow, /github\.token/);
+  }
+  assert.match(windowsWorkflow, /release\/windows\/\*\.exe/);
+  assert.match(windowsWorkflow, /release\/windows\/\*\.msi/);
+  assert.match(androidWorkflow, /release\/android\/\*\.apk/);
+  assert.match(androidWorkflow, /release\/android\/\*\.aab/);
 });

@@ -1,4 +1,4 @@
-name: Build Bumi Makmur POS Desktop v5.1
+name: Build Bumi Makmur POS Desktop v5.1.1
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
           - windows-release
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   desktop:
@@ -85,25 +85,63 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run desktop:dist
 
-      - name: Generate SHA-256 checksums
+      - name: Generate SHA-256 checksums and release metadata
         if: ${{ inputs.build_mode == 'windows-release' }}
         shell: pwsh
         run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
           $files = Get-ChildItem release/windows -File | Where-Object { $_.Extension -in '.exe', '.msi' }
+          if (-not $files) {
+            Write-Error 'Installer EXE/MSI tidak ditemukan.'
+            exit 1
+          }
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($file.Name)"
           }
-          $lines | Set-Content release/windows/SHA256SUMS.txt
+          $lines | Set-Content -Encoding utf8 release/windows/SHA256SUMS-Windows.txt
+          Copy-Item RELEASE-NOTES-Bumi-Makmur-POS-v5.1.1.md release/windows/RELEASE-NOTES.md -Force
 
-      - name: Upload Windows installers
+      - name: Upload Windows installers to Actions artifact
         if: ${{ inputs.build_mode == 'windows-release' }}
         uses: actions/upload-artifact@v6
         with:
-          name: Bumi-Makmur-POS-Desktop-v5.1-Windows
+          name: Bumi-Makmur-POS-Desktop-v5.1.1-Windows
           path: |
             release/windows/*.exe
             release/windows/*.msi
-            release/windows/SHA256SUMS.txt
+            release/windows/SHA256SUMS-Windows.txt
+            release/windows/RELEASE-NOTES.md
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish Windows installers to GitHub Releases
+        if: ${{ inputs.build_mode == 'windows-release' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:RELEASE_TAG
+          $repo = $env:GITHUB_REPOSITORY
+          $notes = 'release/windows/RELEASE-NOTES.md'
+          $title = "Bumi Makmur POS v$env:RELEASE_VERSION"
+
+          gh release view $tag --repo $repo *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $repo --target $env:GITHUB_SHA --title $title --notes-file $notes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            gh release edit $tag --repo $repo --title $title --notes-file $notes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          $assets = @(
+            Get-ChildItem release/windows -File |
+              Where-Object { $_.Extension -in '.exe', '.msi', '.txt' } |
+              Select-Object -ExpandProperty FullName
+          )
+          & gh release upload $tag @assets --clobber --repo $repo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

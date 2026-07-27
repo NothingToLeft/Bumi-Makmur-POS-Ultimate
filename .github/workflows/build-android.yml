@@ -1,4 +1,4 @@
-name: Build Bumi Makmur POS v5.1.0
+name: Build Bumi Makmur POS v5.1.1
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
           - web-and-android
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -92,7 +92,7 @@ jobs:
         if: ${{ inputs.run_mode == 'web-only' || inputs.run_mode == 'web-and-android' }}
         uses: actions/upload-artifact@v6
         with:
-          name: Bumi-Makmur-POS-v5.1-Web-PC-PWA
+          name: Bumi-Makmur-POS-v5.1.1-Web-PC-PWA
           path: dist
           if-no-files-found: error
           retention-days: 30
@@ -141,23 +141,59 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
 
-      - name: Verify release signature
+      - name: Verify signature and prepare Android release assets
         if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
         shell: bash
         run: |
+          set -euo pipefail
           APK="android/app/build/outputs/apk/release/app-release.apk"
+          AAB="android/app/build/outputs/bundle/release/app-release.aab"
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
-          sha256sum "$APK" android/app/build/outputs/bundle/release/app-release.aab > SHA256SUMS.txt
 
-      - name: Upload signed Android release
+          VERSION=$(node -p "require('./package.json').version")
+          echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=v$VERSION" >> "$GITHUB_ENV"
+          mkdir -p release/android
+          cp "$APK" "release/android/Bumi-Makmur-POS-Android-v${VERSION}.apk"
+          cp "$AAB" "release/android/Bumi-Makmur-POS-Android-v${VERSION}.aab"
+          sha256sum release/android/*.apk release/android/*.aab > release/android/SHA256SUMS-Android.txt
+          cp RELEASE-NOTES-Bumi-Makmur-POS-v5.1.1.md release/android/RELEASE-NOTES.md
+
+      - name: Upload signed Android release to Actions artifact
         if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
         uses: actions/upload-artifact@v6
         with:
-          name: Bumi-Makmur-POS-v5.1-Android-Signed
+          name: Bumi-Makmur-POS-v5.1.1-Android-Signed
           path: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/bundle/release/app-release.aab
-            SHA256SUMS.txt
+            release/android/*.apk
+            release/android/*.aab
+            release/android/SHA256SUMS-Android.txt
+            release/android/RELEASE-NOTES.md
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish APK and AAB to GitHub Releases
+        if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TITLE="Bumi Makmur POS v${RELEASE_VERSION}"
+          NOTES="release/android/RELEASE-NOTES.md"
+
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "$TITLE" \
+              --notes-file "$NOTES" || true
+          fi
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file "$NOTES"
+          gh release upload "$RELEASE_TAG" \
+            release/android/*.apk \
+            release/android/*.aab \
+            release/android/SHA256SUMS-Android.txt \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"

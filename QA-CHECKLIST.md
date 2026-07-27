@@ -1,4 +1,4 @@
-# QA Checklist Bumi Makmur POS v5.1.0
+# QA Checklist Bumi Makmur POS v5.1.1
 
 ## Build dan versi
 - [ ] `npm run test:core` lulus seluruh test.
@@ -6,7 +6,7 @@
 - [ ] `npm run build` berhasil.
 - [ ] Workflow Android `test-only` hijau.
 - [ ] Workflow Windows `windows-release` menghasilkan EXE, MSI, dan checksum.
-- [ ] Cloudflare Pages branch `main` berstatus Success dan menampilkan v5.1.0.
+- [ ] Cloudflare Pages branch `main` berstatus Success dan menampilkan v5.1.1.
 
 ## Identitas toko dinamis
 - [ ] Owner dapat membuka Pengaturan → Bisnis.
