@@ -78,6 +78,10 @@ function publicLoginRef(storeId = STORE_ID) {
   return doc(firestore, 'stores', storeId, 'public', 'login');
 }
 
+function publicEmployeesRef(branchId, storeId = STORE_ID) {
+  return doc(firestore, 'stores', storeId, 'publicEmployees', String(branchId));
+}
+
 function operationRef(operation, storeId = STORE_ID) {
   return operation.collectionName === '__settings__'
     ? settingsRef(storeId)
@@ -173,6 +177,49 @@ export async function publishPublicLoginDirectory(db, storeId = STORE_ID) {
     updatedAt: serverTimestamp()
   }, { merge: true });
   return { storeId, businessName: String(db?.configs?.companyName || 'BUMI MAKMUR'), loginAppearance, branches };
+}
+
+
+export async function loadPublicEmployeeDirectory(branchId, storeId = STORE_ID) {
+  requireCloud();
+  if (!branchId) return [];
+  const snapshot = await getDocFromServer(publicEmployeesRef(branchId, storeId));
+  if (!snapshot.exists()) return [];
+  const data = snapshot.data() || {};
+  if (data.storeId !== storeId || data.branchId !== branchId || !Array.isArray(data.employees)) return [];
+  return data.employees
+    .filter(item => item?.loginName && item?.name && item.active !== false && ['manager', 'kasir'].includes(item.role))
+    .slice(0, 100)
+    .map(item => ({
+      loginName: String(item.loginName),
+      name: String(item.name),
+      role: item.role === 'manager' ? 'manager' : 'kasir',
+      branchId: String(branchId),
+      active: true
+    }));
+}
+
+export async function publishPublicEmployeeDirectory(db, branchId, storeId = STORE_ID) {
+  requireCloud();
+  if (!auth?.currentUser) throw new Error('Sesi cloud belum tersedia untuk memperbarui daftar karyawan login.');
+  if (!branchId) throw new Error('Cabang daftar karyawan belum dipilih.');
+  const employees = (db?.users || [])
+    .filter(item => item?.branchId === branchId && item.active !== false && ['manager', 'kasir'].includes(item.role) && item.loginName)
+    .slice(0, 100)
+    .map(item => ({
+      loginName: String(item.loginName),
+      name: String(item.name || item.loginName),
+      role: item.role === 'manager' ? 'manager' : 'kasir',
+      active: true
+    }))
+    .sort((first, second) => first.name.localeCompare(second.name, 'id'));
+  await setDoc(publicEmployeesRef(branchId, storeId), {
+    storeId,
+    branchId: String(branchId),
+    employees,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+  return employees.map(item => ({ ...item, branchId: String(branchId) }));
 }
 
 export async function loadCloudDb(seed, profile, storeId = STORE_ID) {

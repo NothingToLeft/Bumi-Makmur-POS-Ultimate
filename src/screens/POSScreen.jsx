@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScanLine, ShoppingCart, Plus, Minus, Trash2, Package, Save, ReceiptText, Star, User, SlidersHorizontal, QrCode, CreditCard, Banknote, WalletCards, Printer, X, MessageCircle, Copy, Share2, CheckCircle2 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
-import { formatRp, generateId, localDateKey } from '../utils/helpers.js';
+import { formatRp, generateId } from '../utils/helpers.js';
+import { formatQuantity, normalizeQuantityStep } from '../utils/fractionalUnits.js';
 import { Badge, Button, Card, Field, Input, Modal, MoneyInput, SearchBox, Select, Textarea } from '../components/ui.jsx';
 import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
 import { copyReceiptText, getReceiptLogo, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
@@ -70,29 +71,14 @@ export default function POSScreen() {
 
   const totals = useMemo(() => {
     const subtotal = cart.reduce((sum, line) => sum + (Number(line.price) * Number(line.qty)) - Number(line.itemDiscount || 0), 0);
-    const today = localDateKey();
-    const promoCandidates = (scoped.promotions || []).filter(promo => promo.active !== false &&
-      (!promo.startDate || promo.startDate <= today) && (!promo.endDate || promo.endDate >= today) && subtotal >= Number(promo.minPurchase || 0))
-      .map(promo => {
-        const eligibleBase = promo.productId
-          ? cart.filter(line => line.productId === promo.productId).reduce((sum, line) => sum + line.price * line.qty - line.itemDiscount, 0)
-          : promo.category
-            ? cart.filter(line => line.category === promo.category).reduce((sum, line) => sum + line.price * line.qty - line.itemDiscount, 0)
-            : subtotal;
-        let discount = promo.type === 'percent' ? eligibleBase * (Number(promo.value || 0) / 100) : Number(promo.value || 0);
-        if (Number(promo.maxDiscount || 0) > 0) discount = Math.min(discount, Number(promo.maxDiscount));
-        return { ...promo, discount: Math.max(0, Math.round(discount)) };
-      }).filter(promo => promo.discount > 0).sort((a, b) => b.discount - a.discount);
-    const appliedPromo = promoCandidates[0] || null;
-    const promoDiscount = appliedPromo?.discount || 0;
-    const loyaltyDiscount = Math.min(Math.max(0, Number(pointsRedeemed || 0)) * Number(db.configs.pointValue || 0), Math.max(0, subtotal - Number(globalDiscount || 0) - promoDiscount));
-    const afterDiscount = Math.max(0, subtotal - Number(globalDiscount || 0) - promoDiscount - loyaltyDiscount);
+    const loyaltyDiscount = Math.min(Math.max(0, Number(pointsRedeemed || 0)) * Number(db.configs.pointValue || 0), Math.max(0, subtotal - Number(globalDiscount || 0)));
+    const afterDiscount = Math.max(0, subtotal - Number(globalDiscount || 0) - loyaltyDiscount);
     const tax = db.configs.taxEnabled ? afterDiscount * (Number(db.configs.taxRate || 0) / 100) : 0;
     const service = db.configs.serviceEnabled ? afterDiscount * (Number(db.configs.serviceRate || 0) / 100) : 0;
     const raw = afterDiscount + tax + service;
     const total = roundTotal(raw, Number(db.configs.roundingStep || 0));
-    return { subtotal, promoDiscount, appliedPromo, loyaltyDiscount, afterDiscount, tax: Math.round(tax), service: Math.round(service), rounding: total - Math.round(raw), total };
-  }, [cart, globalDiscount, pointsRedeemed, db.configs, scoped.promotions]);
+    return { subtotal, promoDiscount: 0, appliedPromo: null, loyaltyDiscount, afterDiscount, tax: Math.round(tax), service: Math.round(service), rounding: total - Math.round(raw), total };
+  }, [cart, globalDiscount, pointsRedeemed, db.configs]);
 
   useEffect(() => {
     setCustomerDisplay({ cart, total: totals.total, customerName: customer?.name || 'Umum', message: notes });
@@ -108,15 +94,18 @@ export default function POSScreen() {
     const conversion = product.conversions?.find(item => item.unit === options.unit);
     const factor = conversion ? Number(conversion.factor) : 1;
     const unit = options.unit || product.baseUnit;
+    const quantityStep = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true) : 1;
+    const qty = Math.max(quantityStep, Number(options.qty || 1));
     const price = options.price ?? priceFor(product, saleType) * factor;
     const line = {
       lineId: generateId('LINE'), productId: product.id, name: product.name, category: product.category, sku: product.sku, barcode: product.barcode,
-      qty: 1, baseQty: factor, unit, factor, basePrice: Math.round(price), modifierAmount: 0, price: Math.round(price), modalPrice: Number(product.modalPrice || 0) * factor,
+      qty, baseQty: qty * factor, unit, factor, quantityStep, allowFractional: product.allowFractional === true && unit === product.baseUnit,
+      basePrice: Math.round(price), modifierAmount: 0, price: Math.round(price), modalPrice: Number(product.modalPrice || 0) * factor,
       itemDiscount: 0, note: '', variant: options.variant || product.variants?.[0]?.name || '', modifiers: [], bundleItems: product.bundleItems || []
     };
     setCart(previous => {
       const existing = previous.find(item => item.productId === line.productId && item.unit === line.unit && item.variant === line.variant && !item.note && !item.itemDiscount);
-      if (existing) return previous.map(item => item.lineId === existing.lineId ? { ...item, qty: item.qty + 1, baseQty: item.baseQty + factor } : item);
+      if (existing) return previous.map(item => item.lineId === existing.lineId ? { ...item, qty: Math.round((item.qty + qty) * 1000) / 1000, baseQty: Math.round((item.baseQty + qty * factor) * 1000) / 1000 } : item);
       return [...previous, line];
     });
   };
@@ -201,7 +190,12 @@ export default function POSScreen() {
   }, [scoped.products, saleType, paymentOpen, holdOpen, splitOpen, scannerOpen, customOpen, editingLine, choosingProduct, receipt]);
 
   const updateLine = updated => setCart(previous => previous.map(line => line.lineId === updated.lineId ? updated : line));
-  const changeQty = (lineId, delta) => setCart(previous => previous.map(line => line.lineId === lineId ? { ...line, qty: Math.max(0, line.qty + delta), baseQty: Math.max(0, line.baseQty + delta * line.factor) } : line).filter(line => line.qty > 0));
+  const changeQty = (lineId, direction) => setCart(previous => previous.map(line => {
+    if (line.lineId !== lineId) return line;
+    const step = Number(line.quantityStep || 1);
+    const qty = Math.max(0, Math.round((Number(line.qty || 0) + direction * step) * 1000) / 1000);
+    return { ...line, qty, baseQty: Math.max(0, Math.round(qty * Number(line.factor || 1) * 1000) / 1000) };
+  }).filter(line => line.qty > 0));
   const clear = () => { setCart([]); setGlobalDiscount(0); setPointsRedeemed(0); setNotes(''); setHeldSaleId(null); };
 
   const saveBill = name => {
@@ -214,9 +208,11 @@ export default function POSScreen() {
     const splitItems = [];
     const remaining = [];
     for (const line of cart) {
-      const splitQty = Math.min(Number(selections[line.lineId] || 0), Number(line.qty));
+      const step = Math.max(0.001, Number(line.quantityStep || 1));
+      const requestedQty = Math.min(Number(selections[line.lineId] || 0), Number(line.qty));
+      const splitQty = Math.round(requestedQty / step) * step;
       if (splitQty > 0) splitItems.push({ ...line, qty: splitQty, baseQty: (line.baseQty / line.qty) * splitQty });
-      const remainQty = line.qty - splitQty;
+      const remainQty = Math.round((line.qty - splitQty) * 1000) / 1000;
       if (remainQty > 0) remaining.push({ ...line, qty: remainQty, baseQty: (line.baseQty / line.qty) * remainQty });
     }
     if (!splitItems.length) throw new Error('Pilih minimal satu item untuk dipisah.');
@@ -230,9 +226,9 @@ export default function POSScreen() {
     if (paid < totals.total) throw new Error('Jumlah pembayaran belum mencukupi.');
     if (credit && !credit.dueDate) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
     const sale = completeSale({
-      items: cart.map(line => ({ ...line, netUnitPrice: Math.max(0, line.price - Number(line.itemDiscount || 0) / Math.max(1, line.qty)) })),
+      items: cart.map(line => ({ ...line, netUnitPrice: Math.max(0, line.price - Number(line.itemDiscount || 0) / Math.max(0.001, Number(line.qty) || 1)) })),
       customerId: customer?.id, customerName: customer?.name || 'Umum', customerPhone: customer?.phone || '', cashierName: currentUser?.name || 'Kasir', saleType, notes, globalDiscount: Number(globalDiscount || 0),
-      promoDiscount: totals.promoDiscount, appliedPromos: totals.appliedPromo ? [{ id: totals.appliedPromo.id, name: totals.appliedPromo.name, discount: totals.appliedPromo.discount }] : [],
+      promoDiscount: 0, appliedPromos: [],
       loyaltyDiscount: totals.loyaltyDiscount, subtotal: Math.round(totals.subtotal), tax: totals.tax, service: totals.service, rounding: totals.rounding, total: totals.total,
       payments, change: Math.max(0, paid - totals.total), heldSaleId, pointsRedeemed: Number(pointsRedeemed || 0)
     });
@@ -247,12 +243,11 @@ export default function POSScreen() {
         {db.configs.loyaltyEnabled && customer && customer.name !== 'Umum (Non-Member)' && <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-yellow-50 border border-yellow-100 text-xs"><span className="font-bold text-yellow-800">Poin tersedia: {customer.points || 0}</span><div className="flex items-center gap-1"><span>Tukar</span><Input type="number" min="0" max={customer.points || 0} value={pointsRedeemed} onChange={event => setPointsRedeemed(Math.min(Number(customer.points || 0), Math.max(0, Number(event.target.value || 0))))} className="w-20 min-h-[36px] py-1 text-right"/></div></div>}
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-        {cart.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-gray-400"><ShoppingCart size={48} className="mb-3 opacity-40"/><p className="font-bold">Keranjang kosong</p><p className="text-xs mt-1">Pilih produk untuk mulai transaksi</p></div> : cart.map(line => <Card key={line.lineId} className="p-3 bg-gray-50 input-element"><div className="flex justify-between gap-2"><div className="min-w-0"><p className="font-bold text-xs text-gray-800 line-clamp-2">{line.name}</p><p className="text-[10px] text-gray-500">{line.variant ? `${line.variant} · ` : ''}{line.unit} · {formatRp(line.price)}</p>{line.note && <p className="text-[10px] text-blue-600 mt-1">Catatan: {line.note}</p>}</div><p className="font-bold text-xs shrink-0">{formatRp(line.price * line.qty - line.itemDiscount)}</p></div><div className="flex items-center justify-between mt-3"><div className="flex gap-1"><button onClick={() => setEditingLine(line)} className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><SlidersHorizontal size={16}/></button><button onClick={() => setCart(previous => previous.filter(item => item.lineId !== line.lineId))} className="w-10 h-10 bg-red-50 text-red-600 rounded-lg flex items-center justify-center"><Trash2 size={16}/></button></div><div className="flex items-center gap-2 bg-white border rounded-xl p-1"><button onClick={() => changeQty(line.lineId,-1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center"><Minus size={14}/></button><span className="w-8 text-center font-bold text-sm">{line.qty}</span><button onClick={() => changeQty(line.lineId,1)} className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center"><Plus size={14}/></button></div></div></Card>)}
+        {cart.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-gray-400"><ShoppingCart size={48} className="mb-3 opacity-40"/><p className="font-bold">Keranjang kosong</p><p className="text-xs mt-1">Pilih produk untuk mulai transaksi</p></div> : cart.map(line => <Card key={line.lineId} className="p-3 bg-gray-50 input-element"><div className="flex justify-between gap-2"><div className="min-w-0"><p className="font-bold text-xs text-gray-800 line-clamp-2">{line.name}</p><p className="text-[10px] text-gray-500">{line.variant ? `${line.variant} · ` : ''}{line.unit} · {formatRp(line.price)}</p>{line.note && <p className="text-[10px] text-blue-600 mt-1">Catatan: {line.note}</p>}</div><p className="font-bold text-xs shrink-0">{formatRp(line.price * line.qty - line.itemDiscount)}</p></div><div className="flex items-center justify-between mt-3"><div className="flex gap-1"><button onClick={() => setEditingLine(line)} className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><SlidersHorizontal size={16}/></button><button onClick={() => setCart(previous => previous.filter(item => item.lineId !== line.lineId))} className="w-10 h-10 bg-red-50 text-red-600 rounded-lg flex items-center justify-center"><Trash2 size={16}/></button></div><div className="flex items-center gap-2 bg-white border rounded-xl p-1"><button onClick={() => changeQty(line.lineId,-1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center"><Minus size={14}/></button><span className="min-w-10 text-center font-bold text-sm">{formatQuantity(line.qty)}</span><button onClick={() => changeQty(line.lineId,1)} className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center"><Plus size={14}/></button></div></div></Card>)}
       </div>
       <div className="p-4 border-t border-gray-100 shadow-[0_-4px_15px_rgba(0,0,0,.04)] space-y-2 pb-safe">
         <div className="flex justify-between text-sm"><span>Subtotal</span><b>{formatRp(totals.subtotal)}</b></div>
         <div className="flex items-center justify-between gap-2 text-sm"><span>Diskon Transaksi</span><MoneyInput max={Math.max(0, totals.subtotal)} value={globalDiscount} onValueChange={setGlobalDiscount} className="w-32 min-h-[40px] py-1 text-right"/></div>
-        {totals.promoDiscount > 0 && <div className="flex justify-between text-sm text-emerald-700"><span>Promo {totals.appliedPromo?.name}</span><b>-{formatRp(totals.promoDiscount)}</b></div>}
         {totals.loyaltyDiscount > 0 && <div className="flex justify-between text-sm text-yellow-700"><span>Reward Poin</span><b>-{formatRp(totals.loyaltyDiscount)}</b></div>}
         {totals.tax > 0 && <div className="flex justify-between text-sm"><span>Pajak {db.configs.taxRate}%</span><b>{formatRp(totals.tax)}</b></div>}
         {totals.service > 0 && <div className="flex justify-between text-sm"><span>Service {db.configs.serviceRate}%</span><b>{formatRp(totals.service)}</b></div>}
@@ -288,7 +283,7 @@ export default function POSScreen() {
           {scanNotice && <div className={`text-xs font-bold px-3 py-2 rounded-xl ${scanNotice.includes('tidak ditemukan') ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>{scanNotice}</div>}
           <div className="flex gap-2 overflow-x-auto no-scrollbar"><button onClick={() => setFavoritesOnly(value => !value)} className={`min-h-[40px] px-3 rounded-full border font-bold text-xs flex items-center gap-1 ${favoritesOnly ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-white text-gray-600 border-gray-200'}`}><Star size={15} fill={favoritesOnly?'currentColor':'none'}/> Favorit</button>{['Semua', ...db.categories].map(item => <button key={item} onClick={() => setCategory(item)} className={`min-h-[40px] px-4 rounded-full border font-bold text-xs whitespace-nowrap ${category === item ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-white text-gray-600 border-gray-200'}`}>{item}</button>)}</div>
         </div>
-        <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar pb-28 md:pb-4"><div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">{filtered.map(product => <button key={product.id} onClick={() => (product.variants?.length > 1 || product.conversions?.length > 0) ? setChoosingProduct(product) : addProduct(product)} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left card-element active:scale-[.98]"><div className="aspect-square rounded-xl bg-gray-100 img-placeholder flex items-center justify-center mb-2 relative"><Package size={30} className="text-gray-400"/>{product.favorite && <Star size={16} fill="currentColor" className="absolute top-2 right-2 text-yellow-500"/>}{product.bundleItems?.length > 0 && <Badge tone="purple">Paket</Badge>}</div><p className="font-bold text-xs text-gray-800 line-clamp-2 min-h-[32px]">{product.name}</p><p className="font-bold text-emerald-600 mt-2">{formatRp(priceFor(product,saleType))}</p><div className="flex justify-between text-[10px] text-gray-500 mt-1"><span>{product.stock} {product.baseUnit}</span><span>{product.rack}</span></div></button>)}</div></div>
+        <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar pb-28 md:pb-4"><div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">{filtered.map(product => <button key={product.id} onClick={() => (product.allowFractional || product.variants?.length > 1 || product.conversions?.length > 0) ? setChoosingProduct(product) : addProduct(product)} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left card-element active:scale-[.98]"><div className="aspect-square rounded-xl bg-gray-100 img-placeholder flex items-center justify-center mb-2 relative"><Package size={30} className="text-gray-400"/>{product.favorite && <Star size={16} fill="currentColor" className="absolute top-2 right-2 text-yellow-500"/>}{product.bundleItems?.length > 0 && <Badge tone="purple">Paket</Badge>}</div><p className="font-bold text-xs text-gray-800 line-clamp-2 min-h-[32px]">{product.name}</p><p className="font-bold text-emerald-600 mt-2">{formatRp(priceFor(product,saleType))}</p><div className="flex justify-between text-[10px] text-gray-500 mt-1"><span>{formatQuantity(product.stock)} {product.baseUnit}</span><span>{product.rack}</span></div></button>)}</div></div>
         {cart.length > 0 && !mobileCart && <div className="md:hidden absolute left-4 right-4 bottom-[76px] z-30"><button onClick={() => setMobileCart(true)} className="w-full bg-emerald-800 text-white min-h-[64px] rounded-2xl shadow-xl px-4 flex justify-between items-center"><div className="flex gap-3 items-center"><ShoppingCart/><div className="text-left"><p className="text-[10px] text-emerald-200">{cart.reduce((sum,line)=>sum+line.qty,0)} item</p><p className="font-bold">{formatRp(totals.total)}</p></div></div><span className="font-bold text-sm">Lihat Keranjang</span></button></div>}
       </div>
       <div className="hidden md:block w-[340px] lg:w-[390px] border-l border-gray-200 shrink-0">{cartPanel}</div>
@@ -309,10 +304,13 @@ export default function POSScreen() {
 function ProductChoiceModal({ product, saleType, onClose, onAdd }) {
   const [variant, setVariant] = useState(product.variants?.[0]?.name || '');
   const [unit, setUnit] = useState(product.baseUnit);
+  const [qty, setQty] = useState(product.allowFractional ? normalizeQuantityStep(product.quantityStep, true) : 1);
   const conversion = product.conversions?.find(item => item.unit === unit);
   const factor = conversion ? Number(conversion.factor) : 1;
+  const step = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true) : 1;
   const price = priceFor(product, saleType) * factor;
-  return <Modal title="Pilih Varian & Satuan" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onAdd({ variant, unit, price })}>Tambah</Button></>}><div className="space-y-3"><div><p className="font-bold text-gray-800">{product.name}</p><p className="text-xs text-gray-500">Stok {product.stock} {product.baseUnit}</p></div>{product.variants?.length > 0 && <Field label="Varian"><Select value={variant} onChange={event => setVariant(event.target.value)}>{product.variants.map(item => <option key={item.id || item.name} value={item.name}>{item.name}</option>)}</Select></Field>}<Field label="Satuan"><Select value={unit} onChange={event => setUnit(event.target.value)}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions?.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {item.factor} {product.baseUnit}</option>)}</Select></Field><Card className="p-3 bg-emerald-50 text-center"><p className="text-xs text-emerald-700">Harga</p><p className="text-xl font-black text-emerald-800">{formatRp(price)}</p></Card></div></Modal>;
+  const baseQty = qty * factor;
+  return <Modal title="Pilih Jumlah & Satuan" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onAdd({ variant, unit, price, qty })} disabled={Number(qty) <= 0}>Tambah</Button></>}><div className="space-y-3"><div><p className="font-bold text-gray-800">{product.name}</p><p className="text-xs text-gray-500">Stok {formatQuantity(product.stock)} {product.baseUnit}</p></div>{product.variants?.length > 0 && <Field label="Varian"><Select value={variant} onChange={event => setVariant(event.target.value)}>{product.variants.map(item => <option key={item.id || item.name} value={item.name}>{item.name}</option>)}</Select></Field>}<Field label="Satuan"><Select value={unit} onChange={event => { const nextUnit = event.target.value; setUnit(nextUnit); setQty(nextUnit === product.baseUnit && product.allowFractional ? normalizeQuantityStep(product.quantityStep, true) : 1); }}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions?.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {formatQuantity(item.factor)} {product.baseUnit}</option>)}</Select></Field><Field label={`Jumlah (${unit})`} hint={product.allowFractional && unit === product.baseUnit ? `Bisa pecahan dengan langkah ${formatQuantity(step)} ${unit}, contoh 2 atau 3,5.` : 'Gunakan jumlah satuan utuh.'}><Input type="number" min={step} step={step} value={qty} onChange={event => setQty(Math.max(0, Number(event.target.value || 0)))}/></Field><Card className="p-3 bg-emerald-50 text-center"><p className="text-xs text-emerald-700">{formatQuantity(qty)} {unit} = {formatQuantity(baseQty)} {product.baseUnit}</p><p className="text-xl font-black text-emerald-800">{formatRp(price * qty)}</p><p className="text-[11px] text-emerald-700">Harga per {unit}: {formatRp(price)}</p></Card></div></Modal>;
 }
 
 function LineEditModal({ line, product, onClose, onSave }) {
@@ -321,9 +319,9 @@ function LineEditModal({ line, product, onClose, onSave }) {
     const conversion = product?.conversions?.find(item => item.unit === unit);
     const factor = conversion ? Number(conversion.factor) : 1;
     const oldFactor = Number(form.factor || 1);
-    setForm(previous => { const basePrice = Math.round(previous.basePrice / oldFactor * factor); return { ...previous, unit, factor, baseQty: previous.qty * factor, basePrice, price: basePrice + Number(previous.modifierAmount || 0), modalPrice: Math.round(previous.modalPrice / oldFactor * factor) }; });
+    setForm(previous => { const basePrice = Math.round(previous.basePrice / oldFactor * factor); return { ...previous, unit, factor, quantityStep: unit === product?.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true) : 1, allowFractional: unit === product?.baseUnit && product?.allowFractional === true, baseQty: previous.qty * factor, basePrice, price: basePrice + Number(previous.modifierAmount || 0), modalPrice: Math.round(previous.modalPrice / oldFactor * factor) }; });
   };
-  return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave(form)}>Simpan</Button></>}><div className="space-y-4"><div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>{(product?.conversions?.length || 0) > 0 && <Field label="Satuan"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {item.factor} {product.baseUnit}</option>)}</Select></Field>}<div className="grid grid-cols-2 gap-3"><Field label="Jumlah"><Input type="number" min="0.01" step="0.01" value={form.qty} onChange={event => setForm(previous => ({...previous, qty:Number(event.target.value), baseQty:Number(event.target.value)*previous.factor}))}/></Field><Field label="Harga per Satuan"><MoneyInput value={form.price} onValueChange={value => setForm(previous => ({...previous, price:value}))}/></Field></div><Field label="Diskon Item (Rp)"><MoneyInput max={Math.max(0, form.price * form.qty)} value={form.itemDiscount} onValueChange={value => setForm(previous => ({...previous,itemDiscount:value}))}/></Field><div className="grid grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><MoneyInput value={form.modifierAmount || 0} onValueChange={amount => setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]}))}/></Field></div><Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field></div></Modal>;
+  return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave(form)}>Simpan</Button></>}><div className="space-y-4"><div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>{(product?.conversions?.length || 0) > 0 && <Field label="Satuan"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {item.factor} {product.baseUnit}</option>)}</Select></Field>}<div className="grid grid-cols-2 gap-3"><Field label="Jumlah"><Input type="number" min={form.quantityStep || 1} step={form.quantityStep || 1} value={form.qty} onChange={event => setForm(previous => ({...previous, qty:Number(event.target.value), baseQty:Number(event.target.value)*previous.factor}))}/></Field><Field label="Harga per Satuan"><MoneyInput value={form.price} onValueChange={value => setForm(previous => ({...previous, price:value}))}/></Field></div><Field label="Diskon Item (Rp)"><MoneyInput max={Math.max(0, form.price * form.qty)} value={form.itemDiscount} onValueChange={value => setForm(previous => ({...previous,itemDiscount:value}))}/></Field><div className="grid grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><MoneyInput value={form.modifierAmount || 0} onValueChange={amount => setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]}))}/></Field></div><Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field></div></Modal>;
 }
 
 function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
@@ -439,7 +437,7 @@ function SplitBillModal({ cart, onClose, onSplit }) {
   const [name, setName] = useState('Tagihan Terpisah');
   const [selections, setSelections] = useState(Object.fromEntries(cart.map(line => [line.lineId, 0])));
   const submit = () => { try { onSplit({ name, selections }); } catch (error) { alert(error.message); } };
-  return <Modal title="Pisah Tagihan / Split Bill" onClose={onClose} size="lg" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit}>Simpan Tagihan Terpisah</Button></>}><Field label="Nama Tagihan"><Input value={name} onChange={event => setName(event.target.value)}/></Field><div className="mt-4 space-y-2">{cart.map(line => <Card key={line.lineId} className="p-3 grid grid-cols-[1fr_100px] gap-3 items-center"><div><p className="font-bold text-sm">{line.name}</p><p className="text-xs text-gray-500">Tersedia di tagihan: {line.qty} {line.unit}</p></div><Input type="number" min="0" max={line.qty} value={selections[line.lineId]} onChange={event => setSelections(previous => ({ ...previous, [line.lineId]: Math.min(line.qty, Math.max(0, Number(event.target.value || 0))) }))}/></Card>)}</div></Modal>;
+  return <Modal title="Pisah Tagihan / Split Bill" onClose={onClose} size="lg" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit}>Simpan Tagihan Terpisah</Button></>}><Field label="Nama Tagihan"><Input value={name} onChange={event => setName(event.target.value)}/></Field><div className="mt-4 space-y-2">{cart.map(line => <Card key={line.lineId} className="p-3 grid grid-cols-[1fr_100px] gap-3 items-center"><div><p className="font-bold text-sm">{line.name}</p><p className="text-xs text-gray-500">Tersedia di tagihan: {line.qty} {line.unit}</p></div><Input type="number" min="0" max={line.qty} step={line.quantityStep || 1} value={selections[line.lineId]} onChange={event => setSelections(previous => ({ ...previous, [line.lineId]: Math.min(line.qty, Math.max(0, Number(event.target.value || 0))) }))}/></Card>)}</div></Modal>;
 }
 
 function HoldModal({ defaultName, onClose, onSave }) { const [name,setName]=useState(defaultName?`Tagihan ${defaultName}`:'Tagihan Baru'); return <Modal title="Simpan Open Bill" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={()=>onSave(name)} disabled={!name.trim()}>Simpan</Button></>}><Field label="Nama Tagihan"><Input value={name} onChange={event=>setName(event.target.value)} autoFocus/></Field></Modal>; }

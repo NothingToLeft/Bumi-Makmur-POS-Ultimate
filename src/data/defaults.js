@@ -1,10 +1,10 @@
 import {
-  LayoutDashboard, ShoppingCart, ReceiptText, Package, Boxes, Truck, ContactRound,
+  LayoutDashboard, ShoppingCart, ReceiptText, Package, Truck, ContactRound,
   Users, Clock3, WalletCards, BarChart3, ShoppingBag, Store, Printer,
-  MonitorSmartphone, Settings, ListChecks, Tags, Gauge
+  MonitorSmartphone, Settings, ListChecks, Gauge
 } from 'lucide-react';
 
-export const APP_VERSION = '5.1.3';
+export const APP_VERSION = '5.2.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -14,9 +14,7 @@ export const MODULES = [
   { id: 'pos', label: 'Kasir', icon: ShoppingCart, permission: 'pos.use' },
   { id: 'openBills', label: 'Open Bill', icon: ListChecks, permission: 'pos.use' },
   { id: 'transactions', label: 'Transaksi', icon: ReceiptText, permission: 'transactions.view' },
-  { id: 'products', label: 'Produk', icon: Package, permission: 'products.view' },
-  { id: 'promotions', label: 'Promo', icon: Tags, permission: 'promotions.view' },
-  { id: 'inventory', label: 'Stok', icon: Boxes, permission: 'inventory.view' },
+  { id: 'products', label: 'Produk & Stok', icon: Package, permission: 'products.view' },
   { id: 'purchases', label: 'Pembelian', icon: Truck, permission: 'purchases.view' },
   { id: 'suppliers', label: 'Pemasok', icon: ContactRound, permission: 'suppliers.view' },
   { id: 'customers', label: 'Pelanggan', icon: Users, permission: 'customers.view' },
@@ -34,14 +32,14 @@ export const ROLE_PERMISSIONS = {
   owner: ['*'],
   manager: [
     'dashboard.view', 'control.view', 'payments.manage', 'pos.use', 'transactions.view', 'transactions.refund', 'transactions.void',
-    'products.view', 'products.manage', 'promotions.view', 'promotions.manage', 'inventory.view', 'inventory.manage', 'purchases.view',
+    'products.view', 'products.manage', 'inventory.view', 'inventory.manage', 'purchases.view',
     'purchases.manage', 'suppliers.view', 'suppliers.manage', 'customers.view', 'customers.manage',
     'shifts.view', 'shifts.manage', 'finance.view', 'finance.manage', 'reports.view', 'orders.view',
     'orders.manage', 'devices.view', 'devices.manage', 'display.view', 'display.manage',
     'settings.view', 'employees.view', 'employees.manage'
   ],
   kasir: [
-    'pos.use', 'transactions.view', 'products.view', 'customers.view', 'customers.manage',
+    'pos.use', 'transactions.view', 'products.view', 'inventory.view', 'customers.view', 'customers.manage',
     'shifts.view', 'shifts.manage', 'openBills.view', 'orders.view', 'display.view'
   ]
 };
@@ -88,39 +86,39 @@ const defaultProducts = [
     sku: 'LST-001', barcode: '899000000001', baseUnit: 'meter', stock: 150, minStock: 25, rack: 'A-01',
     modalPrice: 7500, initialModalPrice: 7500, prices: { retail: 9000, wholesale: 8500, project: 8200 },
     variants: [{ id: 'VAR-001', name: 'Per Meter', barcode: '899000000001', factor: 1, priceDelta: 0 }],
-    conversions: [{ unit: 'roll', factor: 100 }], bundleItems: [], favorite: true, available: true, active: true, trackStock: true
+    conversions: [{ unit: 'roll', factor: 50 }], allowFractional: true, quantityStep: 0.1, bundleItems: [], favorite: true, available: true, active: true, trackStock: true
   },
   {
     id: 'PRD-002', branchId: MAIN_BRANCH_ID, name: 'Lampu LED Philips 10W Putih', category: 'Listrik',
     sku: 'LST-002', barcode: '899000000002', baseUnit: 'pcs', stock: 45, minStock: 10, rack: 'A-05',
     modalPrice: 28000, initialModalPrice: 28000, prices: { retail: 35000, wholesale: 33000, project: 32000 },
     variants: [{ id: 'VAR-002', name: 'Putih', barcode: '899000000002', factor: 1, priceDelta: 0 }],
-    conversions: [{ unit: 'box', factor: 12 }], bundleItems: [], favorite: true, available: true, active: true, trackStock: true
+    conversions: [{ unit: 'box', factor: 12 }], bundleItems: [], allowFractional: false, quantityStep: 1, favorite: true, available: true, active: true, trackStock: true
   },
   {
     id: 'PRD-003', branchId: MAIN_BRANCH_ID, name: 'Pipa PVC Rucika 1/2 AW', category: 'Air & Pipa',
     sku: 'AIR-001', barcode: '899000000006', baseUnit: 'batang', stock: 200, minStock: 20, rack: 'B-02',
     modalPrice: 18000, initialModalPrice: 18000, prices: { retail: 22000, wholesale: 21000, project: 20000 },
-    variants: [], conversions: [], bundleItems: [], favorite: false, available: true, active: true, trackStock: true
+    variants: [], conversions: [], bundleItems: [], allowFractional: false, quantityStep: 1, favorite: false, available: true, active: true, trackStock: true
   },
   {
     id: 'PRD-004', branchId: MAIN_BRANCH_ID, name: 'Sekrup Baja Ringan 10x19', category: 'Besi & Paku',
     sku: 'BS-001', barcode: '899000000009', baseUnit: 'box', stock: 40, minStock: 8, rack: 'C-03',
     modalPrice: 19000, initialModalPrice: 19000, prices: { retail: 25000, wholesale: 23500, project: 22500 },
-    variants: [], conversions: [{ unit: 'pcs', factor: 0.01 }], bundleItems: [], favorite: false, available: true, active: true, trackStock: true
+    variants: [], conversions: [{ unit: 'pcs', factor: 0.01 }], bundleItems: [], allowFractional: false, quantityStep: 1, favorite: false, available: true, active: true, trackStock: true
   },
   {
     id: 'PRD-005', branchId: MAIN_BRANCH_ID, name: 'Semen Gresik 40kg', category: 'Material',
     sku: 'BGN-001', barcode: '899000000011', baseUnit: 'sak', stock: 100, minStock: 15, rack: 'GUDANG-1',
     modalPrice: 47000, initialModalPrice: 47000, prices: { retail: 52000, wholesale: 50500, project: 49500 },
-    variants: [], conversions: [], bundleItems: [], favorite: false, available: true, active: true, trackStock: true
+    variants: [], conversions: [], bundleItems: [], allowFractional: false, quantityStep: 1, favorite: false, available: true, active: true, trackStock: true
   },
   {
     id: 'PRD-BUNDLE-1', branchId: MAIN_BRANCH_ID, name: 'Paket Instalasi Lampu Dasar', category: 'Paket',
     sku: 'PKT-001', barcode: '899000000099', baseUnit: 'set', stock: 999, minStock: 0, rack: '-',
     modalPrice: 43000, initialModalPrice: 43000, prices: { retail: 52000, wholesale: 50000, project: 48000 },
     variants: [], conversions: [], bundleItems: [{ productId: 'PRD-002', qty: 1 }, { productId: 'PRD-001', qty: 2 }],
-    favorite: true, available: true, active: true, trackStock: false
+    allowFractional: false, quantityStep: 1, favorite: true, available: true, active: true, trackStock: false
   }
 ];
 
@@ -138,13 +136,13 @@ export const createSeedDb = () => ({
       ownerTitle: 'Login Owner',
       ownerSubtitle: 'Seluruh cabang, laporan, pengaturan, dan hak akses.',
       employeeTitle: 'Login Karyawan',
-      employeeSubtitle: 'Pilih cabang, masukkan nama, lalu PIN 4 digit.',
+      employeeSubtitle: 'Pilih cabang, pilih nama karyawan, lalu masukkan PIN 4 digit.',
       onlineTitle: 'Internet tersedia',
       onlineSubtitle: 'Login cloud dan sinkronisasi siap digunakan.',
       offlineTitle: 'Mode offline aktif',
       offlineSubtitle: 'Login offline tersedia untuk akun yang sebelumnya sudah tersimpan pada perangkat ini.',
       footerLead: 'Firebase Spark gratis.',
-      footerText: 'Karyawan cukup memakai nama dan PIN setelah akun dibuat Owner atau Store Manager.'
+      footerText: 'Karyawan cukup memilih nama dari daftar dan memasukkan PIN setelah akun dibuat Owner atau Store Manager.'
     },
     activeBranchId: MAIN_BRANCH_ID, darkMode: false, printAuto: false, taxEnabled: false, taxRate: 11,
     cameraPermissionOnStartup: true, shiftWarningHours: 14, reorderMultiplier: 2,
@@ -179,9 +177,7 @@ export const createSeedDb = () => ({
   categories: ['Listrik', 'Air & Pipa', 'Besi & Paku', 'Perkakas', 'Material', 'Paket'],
   units: UNITS,
   products: defaultProducts,
-  promotions: [
-    { id: 'PROMO-001', branchId: MAIN_BRANCH_ID, name: 'Belanja Hemat 5%', type: 'percent', value: 5, minPurchase: 500000, maxDiscount: 75000, category: '', productId: '', active: true, startDate: '', endDate: '' }
-  ],
+  promotions: [],
   suppliers: [
     { id: 'SUP-001', branchId: MAIN_BRANCH_ID, name: 'Sumber Listrik Jaya', phone: '081234567890', email: '', address: 'Surabaya', taxNo: '', notes: '', active: true },
     { id: 'SUP-002', branchId: MAIN_BRANCH_ID, name: 'Distributor Bangunan Makmur', phone: '081298765432', email: '', address: 'Sidoarjo', taxNo: '', notes: '', active: true }

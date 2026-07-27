@@ -5,21 +5,24 @@ import { access, readFile } from 'node:fs/promises';
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 const expectedModules = [
-  'dashboard', 'controlCenter', 'pos', 'openBills', 'transactions', 'products', 'promotions', 'inventory',
+  'dashboard', 'controlCenter', 'pos', 'openBills', 'transactions', 'products',
   'purchases', 'suppliers', 'customers', 'shifts', 'finance', 'reports', 'orders',
   'branches', 'devices', 'customerDisplay', 'settings'
 ];
 
 const expectedScreens = [
-  'AdminScreens.jsx', 'ControlCenterScreen.jsx', 'DashboardScreen.jsx', 'DeviceSettingsScreens.jsx', 'InventoryScreen.jsx',
+  'AdminScreens.jsx', 'ControlCenterScreen.jsx', 'DashboardScreen.jsx', 'DeviceSettingsScreens.jsx',
   'LoginScreen.jsx', 'OpenBillsScreen.jsx', 'OrdersScreen.jsx', 'POSScreen.jsx',
-  'PartnersScreens.jsx', 'ProductsScreen.jsx', 'PromotionsScreen.jsx', 'PublicReceiptScreen.jsx',
+  'PartnersScreens.jsx', 'ProductsScreen.jsx', 'PublicReceiptScreen.jsx',
   'PurchasesScreen.jsx', 'ReportsScreen.jsx', 'ShiftFinanceScreens.jsx', 'TransactionsScreen.jsx'
 ];
 
 test('seluruh modul operasional utama tetap tersedia setelah migrasi hybrid', async () => {
   const defaults = await read('src/data/defaults.js');
   for (const id of expectedModules) assert.match(defaults, new RegExp(`id: '${id}'`), `modul ${id} hilang`);
+  assert.match(defaults, /id: 'products', label: 'Produk & Stok'/);
+  assert.doesNotMatch(defaults, /id: 'promotions'/);
+  assert.doesNotMatch(defaults, /id: 'inventory'/);
   for (const screen of expectedScreens) await access(new URL(`../src/screens/${screen}`, import.meta.url));
 });
 

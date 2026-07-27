@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, Package, Printer, ShieldCheck } from 'lucide-react';
 import { fetchPublicReceipt } from '../services/cloudStore.js';
 import { formatRp } from '../utils/helpers.js';
+import { formatQuantity } from '../utils/fractionalUnits.js';
 import { getReceiptLogo } from '../services/receiptShare.js';
 
 export default function PublicReceiptScreen({ token }) {
@@ -34,7 +35,7 @@ export default function PublicReceiptScreen({ token }) {
         </div>
         <div className="p-5 md:p-7">
           <div className="grid grid-cols-2 gap-3 mb-5"><Info label="Pelanggan" value={sale.customerName || 'Umum'}/><Info label="Kasir" value={sale.cashierName || '-'}/></div>
-          <div className="space-y-3">{(sale.items || []).map((line,index)=><div key={line.lineId || index} className="flex justify-between gap-3 pb-3 border-b border-dashed"><div><p className="font-bold text-sm">{line.name}</p><p className="text-xs text-gray-500">{line.qty} {line.unit} × {formatRp(line.price)}</p></div><b className="text-sm">{formatRp(line.price * line.qty - (line.itemDiscount || 0))}</b></div>)}</div>
+          <div className="space-y-3">{(sale.items || []).map((line,index)=><div key={line.lineId || index} className="flex justify-between gap-3 pb-3 border-b border-dashed"><div><p className="font-bold text-sm">{line.name}</p><p className="text-xs text-gray-500">{formatQuantity(line.qty)} {line.unit} × {formatRp(line.price)}</p></div><b className="text-sm">{formatRp(line.price * line.qty - (line.itemDiscount || 0))}</b></div>)}</div>
           <div className="mt-5 space-y-1 text-sm"><Row label="Subtotal" value={formatRp(sale.subtotal)}/>{sale.globalDiscount>0&&<Row label="Diskon" value={`-${formatRp(sale.globalDiscount)}`}/>} {sale.tax>0&&<Row label="Pajak" value={formatRp(sale.tax)}/>}<div className="mt-3 p-4 rounded-2xl bg-emerald-900 text-white flex justify-between text-lg font-black"><span>TOTAL</span><span>{formatRp(sale.total)}</span></div></div>
           <div className="mt-5 pt-4 border-t border-dashed">{(sale.payments || []).map((payment,index)=><Row key={payment.id || index} label={payment.name} value={formatRp(payment.amount)}/>)}</div>
           <div className="text-center mt-6"><CheckCircle2 className="mx-auto text-emerald-600"/><p className="font-bold text-sm mt-2">Pembayaran tercatat di sistem</p><p className="text-xs text-gray-500 mt-1">{store.receiptMessage || store.receiptFooter}</p></div>

@@ -10,8 +10,10 @@ import {
   buildDiffOperations,
   loadCloudDb,
   loadPublicLoginDirectory,
+  loadPublicEmployeeDirectory,
   persistOperations,
   publishPublicLoginDirectory,
+  publishPublicEmployeeDirectory,
   refreshOperationsAgainstCloud,
   replaceCloudDb,
   rebaseOperationsAgainstRemote,
@@ -38,16 +40,27 @@ import {
 import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
 import { dataUrlByteLength } from '../utils/assetProcessing.js';
 import { normalizeDbShape } from '../utils/dbShape.js';
+import { baseUnitCost as calculateBaseUnitCost, conversionFactor, normalizeQuantityStep } from '../utils/fractionalUnits.js';
 
 const PosContext = createContext(null);
 const DEVICE_SETTINGS_KEY = 'bm_pos_device_security_v1';
 const LOGIN_DIRECTORY_KEY = 'bm_pos_public_login_directory_v1';
+const LOGIN_EMPLOYEES_KEY = 'bm_pos_public_employee_directory_v1';
 const CUSTOMER_DISPLAY_KEY = 'bm_pos_customer_display_v1';
 const CUSTOMER_DISPLAY_CHANNEL = 'bm-pos-customer-display';
 const clone = value => typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const nowISO = () => new Date().toISOString();
 const money = value => Math.max(0, Math.round(Number(value) || 0));
 const quantity = value => Math.max(0, Math.round((Number(value) || 0) * 1000) / 1000);
+const signedQuantity = value => Math.round((Number(value) || 0) * 1000) / 1000;
+const isStepAligned = (value, step) => Math.abs(Number(value) / Number(step) - Math.round(Number(value) / Number(step))) < 0.000001;
+const validateBaseQuantity = (product, value, label = 'Jumlah') => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`${label} ${product?.name || 'barang'} tidak valid.`);
+  const step = normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true);
+  if (!isStepAligned(number, step)) throw new Error(`${label} ${product?.name || 'barang'} harus kelipatan ${step} ${product?.baseUnit || 'satuan'}.`);
+  return signedQuantity(number);
+};
 const isConflictError = error => String(error?.code || '').includes('aborted') || /telah berubah|menggabungkan pembaruan/i.test(String(error?.message || ''));
 const wait = milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds));
 const withTimeout = (promise, timeoutMs, message = 'Permintaan melewati batas waktu.') => {
@@ -125,6 +138,8 @@ export function PosProvider({ children }) {
     };
   });
   const [loginDirectoryLoading, setLoginDirectoryLoading] = useState(false);
+  const [loginEmployeesByBranch, setLoginEmployeesByBranch] = useState(() => safeJSONParse(localStorage.getItem(LOGIN_EMPLOYEES_KEY), {}));
+  const [loginEmployeesLoading, setLoginEmployeesLoading] = useState(false);
   const cloudUnsubscribeRef = useRef(null);
   const writeChainRef = useRef(Promise.resolve());
   const localReadyRef = useRef(false);
@@ -133,6 +148,7 @@ export function PosProvider({ children }) {
   const syncRunRef = useRef(null);
   const activeSubscriptionKeyRef = useRef('');
   const initialLoadFinishedRef = useRef(false);
+  const employeeDirectoryPublishSignatureRef = useRef('');
 
   useEffect(() => {
     const onOnline = () => { setOnline(true); setCloudError(''); };
@@ -240,6 +256,81 @@ export function PosProvider({ children }) {
   useEffect(() => {
     void refreshLoginDirectory();
   }, [online]);
+
+  const refreshLoginEmployees = useCallback(async targetBranchId => {
+    const branchKey = String(targetBranchId || '');
+    if (!branchKey) return [];
+    const fallback = (dbRef.current?.users || [])
+      .filter(item => item?.branchId === branchKey && item.active !== false && ['manager', 'kasir'].includes(item.role) && item.loginName)
+      .map(item => ({ loginName: String(item.loginName), name: String(item.name || item.loginName), role: item.role, branchId: branchKey, active: true }))
+      .sort((first, second) => first.name.localeCompare(second.name, 'id'));
+    if (!firebaseConfigured || !navigator.onLine) {
+      if (fallback.length) {
+        setLoginEmployeesByBranch(previous => {
+          const next = { ...previous, [branchKey]: fallback };
+          localStorage.setItem(LOGIN_EMPLOYEES_KEY, JSON.stringify(next));
+          return next;
+        });
+        return fallback;
+      }
+      return loginEmployeesByBranch[branchKey] || [];
+    }
+    setLoginEmployeesLoading(true);
+    try {
+      const rows = await loadPublicEmployeeDirectory(branchKey, STORE_ID);
+      const nextRows = rows.length ? rows : fallback;
+      setLoginEmployeesByBranch(previous => {
+        const next = { ...previous, [branchKey]: nextRows };
+        localStorage.setItem(LOGIN_EMPLOYEES_KEY, JSON.stringify(next));
+        return next;
+      });
+      return nextRows;
+    } catch (error) {
+      console.warn('Daftar karyawan login belum dapat dimuat.', error);
+      return loginEmployeesByBranch[branchKey] || fallback;
+    } finally {
+      setLoginEmployeesLoading(false);
+    }
+  }, [loginEmployeesByBranch]);
+
+  const publishEmployeeLoginList = useCallback(async (nextDb, targetBranchId, profile = currentUserRef.current) => {
+    if (!navigator.onLine || !profile || !auth?.currentUser || auth.currentUser.uid !== profile.id) return [];
+    const rows = await publishPublicEmployeeDirectory(nextDb, targetBranchId, profile.storeId || STORE_ID);
+    setLoginEmployeesByBranch(previous => {
+      const next = { ...previous, [targetBranchId]: rows };
+      localStorage.setItem(LOGIN_EMPLOYEES_KEY, JSON.stringify(next));
+      return next;
+    });
+    return rows;
+  }, []);
+
+
+  // Migrasi otomatis: setelah Owner/Manager berhasil login, publikasi daftar nama aman
+  // untuk setiap cabang yang menjadi kewenangannya. Ini membuat akun lama langsung
+  // muncul pada dropdown login tanpa harus diedit dan disimpan ulang satu per satu.
+  useEffect(() => {
+    const profile = currentUserRef.current;
+    if (!online || !cloudReady || !profile || !auth?.currentUser || auth.currentUser.uid !== profile.id) return;
+    if (!['owner', 'manager'].includes(profile.role)) return;
+    const targetBranches = profile.role === 'owner'
+      ? (db.branches || []).map(item => item.id)
+      : [profile.branchId].filter(Boolean);
+    const signature = JSON.stringify({
+      userId: profile.id,
+      branches: targetBranches,
+      employees: (db.users || [])
+        .filter(item => targetBranches.includes(item.branchId) && ['manager', 'kasir'].includes(item.role))
+        .map(item => [item.id, item.branchId, item.loginName, item.name, item.role, item.active !== false])
+        .sort((first, second) => String(first[0]).localeCompare(String(second[0])))
+    });
+    if (!targetBranches.length || employeeDirectoryPublishSignatureRef.current === signature) return;
+    employeeDirectoryPublishSignatureRef.current = signature;
+    void Promise.all(targetBranches.map(targetBranchId => publishEmployeeLoginList(dbRef.current, targetBranchId, profile)))
+      .catch(error => {
+        employeeDirectoryPublishSignatureRef.current = '';
+        console.warn('Daftar pilihan karyawan belum dapat dipublikasikan otomatis.', error);
+      });
+  }, [online, cloudReady, currentUser?.id, currentUser?.role, db.users, db.branches, publishEmployeeLoginList]);
 
   const hydrateLocal = useCallback(async profile => {
     const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
@@ -946,11 +1037,17 @@ export function PosProvider({ children }) {
       const duplicateBarcode = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && String(product.barcode || '') === barcode);
       if (duplicateBarcode) throw new Error(`Barcode ${barcode} sudah dipakai oleh produk ${duplicateBarcode.name}.`);
     }
+    const allowFractional = data.allowFractional === true;
+    const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional);
+    const quantityProfile = { name: productName, baseUnit: data.baseUnit || 'pcs', allowFractional, quantityStep };
+    const initialStock = existing?.stock ?? validateBaseQuantity(quantityProfile, data.stock || 0, 'Stok awal');
+    const minimumStock = validateBaseQuantity(quantityProfile, data.minStock || 0, 'Stok minimum');
+    if (initialStock < 0 || minimumStock < 0) throw new Error('Stok awal dan stok minimum tidak boleh negatif.');
     const item = {
       id: data.id || generateId('PRD'), branchId: targetBranchId,
       name: productName, category: data.category || 'Lainnya', sku,
-      barcode, baseUnit: data.baseUnit || 'pcs', stock: existing?.stock ?? quantity(data.stock),
-      minStock: quantity(data.minStock || 0), rack: data.rack || '-', modalPrice: money(data.modalPrice),
+      barcode, baseUnit: data.baseUnit || 'pcs', stock: quantity(initialStock),
+      minStock: quantity(minimumStock), rack: data.rack || '-', modalPrice: money(data.modalPrice),
       initialModalPrice: existing?.initialModalPrice ?? money(data.modalPrice),
       prices: {
         retail: money(data.prices?.retail ?? data.price),
@@ -962,12 +1059,23 @@ export function PosProvider({ children }) {
         wholesale: Math.max(0, Number(data.markups?.wholesale || 0)),
         project: Math.max(0, Number(data.markups?.project || 0))
       },
-      variants: data.variants || [], conversions: data.conversions || [], bundleItems: data.bundleItems || [],
+      variants: data.variants || [],
+      conversions: (data.conversions || []).filter(row => row?.unit && Number(row.factor) > 0).map(row => ({ ...row, factor: quantity(row.factor) })),
+      allowFractional, quantityStep, bundleItems: data.bundleItems || [],
       favorite: Boolean(data.favorite), available: data.available !== false, active: data.active !== false,
       trackStock: data.trackStock !== false, updatedAt: nowISO()
     };
     if (existing) next.products = next.products.map(product => product.id === item.id ? item : product);
-    else next.products.unshift(item);
+    else {
+      next.products.unshift(item);
+      if (item.trackStock !== false && item.stock > 0) {
+        next.stockMovements.unshift({
+          id: generateId('MOV'), branchId: item.branchId, productId: item.id, productName: item.name,
+          type: 'INITIAL_STOCK', qtyChange: item.stock, refId: item.id,
+          note: 'Stok awal saat barang dibuat', createdAt: nowISO(), userId: currentUser.id
+        });
+      }
+    }
     return item;
   });
 
@@ -1043,6 +1151,7 @@ export function PosProvider({ children }) {
         branchId: currentUser.role === 'manager' ? currentUser.branchId : (data.branchId || branchId)
       });
       if (profile) {
+        let nextDb = dbRef.current;
         setDb(previous => {
           let users = previous.users.filter(user => user.id !== profile.replacesUserId);
           const exists = users.some(user => user.id === profile.id);
@@ -1050,9 +1159,13 @@ export function PosProvider({ children }) {
             ? users.map(user => user.id === profile.id ? profile : user)
             : [profile, ...users];
           const next = { ...previous, users };
+          nextDb = next;
           dbRef.current = next;
           void saveLocalSnapshot(next, currentUser);
           return next;
+        });
+        await publishEmployeeLoginList(nextDb, profile.branchId, currentUser).catch(error => {
+          console.warn('Akun tersimpan, tetapi daftar pilihan login menunggu sinkronisasi.', error);
         });
         if (profile.replacesUserId) await removeOfflineCredential(storeCode, profile.replacesUserId).catch(() => {});
         setCloudError('');
@@ -1074,11 +1187,17 @@ export function PosProvider({ children }) {
     }
     try {
       const result = await deleteCloudEmployee({ id, pin });
+      const removed = dbRef.current.users.find(user => user.id === id);
+      let nextDb = dbRef.current;
       setDb(previous => {
         const next = { ...previous, users: previous.users.filter(user => user.id !== id) };
+        nextDb = next;
         dbRef.current = next;
         void saveLocalSnapshot(next, currentUser);
         return next;
+      });
+      if (removed?.branchId) await publishEmployeeLoginList(nextDb, removed.branchId, currentUser).catch(error => {
+        console.warn('Karyawan dihapus, tetapi daftar pilihan login menunggu sinkronisasi.', error);
       });
       await removeOfflineCredential(storeCode, id).catch(() => {});
       setCloudError('');
@@ -1153,8 +1272,9 @@ export function PosProvider({ children }) {
           const returned = (purchase.returns || []).reduce((sum, purchaseReturn) => sum + (purchaseReturn.items || [])
             .filter(row => row.id === item.id || row.productId === item.productId)
             .reduce((itemSum, row) => itemSum + Number(row.qty || 0), 0), 0);
+          const factor = Math.max(0.001, Number(item.factor || 1));
           return {
-            price: money(item.price),
+            price: money(item.baseUnitCost ?? calculateBaseUnitCost(item.price, factor)),
             remaining: Math.max(0, Number(item.qty || 0) - returned),
             date: new Date(purchase.updatedAt || purchase.createdAt || 0).getTime() || 0
           };
@@ -1204,22 +1324,7 @@ export function PosProvider({ children }) {
     });
     const recalculatedSubtotal = Math.round(normalizedItems.reduce((sum, item) => sum + item.price * item.qty - item.itemDiscount, 0));
     const safeGlobalDiscount = Math.min(recalculatedSubtotal, money(payload.globalDiscount));
-    const activePromo = (payload.appliedPromos || []).map(item => next.promotions.find(promo => promo.id === item.id && promo.active !== false)).find(Boolean);
-    let safePromoDiscount = 0;
-    if (activePromo) {
-      const today = localDateKey();
-      const validDate = (!activePromo.startDate || activePromo.startDate <= today) && (!activePromo.endDate || activePromo.endDate >= today);
-      const eligibleBase = activePromo.productId
-        ? normalizedItems.filter(item => item.productId === activePromo.productId).reduce((sum, item) => sum + item.price * item.qty - item.itemDiscount, 0)
-        : activePromo.category
-          ? normalizedItems.filter(item => item.category === activePromo.category).reduce((sum, item) => sum + item.price * item.qty - item.itemDiscount, 0)
-          : recalculatedSubtotal;
-      if (validDate && recalculatedSubtotal >= money(activePromo.minPurchase)) {
-        safePromoDiscount = activePromo.type === 'percent' ? Math.round(eligibleBase * Math.max(0, Number(activePromo.value || 0)) / 100) : money(activePromo.value);
-        if (money(activePromo.maxDiscount) > 0) safePromoDiscount = Math.min(safePromoDiscount, money(activePromo.maxDiscount));
-      }
-    }
-    safePromoDiscount = Math.min(Math.max(0, recalculatedSubtotal - safeGlobalDiscount), safePromoDiscount);
+    const safePromoDiscount = 0;
     const safePointsRedeemed = money(payload.pointsRedeemed);
     const safeLoyaltyDiscount = Math.min(
       Math.max(0, recalculatedSubtotal - safeGlobalDiscount - safePromoDiscount),
@@ -1252,11 +1357,12 @@ export function PosProvider({ children }) {
     }
     const stockRows = [...stockMap.values()];
     for (const row of stockRows) {
+      row.qty = validateBaseQuantity(row.product, row.qty, 'Jumlah penjualan');
       if (row.product.trackStock !== false && row.product.stock < row.qty) throw new Error(`Stok ${row.product.name} tidak cukup. Tersedia ${row.product.stock}, dibutuhkan ${row.qty}.`);
     }
     const saleId = payload.id || generateId('INV');
     for (const row of stockRows) {
-      if (row.product.trackStock !== false) row.product.stock -= row.qty;
+      if (row.product.trackStock !== false) row.product.stock = quantity(row.product.stock - row.qty);
       next.stockMovements.unshift({
         id: generateId('MOV'), branchId: branchId, productId: row.product.id, productName: row.product.name,
         type: 'SALE', qtyChange: -row.qty, refId: saleId, note: [...row.sourceNames].join(', '), createdAt: nowISO(), userId: currentUser.id
@@ -1322,14 +1428,17 @@ export function PosProvider({ children }) {
       if (!original) throw new Error(`Item ${refundItem.name || refundItem.productId} tidak ditemukan pada transaksi.`);
       const alreadyRefunded = previousRefunds.reduce((sum, refund) => sum + refund.items.filter(item => item.lineId === original.lineId || item.productId === original.productId).reduce((itemSum, item) => itemSum + Number(item.qty || 0), 0), 0);
       const remaining = Math.max(0, Number(original.qty || 0) - alreadyRefunded);
-      if (Number(refundItem.qty || 0) <= 0 || Number(refundItem.qty) > remaining) throw new Error(`Jumlah refund ${original.name} melebihi sisa yang dapat direfund (${remaining}).`);
+      const refundQty = Number(refundItem.qty || 0);
+      const refundStep = Math.max(0.001, Number(original.quantityStep || 1));
+      if (refundQty <= 0 || refundQty > remaining) throw new Error(`Jumlah refund ${original.name} melebihi sisa yang dapat direfund (${remaining}).`);
+      if (!isStepAligned(refundQty, refundStep)) throw new Error(`Jumlah refund ${original.name} harus kelipatan ${refundStep} ${original.unit || 'satuan'}.`);
     }
-    const itemNetTotal = sale.items.reduce((sum, item) => sum + money(item.netUnitPrice ?? item.price) * Number(item.qty || 0), 0);
+    const itemNetTotal = sale.items.reduce((sum, item) => sum + Math.max(0, Number(item.netUnitPrice ?? item.price) || 0) * Number(item.qty || 0), 0);
     const saleAllocationRatio = itemNetTotal > 0 ? money(sale.total) / itemNetTotal : 0;
     const calculatedRefund = payload.items.reduce((sum, refundItem) => {
       const original = sale.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
       if (!original) return sum;
-      const base = money(original.netUnitPrice ?? original.price) * Number(refundItem.qty || 0);
+      const base = Math.max(0, Number(original.netUnitPrice ?? original.price) || 0) * Number(refundItem.qty || 0);
       return sum + Math.round(base * saleAllocationRatio);
     }, 0);
     const amount = Math.min(Math.max(0, money(sale.total) - money(sale.refundedTotal)), calculatedRefund);
@@ -1364,7 +1473,8 @@ export function PosProvider({ children }) {
           if (!original) continue;
           const rows = resolveProductStockRows(next, { ...original, qty: refundItem.qty, baseQty: (original.baseQty / original.qty) * refundItem.qty }, target.branchId);
           for (const row of rows) {
-            if (row.product.trackStock !== false) row.product.stock += row.qty;
+            row.qty = validateBaseQuantity(row.product, row.qty, 'Jumlah restock refund');
+            if (row.product.trackStock !== false) row.product.stock = quantity(row.product.stock + row.qty);
             next.stockMovements.unshift({ id: generateId('MOV'), branchId: target.branchId, productId: row.product.id, productName: row.product.name, type: payload.voidAll ? 'VOID' : 'REFUND', qtyChange: row.qty, refId: refund.id, note: payload.reason, createdAt: refund.createdAt, userId: currentUser.id });
           }
         }
@@ -1388,12 +1498,19 @@ export function PosProvider({ children }) {
     if (status !== 'DRAFT' && !payload.items?.length) throw new Error('Tambahkan minimal satu barang.');
 
     const items = (payload.items || []).map(item => {
+      const product = next.products.find(row => row.id === item.productId && row.branchId === branchId);
+      if (!product) throw new Error(`Produk ${item.name || item.productId} tidak ditemukan di cabang aktif.`);
       const qty = Number(item.qty);
+      const unit = item.unit || product.baseUnit;
+      const factor = quantity(item.factor || conversionFactor(product, unit));
       const price = money(item.price);
       const itemDiscount = money(item.discount);
+      const baseQty = quantity(item.baseQty ?? qty * factor);
+      const baseUnitCost = money(item.baseUnitCost ?? calculateBaseUnitCost(price, factor));
       if (!Number.isFinite(qty) || qty <= 0) throw new Error(`Jumlah ${item.name || 'barang'} harus lebih dari 0.`);
+      if (!Number.isFinite(factor) || factor <= 0 || baseQty <= 0) throw new Error(`Konversi satuan ${item.name || 'barang'} tidak valid.`);
       if (itemDiscount > qty * price) throw new Error(`Diskon ${item.name || 'barang'} melebihi subtotal item.`);
-      return { ...item, qty, price, discount: itemDiscount };
+      return { ...item, qty: quantity(qty), unit, factor, baseQty, baseUnit: product.baseUnit, price, baseUnitCost, discount: itemDiscount };
     });
     const subtotal = items.reduce((sum, item) => sum + Math.max(0, item.qty * item.price - item.discount), 0);
     const additional = money(payload.additional);
@@ -1414,9 +1531,9 @@ export function PosProvider({ children }) {
         const product = next.products.find(row => row.id === item.productId && row.branchId === purchase.branchId);
         if (!product) throw new Error(`Produk ${item.name || item.productId} tidak ditemukan di cabang aktif.`);
         item.previousModalPrice = product.modalPrice;
-        product.stock += Number(item.qty);
-        product.modalPrice = money(item.price);
-        next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE', qtyChange: Number(item.qty), refId: purchase.id, note: purchase.invoiceNo, createdAt: nowISO(), userId: currentUser.id });
+        product.stock = quantity(product.stock + Number(item.baseQty || item.qty));
+        product.modalPrice = money(item.baseUnitCost ?? calculateBaseUnitCost(item.price, item.factor || 1));
+        next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE', qtyChange: Number(item.baseQty || item.qty), refId: purchase.id, note: `${purchase.invoiceNo} · ${item.qty} ${item.unit}`, createdAt: nowISO(), userId: currentUser.id });
       }
       purchase.inventoryApplied = true;
       if (balance > 0) next.payables.unshift({ id: generateId('PAY'), branchId: purchase.branchId, purchaseId: purchase.id, supplierId: purchase.supplierId, supplierName: purchase.supplierName, total, paid, balance, dueDate: purchase.dueDate, status: 'OPEN', payments: [], createdAt: nowISO(), updatedAt: nowISO() });
@@ -1445,12 +1562,20 @@ export function PosProvider({ children }) {
       const remaining = Math.max(0, Number(original.qty || 0) - alreadyReturned);
       if (Number(item.qty || 0) <= 0 || Number(item.qty) > remaining) throw new Error(`Jumlah retur ${original.name} melebihi sisa yang dapat diretur (${remaining}).`);
       const product = next.products.find(row => row.id === item.productId && row.branchId === purchase.branchId);
+      if (!product) throw new Error(`Produk ${original.name || item.productId} tidak ditemukan di cabang pembelian.`);
       const returnQty = quantity(item.qty);
-      if (!product || product.stock < returnQty) throw new Error(`Stok ${item.name} tidak cukup untuk retur.`);
-      product.stock -= returnQty;
+      const returnStep = Number(original.quantityStep || (original.unit === original.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true) : 1));
+      if (!isStepAligned(returnQty, returnStep)) throw new Error(`Jumlah retur ${original.name} harus mengikuti kelipatan ${returnStep} ${original.unit || ''}.`);
+      const factor = quantity(original.factor || 1);
+      const returnBaseQty = validateBaseQuantity(product, returnQty * factor, `Jumlah retur ${original.name}`);
+      if (product.stock < returnBaseQty) throw new Error(`Stok ${item.name} tidak cukup untuk retur. Dibutuhkan ${returnBaseQty} ${product.baseUnit || 'satuan dasar'}.`);
+      product.stock = quantity(product.stock - returnBaseQty);
       affectedProductIds.add(product.id);
+      item.baseQty = returnBaseQty;
+      item.unit = original.unit || product.baseUnit;
+      item.factor = factor;
       total += Math.round(returnQty * money(original.price) * purchaseAllocationRatio);
-      next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE_RETURN', qtyChange: -returnQty, refId: purchase.id, note: payload.reason, createdAt: nowISO(), userId: currentUser.id });
+      next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE_RETURN', qtyChange: -returnBaseQty, refId: purchase.id, note: `${payload.reason} · ${returnQty} ${item.unit}`, createdAt: nowISO(), userId: currentUser.id });
     }
     purchase.returns = [...(purchase.returns || []), { id: generateId('PRET'), items: payload.items, total, reason: payload.reason, createdAt: nowISO() }];
     purchase.updatedAt = nowISO();
@@ -1505,10 +1630,10 @@ export function PosProvider({ children }) {
   const adjustStock = data => commit('STOCK_ADJUST', data.reason, next => {
     const product = next.products.find(item => item.id === data.productId && item.branchId === branchId);
     if (!product) throw new Error('Produk tidak ditemukan.');
-    const change = Number(data.qtyChange) || 0;
+    const change = validateBaseQuantity(product, data.qtyChange, 'Perubahan stok');
     if (change === 0) throw new Error('Perubahan stok tidak boleh 0.');
-    if (product.stock + change < 0) throw new Error('Stok tidak boleh negatif.');
-    product.stock += change;
+    if (Number(product.stock || 0) + change < 0) throw new Error('Stok tidak boleh negatif.');
+    product.stock = quantity(Number(product.stock || 0) + change);
     const adjustment = { id: generateId('ADJ'), branchId: product.branchId, productId: product.id, productName: product.name, qtyChange: change, reason: data.reason, createdAt: nowISO(), userId: currentUser.id };
     next.stockAdjustments.unshift(adjustment);
     next.stockMovements.unshift({ ...adjustment, type: 'ADJUSTMENT', refId: adjustment.id, note: data.reason });
@@ -1521,9 +1646,9 @@ export function PosProvider({ children }) {
     for (const count of counts) {
       const product = next.products.find(item => item.id === count.productId && item.branchId === branchId);
       if (!product) continue;
-      const actual = Number(count.actual);
-      if (!Number.isFinite(actual) || actual < 0) throw new Error(`Stok fisik ${product.name} tidak valid.`);
-      const difference = actual - product.stock;
+      const actual = validateBaseQuantity(product, count.actual, 'Stok fisik');
+      if (actual < 0) throw new Error(`Stok fisik ${product.name} tidak valid.`);
+      const difference = signedQuantity(actual - Number(product.stock || 0));
       opname.items.push({ productId: product.id, productName: product.name, system: product.stock, actual, difference });
       if (difference !== 0) {
         product.stock = actual;
@@ -1535,17 +1660,18 @@ export function PosProvider({ children }) {
   });
 
   const transferStock = ({ productId, destinationBranchId, qty, notes }) => commit('STOCK_TRANSFER', `${productId}:${qty}`, next => {
-    const transferQty = quantity(qty);
-    if (transferQty <= 0) throw new Error('Jumlah transfer harus lebih dari 0.');
     if (!destinationBranchId || destinationBranchId === branchId) throw new Error('Pilih cabang tujuan yang berbeda.');
     const source = next.products.find(item => item.id === productId && item.branchId === branchId);
-    if (!source || source.stock < transferQty) throw new Error('Stok sumber tidak cukup.');
+    if (!source) throw new Error('Barang sumber tidak ditemukan.');
+    const transferQty = validateBaseQuantity(source, qty, 'Jumlah transfer');
+    if (transferQty <= 0) throw new Error('Jumlah transfer harus lebih dari 0.');
+    if (Number(source.stock || 0) < transferQty) throw new Error('Stok sumber tidak cukup.');
     let destination = next.products.find(item => item.sku === source.sku && item.branchId === destinationBranchId);
     if (!destination) {
       destination = { ...clone(source), id: generateId('PRD'), branchId: destinationBranchId, stock: 0 };
       next.products.push(destination);
     }
-    source.stock -= transferQty; destination.stock += transferQty;
+    source.stock = quantity(Number(source.stock || 0) - transferQty); destination.stock = quantity(Number(destination.stock || 0) + transferQty);
     const transfer = { id: generateId('TRF'), sourceBranchId: source.branchId, destinationBranchId, productId: source.id, productName: source.name, qty: transferQty, notes: notes || '', status: 'RECEIVED', createdAt: nowISO(), userId: currentUser.id };
     next.stockTransfers.unshift(transfer);
     next.stockMovements.unshift({ id: generateId('MOV'), branchId: source.branchId, productId: source.id, productName: source.name, type: 'TRANSFER_OUT', qtyChange: -transferQty, refId: transfer.id, note: destinationBranchId, createdAt: transfer.createdAt, userId: currentUser.id });
@@ -1556,7 +1682,22 @@ export function PosProvider({ children }) {
   const saveOnlineOrder = data => commit(data.id ? 'ORDER_UPDATE' : 'ORDER_CREATE', data.channel, next => {
     const channel = String(data.channel || '').trim();
     if (!channel) throw new Error('Sumber/channel pesanan wajib diisi.');
-    const item = { ...data, id: data.id || generateId('ORD'), branchId: data.branchId || branchId, channel, createdAt: data.createdAt || nowISO(), status: data.status || 'NEW' };
+    const targetBranchId = data.branchId || branchId;
+    const items = (data.items || []).map(line => {
+      const product = next.products.find(row => row.id === line.productId && row.branchId === targetBranchId);
+      if (!product) throw new Error(`Produk ${line.name || line.productId} tidak ditemukan di cabang pesanan.`);
+      const qty = quantity(line.qty);
+      const unit = line.unit || product.baseUnit;
+      const factor = quantity(line.factor || conversionFactor(product, unit));
+      const baseQty = validateBaseQuantity(product, line.baseQty ?? qty * factor, `Jumlah ${product.name}`);
+      const quantityStep = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true) : 1;
+      if (qty <= 0 || factor <= 0 || !isStepAligned(qty, quantityStep)) throw new Error(`Jumlah ${product.name} harus mengikuti kelipatan ${quantityStep} ${unit}.`);
+      const price = money(line.price);
+      return { ...line, productId: product.id, name: product.name, qty, unit, factor, baseQty, baseUnit: product.baseUnit, quantityStep, allowFractional: quantityStep < 1, price, netUnitPrice: money(line.netUnitPrice ?? price), itemDiscount: 0 };
+    });
+    if (!data.id && !items.length) throw new Error('Tambahkan minimal satu barang ke pesanan.');
+    const total = money(items.reduce((sum, line) => sum + line.qty * line.price, 0));
+    const item = { ...data, items, total, id: data.id || generateId('ORD'), branchId: targetBranchId, channel, createdAt: data.createdAt || nowISO(), status: data.status || 'NEW' };
     const index = next.onlineOrders.findIndex(row => row.id === item.id);
     if (index >= 0) next.onlineOrders[index] = item; else next.onlineOrders.unshift(item);
     return item;
@@ -1730,6 +1871,7 @@ export function PosProvider({ children }) {
     branchId, branch, customerDisplay, setCustomerDisplay,
     deviceSettings, updateDeviceSettings, login, loginEmployee, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     loginDirectory, loginDirectoryLoading, refreshLoginDirectory,
+    loginEmployeesByBranch, loginEmployeesLoading, refreshLoginEmployees,
     hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, saveProduct, archiveProduct, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,

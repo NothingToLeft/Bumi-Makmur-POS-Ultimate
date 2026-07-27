@@ -1,4 +1,5 @@
 import { escapeHtml, formatRp } from '../utils/helpers.js';
+import { formatQuantity } from '../utils/fractionalUnits.js';
 
 export const getReceiptLogo = (configs = {}) => configs.receiptShowLogo === false ? '' : (configs.receiptLogo || '/logo-bm.svg');
 
@@ -15,7 +16,7 @@ export const buildReceiptText = (sale, configs = {}) => {
   const divider = '------------------------------';
   const items = (sale.items || []).flatMap(line => {
     const net = Number(line.price || 0) * Number(line.qty || 0) - Number(line.itemDiscount || 0);
-    const detail = `${line.qty} ${line.unit || 'item'} x ${formatRp(line.price)}`;
+    const detail = `${formatQuantity(line.qty)} ${line.unit || 'item'} x ${formatRp(line.price)}`;
     const extra = line.itemDiscount > 0 ? ` | diskon ${formatRp(line.itemDiscount)}` : '';
     return [`*${line.name}*`, `${detail}${extra}`, `= ${formatRp(net)}`];
   });
@@ -176,7 +177,7 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
     for (const line of nameLines) { context.fillText(line, 60, y); y += 30; }
     context.font = '21px Segoe UI, Arial, sans-serif';
     context.fillStyle = '#6b7280';
-    context.fillText(`${item.qty} ${item.unit || 'item'} × ${formatRp(item.price)}`, 60, y);
+    context.fillText(`${formatQuantity(item.qty)} ${item.unit || 'item'} × ${formatRp(item.price)}`, 60, y);
     context.textAlign = 'right';
     context.font = '700 23px Segoe UI, Arial, sans-serif';
     context.fillStyle = '#111827';
@@ -216,7 +217,7 @@ export const buildReceiptPrintHtml = (sale, configs = {}) => {
   const rows = (sale.items || []).map(line => `
     <div class="item">
       <div class="item-name">${escapeHtml(line.name || '')}</div>
-      <div class="row subtle"><span>${escapeHtml(String(line.qty))} ${escapeHtml(line.unit || 'item')} × ${escapeHtml(formatRp(line.price))}</span><b>${escapeHtml(formatRp(Number(line.price || 0) * Number(line.qty || 0) - Number(line.itemDiscount || 0)))}</b></div>
+      <div class="row subtle"><span>${escapeHtml(formatQuantity(line.qty))} ${escapeHtml(line.unit || 'item')} × ${escapeHtml(formatRp(line.price))}</span><b>${escapeHtml(formatRp(Number(line.price || 0) * Number(line.qty || 0) - Number(line.itemDiscount || 0)))}</b></div>
       ${line.itemDiscount > 0 ? `<div class="discount">Diskon item -${escapeHtml(formatRp(line.itemDiscount))}</div>` : ''}
     </div>`).join('');
   const payments = (sale.payments || []).map(payment => `<div class="row"><span>${escapeHtml(payment.name || 'Pembayaran')}</span><b>${escapeHtml(formatRp(payment.amount))}</b></div>`).join('');

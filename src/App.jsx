@@ -8,8 +8,6 @@ import ControlCenterScreen from './screens/ControlCenterScreen.jsx';
 import POSScreen from './screens/POSScreen.jsx';
 import OpenBillsScreen from './screens/OpenBillsScreen.jsx';
 import ProductsScreen from './screens/ProductsScreen.jsx';
-import PromotionsScreen from './screens/PromotionsScreen.jsx';
-import InventoryScreen from './screens/InventoryScreen.jsx';
 import PurchasesScreen from './screens/PurchasesScreen.jsx';
 import { SuppliersScreen, CustomersScreen } from './screens/PartnersScreens.jsx';
 import { ShiftsScreen, FinanceScreen } from './screens/ShiftFinanceScreens.jsx';
@@ -46,8 +44,8 @@ function AppShell(){
  if(initializingApp&&!dataReady)return <CloudLoadingScreen storeName={storeName}/>;
  const navigate=id=>{setActive(id);setMore(false)};
  const content=()=>{switch(active){
-  case'dashboard':return <DashboardScreen/>;case'controlCenter':return <ControlCenterScreen/>;case'pos':return <POSScreen/>;case'openBills':return <OpenBillsScreen onNavigate={navigate}/>;case'transactions':return <TransactionsScreen/>;case'products':return <ProductsScreen/>;case'promotions':return <PromotionsScreen/>;case'inventory':return <InventoryScreen/>;case'purchases':return <PurchasesScreen/>;case'suppliers':return <SuppliersScreen/>;case'customers':return <CustomersScreen/>;case'shifts':return <ShiftsScreen/>;case'finance':return <FinanceScreen/>;case'reports':return <ReportsScreen/>;case'orders':return <OrdersScreen onNavigate={navigate}/>;case'employees':return <EmployeesScreen/>;case'branches':return <BranchesScreen/>;case'devices':return <DevicesScreen/>;case'customerDisplay':return <CustomerDisplayScreen/>;case'settings':return <SettingsScreen/>;default:return <POSScreen/>}}
- const bottomIds=['pos','transactions','products','inventory'];const bottom=bottomIds.map(id=>allowed.find(m=>m.id===id)).filter(Boolean).slice(0,4);
+  case'dashboard':return <DashboardScreen/>;case'controlCenter':return <ControlCenterScreen/>;case'pos':return <POSScreen/>;case'openBills':return <OpenBillsScreen onNavigate={navigate}/>;case'transactions':return <TransactionsScreen/>;case'products':return <ProductsScreen/>;case'inventory':return <ProductsScreen/>;case'promotions':return <ProductsScreen/>;case'purchases':return <PurchasesScreen/>;case'suppliers':return <SuppliersScreen/>;case'customers':return <CustomersScreen/>;case'shifts':return <ShiftsScreen/>;case'finance':return <FinanceScreen/>;case'reports':return <ReportsScreen/>;case'orders':return <OrdersScreen onNavigate={navigate}/>;case'employees':return <EmployeesScreen/>;case'branches':return <BranchesScreen/>;case'devices':return <DevicesScreen/>;case'customerDisplay':return <CustomerDisplayScreen/>;case'settings':return <SettingsScreen/>;default:return <POSScreen/>}}
+ const bottomIds=['pos','transactions','products'];const bottom=bottomIds.map(id=>allowed.find(m=>m.id===id)).filter(Boolean).slice(0,4);
  return <div className={`h-screen flex overflow-hidden font-sans app-shell-premium ${db.configs.darkMode?'theme-dark':'theme-light'}`}>
   <aside className="hidden md:flex w-20 lg:w-64 bg-emerald-900 text-white flex-col shrink-0 sidebar-nav sidebar-premium">
    <div className="h-[72px] border-b border-emerald-800 flex items-center justify-center lg:justify-start gap-3 px-4 lg:px-5"><img src="/logo-bm.svg" alt="BM" className="w-11 h-11 rounded-2xl shadow-lg ring-1 ring-white/20"/><div className="hidden lg:block"><p className="font-black tracking-tight truncate" title={storeName}>{storeName}</p><p className="text-[10px] text-emerald-300">POS Hybrid v{APP_VERSION}</p></div></div>

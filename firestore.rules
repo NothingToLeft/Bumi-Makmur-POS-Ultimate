@@ -164,6 +164,21 @@ service cloud.firestore {
       allow delete: if owner(storeId);
     }
 
+
+    // Daftar nama tampilan karyawan aktif per cabang untuk dropdown login.
+    // Dokumen ini tidak memuat UID, email, PIN, hash PIN, atau data transaksi.
+    match /stores/{storeId}/publicEmployees/{branchId} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if (owner(storeId) || managerOwnBranch(storeId, branchId))
+        && request.resource.data.keys().hasOnly(['storeId', 'branchId', 'employees', 'updatedAt'])
+        && request.resource.data.storeId == storeId
+        && request.resource.data.branchId == branchId
+        && request.resource.data.employees is list
+        && request.resource.data.employees.size() <= 100;
+      allow delete: if owner(storeId) || managerOwnBranch(storeId, branchId);
+    }
+
     match /stores/{storeId}/users/{uid} {
       // Pengguna selalu boleh membaca profilnya sendiri. Owner melihat seluruh
       // karyawan; Store Manager hanya melihat Kasir pada cabangnya sendiri.

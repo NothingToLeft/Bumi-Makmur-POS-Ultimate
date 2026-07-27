@@ -20,11 +20,12 @@ export default function LoginScreen() {
   const {
     login, loginEmployee, connectAccount, loginWithBiometric, bootstrapStore,
     deviceSettings, updateDeviceSettings, cloudConfigured, online, clearCloudError,
-    loginDirectory, loginDirectoryLoading, refreshLoginDirectory
+    loginDirectory, loginDirectoryLoading, refreshLoginDirectory,
+    loginEmployeesByBranch, loginEmployeesLoading, refreshLoginEmployees
   } = usePos();
   const [mode, setMode] = useState('choose');
   const [pin, setPin] = useState('');
-  const [employeeName, setEmployeeName] = useState('');
+  const [employeeLoginName, setEmployeeLoginName] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState(deviceSettings.activeBranchId || MAIN_BRANCH_ID);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -38,6 +39,9 @@ export default function LoginScreen() {
     const rows = (loginDirectory?.branches || []).filter(item => item?.id && item.active !== false);
     return rows.length ? rows : [{ id: MAIN_BRANCH_ID, name: 'Pusat BUMI MAKMUR', active: true }];
   }, [loginDirectory]);
+  const employees = useMemo(() => (loginEmployeesByBranch?.[selectedBranchId] || [])
+    .filter(item => item?.loginName && item.active !== false)
+    .sort((first, second) => String(first.name || first.loginName).localeCompare(String(second.name || second.loginName), 'id')), [loginEmployeesByBranch, selectedBranchId]);
   const loginAppearance = useMemo(() => normalizeLoginAppearance(loginDirectory?.loginAppearance), [loginDirectory?.loginAppearance]);
   const selectedBranchName = branches.find(branch => branch.id === selectedBranchId)?.name || 'Pilih cabang';
   const loginHeader = loginAppearance.headerText || loginDirectory?.businessName || 'BUMI MAKMUR';
@@ -71,11 +75,26 @@ export default function LoginScreen() {
     if (!branches.some(branch => branch.id === selectedBranchId)) setSelectedBranchId(branches[0]?.id || MAIN_BRANCH_ID);
   }, [branches, selectedBranchId]);
 
+  useEffect(() => {
+    if (!selectedBranchId) return;
+    void refreshLoginEmployees(selectedBranchId);
+  }, [selectedBranchId, online]);
+
+  useEffect(() => {
+    const remembered = deviceSettings.lastEmployeeLoginByBranch?.[selectedBranchId] || '';
+    if (remembered && employees.some(item => item.loginName === remembered)) {
+      setEmployeeLoginName(remembered);
+      return;
+    }
+    if (!employees.some(item => item.loginName === employeeLoginName)) setEmployeeLoginName(employees[0]?.loginName || '');
+  }, [selectedBranchId, employees]);
+
   const selectMode = nextMode => {
     clearCloudError?.();
     setMode(nextMode);
     setPin('');
     setError('');
+    if (nextMode === 'employee') void refreshLoginEmployees(selectedBranchId);
   };
 
   const goBack = () => {
@@ -110,7 +129,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!activeRole || pin.length !== 4) return undefined;
-    if (mode === 'employee' && !employeeName.trim()) return undefined;
+    if (mode === 'employee' && !employeeLoginName) return undefined;
     let cancelled = false;
     const verify = async () => {
       setBusy(true);
@@ -118,7 +137,7 @@ export default function LoginScreen() {
       setError('');
       try {
         const result = mode === 'employee'
-          ? await loginEmployee({ loginName: employeeName, pin, branchId: selectedBranchId })
+          ? await loginEmployee({ loginName: employeeLoginName, pin, branchId: selectedBranchId })
           : await login(pin, 'owner', { branchId: selectedBranchId });
         if (!cancelled && !result.success) {
           setError(result.message || 'Data login tidak dikenali.');
@@ -135,7 +154,7 @@ export default function LoginScreen() {
     };
     void verify();
     return () => { cancelled = true; };
-  }, [pin, mode, employeeName, selectedBranchId, activeRole, login, loginEmployee, online]);
+  }, [pin, mode, employeeLoginName, selectedBranchId, activeRole, login, loginEmployee, online]);
 
   const press = value => {
     if (pin.length < 4 && !busy) {
@@ -146,9 +165,11 @@ export default function LoginScreen() {
 
   const chooseBranch = value => {
     setSelectedBranchId(value);
+    setEmployeeLoginName('');
     updateDeviceSettings({ activeBranchId: value });
     setPin('');
     setError('');
+    void refreshLoginEmployees(value);
   };
 
   return (
@@ -179,8 +200,16 @@ export default function LoginScreen() {
               selectedBranchId={selectedBranchId}
               onBranchChange={chooseBranch}
               directoryLoading={loginDirectoryLoading}
-              employeeName={employeeName}
-              onEmployeeNameChange={value => { setEmployeeName(value); setPin(''); setError(''); }}
+              employees={employees}
+              employeesLoading={loginEmployeesLoading}
+              employeeLoginName={employeeLoginName}
+              onReloadEmployees={() => void refreshLoginEmployees(selectedBranchId)}
+              onEmployeeChange={value => {
+                setEmployeeLoginName(value);
+                updateDeviceSettings({ lastEmployeeLoginByBranch: { ...(deviceSettings.lastEmployeeLoginByBranch || {}), [selectedBranchId]: value } });
+                setPin('');
+                setError('');
+              }}
               onPress={press}
               onErase={() => { setPin(value => value.slice(0, -1)); setError(''); }}
               onBack={goBack}
@@ -258,7 +287,7 @@ function LoginChooser({ onSelect, cloudConfigured, appearance }) {
 
 function RoleLogin({
   mode, role, pin, error, busy, branches, selectedBranchId, onBranchChange, directoryLoading,
-  employeeName, onEmployeeNameChange, onPress, onErase, onBack, biometricEnabled,
+  employees, employeesLoading, employeeLoginName, onEmployeeChange, onReloadEmployees, onPress, onErase, onBack, biometricEnabled,
   onBiometric, onOwnerConnect, onSetup, setupAvailable, online, cloudConfigured
 }) {
   const RoleIcon = role.icon;
@@ -278,8 +307,13 @@ function RoleLogin({
       </Field>
 
       {!isOwner && (
-        <Field label="Nama Login Karyawan" hint="Gunakan nama login yang dibuat dari Pengaturan Owner/Manager.">
-          <Input value={employeeName} onChange={event => onEmployeeNameChange(event.target.value)} placeholder="Contoh: andi kasir" autoComplete="username" disabled={busy}/>
+        <Field label="Nama Karyawan" hint={employeesLoading ? 'Memuat daftar karyawan aktif...' : 'Daftar mengikuti cabang yang dipilih dan diperbarui otomatis oleh Owner/Manager.'}>
+          <Select value={employeeLoginName} onChange={event => onEmployeeChange(event.target.value)} disabled={busy || employeesLoading || employees.length === 0}>
+            {employees.length === 0 && <option value="">Belum ada karyawan aktif di cabang ini</option>}
+            {employees.map(employee => <option key={employee.loginName} value={employee.loginName}>{employee.name} — {employee.role === 'manager' ? 'Store Manager' : 'Kasir'}</option>)}
+          </Select>
+          {!employeesLoading && employees.length === 0 && <p className="text-xs text-orange-700 font-bold mt-2">Buat atau aktifkan akun dari Pengaturan → Karyawan, lalu tekan muat ulang daftar.</p>}
+          <button type="button" onClick={onReloadEmployees} disabled={busy || employeesLoading} className="mt-2 min-h-[40px] px-3 rounded-xl bg-blue-50 text-blue-700 border border-blue-100 text-xs font-bold disabled:opacity-50">Muat Ulang Daftar Karyawan</button>
         </Field>
       )}
 
@@ -289,7 +323,7 @@ function RoleLogin({
           {[0,1,2,3].map(index => <span key={index} className={`w-3 h-3 rounded-full ${index < pin.length ? (isOwner ? 'bg-emerald-600' : 'bg-blue-600') : 'bg-gray-200'}`}/>)}
         </div>
         {error && <ErrorBox text={error}/>} 
-        <PinPad onPress={onPress} onErase={onErase} busy={busy || (!isOwner && !employeeName.trim())} accent={isOwner ? 'emerald' : 'blue'}/>
+        <PinPad onPress={onPress} onErase={onErase} busy={busy || (!isOwner && !employeeLoginName)} accent={isOwner ? 'emerald' : 'blue'}/>
       </div>
 
       {biometricEnabled && (

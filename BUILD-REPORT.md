@@ -1,33 +1,53 @@
-# Build & QA Report — Bumi Makmur POS v5.1.3
+# Build & QA Report — Bumi Makmur POS v5.2.0
 
-## Ruang lingkup
+## Lingkup perubahan
 
-- Editor lengkap teks halaman login.
-- Preview langsung tampilan login.
-- Publikasi konfigurasi login lintas Web, PC, Android, HP, dan tablet.
-- Normalisasi data lama agar tetap kompatibel.
+- Dropdown login karyawan per cabang.
+- Direktori nama karyawan publik yang disanitasi.
+- Produk & Stok terpadu.
+- Penjualan pecahan dan konversi satuan.
+- Pembelian/restok multi-satuan serta retur pecahan.
+- Pesanan online multi-satuan yang konsisten saat dikonversi ke tagihan Kasir.
+- Penghapusan UI Promo otomatis dengan kompatibilitas histori.
+- Audit regresi Android, Web/PWA, Windows, Firebase Spark, dan offline sync.
 
 ## Hasil pemeriksaan lokal
 
 ```text
-Core tests   : 88/88 lulus
-Static audit : lulus
-JS/JSX/MJS   : 65 file diperiksa
-JSON         : 4 file valid
+npm run test:core
+Tests : 95
+Pass  : 95
+Fail  : 0
 ```
 
-Kompilasi Vite lokal belum dapat diselesaikan karena registry dependency internal mengembalikan HTTP 503 saat `npm install`. Workflow GitHub `test-only` tetap wajib dijalankan untuk kompilasi Vite final.
+```text
+npm run audit:static
+AUDIT LULUS
+JS/JSX/MJS : 65 file
+JSON       : 4 file valid
+```
 
-## Urutan rilis
+Pemeriksaan sintaks/transpilasi source menghasilkan **0 error**.
 
-1. Jalankan workflow `test-only`.
-2. Cloudflare Pages memperbarui Web otomatis setelah branch `main` dipush.
-3. Jalankan `windows-release` untuk EXE/MSI.
-4. Jalankan `android-release` untuk APK/AAB.
-5. Firestore Rules tidak perlu di-deploy ulang untuk v5.1.3.
+## Batas pemeriksaan
 
-## Kompatibilitas data
+Instalasi dependency/Vite build penuh tidak dapat dipastikan dari lingkungan penyusunan ketika registry npm tidak merespons stabil. Karena itu workflow GitHub Actions `test-only` tetap menjadi gerbang wajib sebelum Android/Windows release.
 
-- Dapat dipasang langsung di atas v5.1.2.
-- Jangan uninstall APK/aplikasi Desktop lama bila ingin mempertahankan cache lokal.
-- Konfigurasi baru menggunakan fallback aman untuk database lama.
+## Pemeriksaan yang wajib di GitHub
+
+1. Core tests.
+2. Static audit.
+3. Vite production build.
+4. Firestore Rules compile/deploy.
+5. Android Gradle signed APK/AAB.
+6. Electron Builder EXE/MSI dengan `--publish never`.
+7. Publikasi checksum dan aset ke GitHub Releases.
+
+## Status kompatibilitas
+
+- Firebase Spark/free tier: dipertahankan.
+- Cloud Functions: tidak digunakan.
+- Firebase Storage: tidak digunakan.
+- Package ID Android: tetap `app.bumimakmur.pos`.
+- Data lokal v5.1.x: dipertahankan saat update langsung.
+- Data promo lama: dipertahankan untuk laporan historis.

@@ -1,115 +1,153 @@
-# Bumi Makmur POS FreeSync v5.1.3
+# Bumi Makmur POS FreeSync v5.2.0
 
-Satu source code untuk **Windows Desktop, Web/PWA, Android HP, dan tablet**. Rilis v5.1.3 menambahkan studio pengaturan halaman login, sekaligus mempertahankan Desktop Windows profesional, identitas toko/cabang dinamis, input produk melalui scan barcode, dan layar pelanggan kedua.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.2.0 berfokus pada alur yang lebih mudah bagi toko bahan bangunan, listrik, dan air: login karyawan tinggal memilih nama, Produk dan Stok disatukan, serta barang seperti kabel dapat dijual 2 meter atau 3,5 meter meskipun dibeli per roll.
 
-## Platform
+## Platform dan arsitektur
 
-- **Windows Desktop:** installer `.exe` (NSIS) dan `.msi`, dibuat gratis melalui GitHub Actions.
+- **Android:** APK/AAB Capacitor, dioptimalkan untuk Infinix Note 40 Pro+ dan Huawei MatePad SE 11.
+- **Windows:** installer `.exe` dan `.msi` melalui GitHub Actions.
 - **Web/PWA:** Cloudflare Pages.
-- **Android:** APK/AAB Capacitor untuk Infinix Note 40 Pro+, Huawei MatePad SE 11, dan perangkat Android lain.
 - **Cloud:** Firebase Authentication + Firestore pada Spark/free tier.
-- **Offline:** IndexedDB, antrean mutasi, rebase konflik, dan sinkronisasi latar belakang.
+- **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
+- **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Fitur baru v5.1.3
+## Fitur utama v5.2.0
 
-### Studio tampilan halaman login
-Owner dapat membuka:
+### Login karyawan: pilih nama lalu PIN
 
-```text
-Pengaturan → Toko → Tampilan Halaman Login
-```
-
-Di sana tersedia pengaturan header, teks di bawah header, judul pilihan akun, deskripsi Owner/Karyawan, status online/offline, footer, placeholder dinamis `{branch}`, `{business}`, `{version}`, serta preview langsung.
-
-
-### Desktop Windows profesional
-- Mode kasir dua panel untuk monitor lebar.
-- Shortcut `F2` cari produk, `F4` bayar, `F8` tahan transaksi, `F9` scan, dan `Esc` tutup dialog.
-- Scanner barcode USB/Bluetooth dapat langsung mengetik ke pencarian atau kolom barcode produk.
-- Layar pelanggan kedua dapat dibuka pada monitor tambahan.
-- Installer Windows EXE dan MSI dibuat melalui workflow khusus.
-
-### Nama toko dapat diganti
-Owner dapat membuka:
+Alur karyawan menjadi:
 
 ```text
-Pengaturan → Bisnis → Identitas Toko Utama
+Pilih Toko/Cabang
+→ Pilih Nama Karyawan
+→ Masukkan PIN 4 digit
 ```
 
-Nama seperti **Bumi Makmur Utama** akan diterapkan ke sidebar, login karyawan, judul aplikasi, nota, layar pelanggan, dan profil QRIS default yang masih mengikuti nama lama. Mengganti nama tidak membuat toko baru dan tidak menghapus transaksi.
+Daftar hanya menampilkan Store Manager dan Kasir aktif pada cabang yang dipilih. Nama dikirim melalui dokumen publik yang sudah disanitasi; UID, email, PIN, hash PIN, dan data transaksi tidak ikut dipublikasikan. Daftar terakhir disimpan lokal agar tetap tersedia pada perangkat yang sudah pernah tersambung.
 
-### Scan barcode saat menambah produk
-Pada formulir **Produk Baru**, tekan **Scan** untuk memakai kamera. Di PC, fokuskan kolom barcode lalu gunakan scanner USB/Bluetooth. Sistem memeriksa duplikasi sebelum menyimpan.
+### Produk & Stok terpadu
 
-## Fitur utama yang dipertahankan
+Menu **Produk** dan **Stok** digabung menjadi **Produk & Stok**. Pengguna baru dapat langsung:
 
-Kasir, open bill, split bill, refund, multi-harga, stok, transfer antarcabang, pembelian, retur pemasok, pelanggan, piutang, utang, kas, shift, laporan, promosi, nota digital, QRIS per cabang, Store Manager, Kasir, audit log, printer thermal, PWA, Android, dan Pusat Kontrol Operasional tetap tersedia.
+- membuat barang;
+- scan barcode;
+- mengisi harga modal dan harga jual;
+- memasukkan stok awal;
+- mengatur stok minimum dan lokasi rak;
+- melakukan penyesuaian, stok opname, dan transfer cabang;
+- melihat stok rendah/habis, nilai modal, dan potensi retail;
+- mengekspor CSV dan mencetak lembar hitung stok.
+
+Restok rutin tetap disarankan melalui **Pembelian**, karena pemasok, harga beli, HPP, utang, dan riwayat barang masuk ikut tercatat.
+
+### Penjualan eceran dan pecahan
+
+Produk dapat memakai satuan dasar terkecil dan konversi kemasan. Contoh kabel:
+
+```text
+Satuan dasar : meter
+Konversi     : 1 roll = 50 meter
+Langkah jual : 0,1 meter
+```
+
+Kasir dapat menjual `2 meter`, `3,5 meter`, atau `1 roll`. Stok selalu dikurangi dalam meter, sedangkan harga checkout mengikuti satuan yang dipilih. Pembelian `1 roll` otomatis menambah stok `50 meter` dan menghitung biaya modal per meter. Pesanan WhatsApp/online juga dapat memilih meter, roll, box, atau konversi lain sebelum diteruskan ke Kasir.
+
+Fitur ini juga cocok untuk barang yang dijual per kilogram, liter, meter, atau potongan.
+
+### Promo diskon otomatis dihapus dari menu
+
+Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otomatis. Nilai promo pada transaksi lama tetap dipertahankan agar laporan dan nota historis tidak berubah. Pesan pada layar pelanggan tetap tersedia sebagai **Pesan Layar**, bukan diskon promo.
+
+### Fitur profesional tambahan
+
+- Filter stok rendah, stok kosong, dan barang pecahan.
+- Pergerakan stok dalam satu halaman.
+- Penyesuaian stok dengan alasan dan audit trail.
+- Stok opname dengan dukungan jumlah desimal.
+- Transfer stok pecahan antarcabang.
+- Scan barcode kamera dan scanner USB/Bluetooth.
+- Validasi SKU/barcode ganda per cabang.
+- QRIS adaptif per cabang.
+- Pusat Kontrol Operasional dan rekomendasi restok.
+- Identitas brand dan cabang dinamis.
+- Studio tulisan halaman login.
+- Shortcut kasir Windows dan layar pelanggan kedua.
 
 ## Role
 
-- **Owner:** seluruh akses, identitas toko, cabang, Manager, Kasir, dan pengaturan global.
-- **Store Manager:** operasional luas dan dapat mengelola Kasir pada cabangnya; tidak dapat mengubah identitas/global Owner atau mengelola Manager lain.
-- **Kasir:** kasir dan fungsi yang diizinkan pada cabangnya.
+- **Owner:** seluruh cabang, identitas usaha, Manager, Kasir, pengaturan global, backup, dan laporan.
+- **Store Manager:** operasional luas dan pengelolaan Kasir pada cabangnya; tidak dapat mengelola Owner/Manager lain atau pengaturan global Owner.
+- **Kasir:** kasir dan fungsi yang diizinkan pada cabang login.
 
-## Upload source penuh melalui GitHub Desktop
+## Upload source melalui GitHub Desktop
 
-1. Backup JSON dan pastikan antrean offline `0`.
-2. Ekstrak ZIP v5.1.3.
-3. Salin **seluruh isi** folder ke root repository lokal yang sama. Banyak file berubah adalah normal.
-4. Commit dengan pesan:
-   ```text
-   Bumi Makmur POS v5.1.3 Login Page Content Studio
-   ```
-5. Klik **Push origin**.
-
-## Workflow setelah push
-
-### Pemeriksaan umum/Android
+1. Backup JSON dan pastikan **Antrean Offline = 0**.
+2. Ekstrak ZIP v5.2.0.
+3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
+4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
+5. Commit yang disarankan:
 
 ```text
-Actions → Build Bumi Makmur POS v5.1.3 → test-only
+Bumi Makmur POS v5.2 Smart Inventory, Fractional Sales, and Employee Picker
 ```
 
-Setelah hijau, Cloudflare Pages memperbarui Web otomatis. Firestore Rules v5.0 tetap kompatibel; jalankan **Deploy Firebase Spark Rules** hanya apabila file `firestore.rules` ikut berubah di repository.
+6. Klik **Push origin**.
 
-Untuk Android:
+## Urutan workflow setelah push
+
+### 1. Pemeriksaan source
 
 ```text
-Actions → Build Bumi Makmur POS v5.1.3 → android-release
+Actions
+→ Build Bumi Makmur POS v5.2.0
+→ test-only
 ```
 
-Instal APK langsung di atas versi lama. Jangan uninstall agar data lokal tetap tersimpan.
+Pastikan core tests, audit statis, dan Vite build hijau.
 
-### Windows EXE dan MSI
+### 2. Deploy Firestore Rules — wajib
+
+v5.2.0 menambahkan dokumen `publicEmployees` untuk dropdown nama karyawan. Jalankan:
 
 ```text
-Actions → Build Bumi Makmur POS Desktop v5.1.3
+Actions
+→ Deploy Firebase Spark Rules
 → Run workflow
+```
+
+Tetap memakai Firebase Spark gratis.
+
+### 3. Android
+
+```text
+Actions
+→ Build Bumi Makmur POS v5.2.0
+→ android-release
+```
+
+Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal dan sesi perangkat tetap tersimpan.
+
+### 4. Windows
+
+```text
+Actions
+→ Build Bumi Makmur POS Desktop v5.2.0
 → windows-release
 ```
 
-Unduh artifact:
-
-```text
-Bumi-Makmur-POS-Desktop-v5.1.3-Windows
-```
-
-Artifact berisi installer `.exe`, `.msi`, dan `SHA256SUMS.txt`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.2.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
-- Ubah nama toko menjadi `Bumi Makmur Utama`, simpan, logout/login, dan periksa seluruh perangkat.
-- Tambah produk baru dengan kamera serta scanner fisik.
-- Pastikan barcode ganda ditolak.
-- Jalankan transaksi di PC memakai shortcut.
-- Buka layar pelanggan kedua dan pastikan keranjang/total berubah realtime.
-- Uji sinkronisasi PC–Web–Android dengan antrean offline kembali ke `0`.
+- Cabang dipilih, daftar karyawan aktif muncul, lalu login hanya dengan PIN.
+- Karyawan nonaktif/hapus tidak lagi muncul setelah daftar dimuat ulang.
+- Tambah kabel dengan satuan dasar meter, `1 roll = 50 meter`, langkah `0,1`, dan stok awal.
+- Jual `3,5 meter`; total dan stok berkurang tepat `3,5 meter`.
+- Restok `1 roll`; stok bertambah `50 meter` dan HPP per meter benar.
+- Penyesuaian, opname, dan transfer menerima angka desimal sesuai langkah produk.
+- Menu Promo tidak muncul dan transaksi baru tidak mendapat promo otomatis.
+- Sinkronisasi PC–Web–Android kembali ke antrean `0`.
 
-## Batasan keamanan installer Windows
+## Catatan installer Windows
 
-Installer lokal belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada instalasi pertama. Pastikan file berasal dari artifact GitHub repository sendiri dan cocokkan SHA-256.
-
-
-## GitHub Releases
-
-Setelah workflow `windows-release` berhasil, installer `.exe`, `.msi`, checksum, dan catatan rilis otomatis tersedia pada menu **Releases** repository. Workflow `android-release` menambahkan APK dan AAB ke tag versi yang sama. Actions Artifact tetap tersedia sebagai cadangan.
+Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.

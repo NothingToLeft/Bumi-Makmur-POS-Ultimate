@@ -13,7 +13,9 @@ test('halaman login memisahkan Owner dan Karyawan secara tegas', async () => {
   assert.match(appearance, /Login Owner/);
   assert.match(appearance, /Login Karyawan/);
   assert.match(login, /Toko \/ Cabang/);
-  assert.match(login, /Nama Login Karyawan/);
+  assert.match(login, /Nama Karyawan/);
+  assert.match(login, /<Select value=\{employeeLoginName\}/);
+  assert.doesNotMatch(login, /placeholder="Nama login karyawan"/);
   assert.match(login, /Biometrik tidak akan muncul otomatis/);
   assert.match(login, /expectedRole: 'owner'/);
   assert.match(login, /expectedRole: 'employee'/);

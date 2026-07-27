@@ -9,7 +9,7 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   const main = await read('electron/main.cjs');
   const preload = await read('electron/preload.cjs');
   const workflow = await read('.github/workflows/build-windows.yml');
-  assert.equal(pkg.version, '5.1.3');
+  assert.equal(pkg.version, '5.2.0');
   assert.equal(pkg.main, 'electron/main.cjs');
   assert.ok(pkg.devDependencies.electron);
   assert.ok(pkg.devDependencies['electron-builder']);
@@ -53,11 +53,11 @@ test('nama toko dapat diubah Owner dan diterapkan lintas login, shell, nota, QRI
 
 test('input produk baru mendukung kamera dan scanner USB Bluetooth tanpa mengetik barcode', async () => {
   const products = await read('src/screens/ProductsScreen.jsx');
-  assert.match(products, /Scan Barcode Produk Baru/);
+  assert.match(products, /Scan Barcode Barang Baru/);
   assert.match(products, /BarcodeDetector/);
   assert.match(products, /requestCameraPermission/);
   assert.match(products, /Scanner USB\/Bluetooth/);
-  assert.match(products, /Barcode ini sudah dipakai produk lain/);
+  assert.match(products, /Barcode ini sudah dipakai barang lain/);
   assert.match(products, /placeholder="Scan tanpa mengetik nomor"/);
 });
 

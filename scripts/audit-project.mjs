@@ -74,7 +74,7 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '5.1.3') errors.push(`Versi package harus 5.1.3, ditemukan ${pkg.version}`);
+if (pkg.version !== '5.2.0') errors.push(`Versi package harus 5.2.0, ditemukan ${pkg.version}`);
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 
 const rules = await readFile(path.join(root, 'firestore.rules'), 'utf8');

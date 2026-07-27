@@ -1,11 +1,11 @@
-BUMI MAKMUR POS v5.1.3 — DESKTOP WINDOWS, NAMA TOKO DINAMIS, DAN SCAN BARCODE PRODUK
+BUMI MAKMUR POS v5.2.0 — SMART INVENTORY & FRACTIONAL SALES
 
-1. Backup JSON dan pastikan antrean offline 0.
-2. Ekstrak ZIP v5.1 dan salin seluruh ISINYA ke root repository melalui GitHub Desktop.
-3. Commit lalu Push origin ke main.
-4. Actions > Build Bumi Makmur POS v5.1.3 > test-only.
-5. Setelah hijau, Cloudflare Pages memperbarui Web otomatis.
-6. Untuk APK: jalankan android-release, unduh artifact v5.1, dan instal tanpa uninstall versi lama.
-7. Untuk PC: Actions > Build Bumi Makmur POS Desktop v5.1 > windows-release.
-8. Unduh artifact Bumi-Makmur-POS-Desktop-v5.1-Windows yang berisi EXE, MSI, dan SHA256SUMS.txt.
-9. Uji ganti nama toko, scan barcode produk baru, shortcut kasir PC, layar pelanggan kedua, dan sinkronisasi PC-Web-Android.
+1. Backup JSON dan pastikan Antrean Offline = 0.
+2. Ekstrak ZIP v5.2.0 dan salin seluruh ISINYA ke root repository melalui GitHub Desktop.
+3. Pilih Replace files, commit, lalu Push origin ke main.
+4. Actions > Build Bumi Makmur POS v5.2.0 > test-only.
+5. Setelah hijau, WAJIB jalankan Actions > Deploy Firebase Spark Rules.
+6. Cloudflare Pages memperbarui Web otomatis.
+7. Android: jalankan android-release, unduh APK dari Releases, instal tanpa uninstall versi lama.
+8. Windows: Build Bumi Makmur POS Desktop v5.2.0 > windows-release.
+9. Uji dropdown karyawan, kabel 3,5 meter, restok 1 roll = 50 meter, stok awal, opname, transfer, dan sinkronisasi lintas perangkat.
