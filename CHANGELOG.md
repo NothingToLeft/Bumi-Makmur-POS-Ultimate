@@ -1,3 +1,7 @@
+## v5.1.2 — Branch Identity & UI Fix
+
+- Memperbaiki tombol sinkronisasi kosong, menambahkan editor cabang, dan menyelaraskan identitas aplikasi dengan cabang aktif.
+
 # Changelog Bumi Makmur POS
 
 ## v5.1.1 — GitHub Releases Otomatis

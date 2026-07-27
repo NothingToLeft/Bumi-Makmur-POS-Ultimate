@@ -1,9 +1,9 @@
-BUMI MAKMUR POS v5.1.1 — DESKTOP WINDOWS, NAMA TOKO DINAMIS, DAN SCAN BARCODE PRODUK
+BUMI MAKMUR POS v5.1.2 — DESKTOP WINDOWS, NAMA TOKO DINAMIS, DAN SCAN BARCODE PRODUK
 
 1. Backup JSON dan pastikan antrean offline 0.
 2. Ekstrak ZIP v5.1 dan salin seluruh ISINYA ke root repository melalui GitHub Desktop.
 3. Commit lalu Push origin ke main.
-4. Actions > Build Bumi Makmur POS v5.1.1 > test-only.
+4. Actions > Build Bumi Makmur POS v5.1.2 > test-only.
 5. Setelah hijau, Cloudflare Pages memperbarui Web otomatis.
 6. Untuk APK: jalankan android-release, unduh artifact v5.1, dan instal tanpa uninstall versi lama.
 7. Untuk PC: Actions > Build Bumi Makmur POS Desktop v5.1 > windows-release.

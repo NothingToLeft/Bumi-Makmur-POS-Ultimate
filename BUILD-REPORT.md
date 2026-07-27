@@ -1,59 +1,28 @@
-# Build & QA Report — Bumi Makmur POS v5.1.1
+# Build & QA Report — Bumi Makmur POS v5.1.2
 
-Tanggal audit source: 27 Juli 2026
+## Ruang lingkup perbaikan
 
-## Ruang lingkup
+- Tombol sinkronisasi Desktop/Windows yang sebelumnya tampak sebagai kotak putih kosong.
+- Editor nama, alamat, dan telepon pada setiap cabang.
+- Identitas aplikasi, nota, layar pelanggan, dan login mengikuti cabang aktif.
+- Pemisahan identitas cabang dari nama brand/grup usaha.
+- Snapshot identitas cabang pada transaksi agar nota lama tidak berubah setelah cabang diganti nama.
 
-- Windows Desktop dengan installer EXE/NSIS dan MSI.
-- Web/PWA dan Android tetap dipertahankan.
-- Nama toko, alamat, dan telepon dapat diganti Owner.
-- Scan barcode saat menambah produk melalui kamera atau scanner USB/Bluetooth.
-- Shortcut kasir PC dan layar pelanggan kedua.
-- Nama toko dinamis diterapkan ke login, shell, nota, faktur pembelian, QRIS default, dan customer display.
+## Pemeriksaan yang dijalankan
 
-## Hasil pemeriksaan aktual
-
-```text
-Core regression tests : 81/81 lulus
-Static audit          : lulus
-JS/JSX/MJS/CJS audit  : 62 file
-JSON validation       : 4 file valid
-TypeScript parse pass : lulus, 0 syntax error
-YAML workflow parse   : 4 workflow valid
-Secret/private key    : tidak terdeteksi
-Forbidden paid stack  : Functions dan Storage tidak ditemukan
-ZIP integrity         : diverifikasi saat paket final dibuat
-```
-
-## Pemeriksaan yang dilakukan
-
-```text
-npm run test:core
-npm run audit:static
-tsc --noEmit --allowJs --checkJs false --jsx preserve --noResolve ...
-```
+- Core test Node: **85/85 lulus**.
+- Static audit: **lulus**.
+- File JS/JSX/MJS yang diperiksa audit: **63**.
+- File JSON valid: **4**.
+- Pemeriksaan import relatif, file wajib, layanan berbayar terlarang, dan kemungkinan secret: **lulus**.
 
 ## Kompilasi final
 
-Instalasi dependency dan `npm run build` tidak dapat diselesaikan pada lingkungan penyusunan karena koneksi npm registry mengalami timeout. Source sudah memiliki workflow `test-only` yang menjalankan instalasi dependency, seluruh test, audit statis, dan kompilasi Vite pada GitHub sebelum installer dibuat.
+Instalasi dependency dan kompilasi Vite tidak dijalankan pada lingkungan penyusunan karena dependency registry tidak tersedia secara andal. Jalankan workflow GitHub Actions **test-only** setelah source di-push. Workflow tersebut menjadi pemeriksaan kompilasi Vite final sebelum Windows/Android release dibuat.
 
-Installer Windows final tidak disertakan di dalam source ZIP. Installer dibuat secara reproducible melalui:
+## Kompatibilitas data
 
-```text
-Actions → Build Bumi Makmur POS Desktop v5.1 → windows-release
-```
-
-## Keamanan Desktop
-
-- `nodeIntegration: false`
-- `contextIsolation: true`
-- `sandbox: true`
-- `webSecurity: true`
-- Preload hanya mengekspos API desktop minimum.
-- Renderer dilayani melalui custom secure scheme dari folder `dist`.
-- Navigasi/link eksternal dibuka di browser sistem, bukan di dalam aplikasi.
-- Izin media hanya diberikan untuk origin aplikasi lokal tepercaya.
-
-## Batasan rilis
-
-Installer Windows belum memakai sertifikat code-signing komersial. SmartScreen dapat menampilkan publisher tidak dikenal pada pemasangan pertama. Gunakan artifact dari repository GitHub sendiri dan cocokkan `SHA256SUMS.txt`.
+- Tidak mengubah package ID Android atau app ID Desktop.
+- Tidak menghapus data lokal, akun, transaksi, cabang, maupun konfigurasi Firebase.
+- APK/EXE/MSI v5.1.2 dapat dipasang sebagai pembaruan di atas versi sebelumnya.
+- Firestore Rules tidak berubah pada hotfix ini dan tidak perlu deploy ulang.

@@ -27,7 +27,8 @@ export default function App(){const params=new URLSearchParams(window.location.s
 function AppShell(){
  const {currentUser,db,logout,online,dataReady,cloudReady,initializingApp,cloudSaving,cloudError,clearCloudError,pendingSyncCount,branchId,setActiveBranch}=usePos();
  const requestedScreen=new URLSearchParams(window.location.search).get('screen');
- const storeName=db.configs.companyName||'BUMI MAKMUR';
+ const activeBranch=db.branches.find(item=>item.id===branchId)||db.branches[0];
+ const storeName=activeBranch?.name||db.configs.companyName||'BUMI MAKMUR';
  const [active,setActive]=useState(requestedScreen || (currentUser?.role==='kasir'?'pos':'dashboard')); const[more,setMore]=useState(false);
  const allowed=useMemo(()=>currentUser?MODULES.filter(module=>can(currentUser,module.permission)):[],[currentUser]);
  useEffect(()=>{

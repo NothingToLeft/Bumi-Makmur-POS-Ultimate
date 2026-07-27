@@ -11,7 +11,7 @@ const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.pri
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
 
 export default function POSScreen() {
-  const { db, scoped, completeSale, holdSale, findOpenShift, setCustomerDisplay, currentUser } = usePos();
+  const { db, scoped, completeSale, holdSale, findOpenShift, setCustomerDisplay, currentUser, branch } = usePos();
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Semua');
@@ -64,6 +64,7 @@ export default function POSScreen() {
     qrisMerchantName: branchPaymentProfile?.merchantName || db.configs.qrisMerchantName || db.configs.companyName,
     qrisInstruction: branchPaymentProfile?.qrisInstruction || db.configs.qrisInstruction
   };
+  const receiptDisplayConfig = { ...db.configs, companyName: branch?.name || db.configs.companyName, address: branch?.address || db.configs.address, phone: branch?.phone || db.configs.phone };
   const activePaymentMethods = (db.configs.paymentMethods || []).filter(item => item.active && (item.id !== 'qris' || branchPaymentProfile?.enabled !== false));
   useEffect(() => { if (customer?.priceTier && cart.length === 0) setSaleType(customer.priceTier); }, [customerId]);
 
@@ -300,7 +301,7 @@ export default function POSScreen() {
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
       {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={(product, options = {}) => { addProduct(product, options); setScannerOpen(false); }}/>}      
       {customOpen && <CustomItemModal onClose={() => setCustomOpen(false)} onAdd={line => { setCart(previous => [...previous, line]); setCustomOpen(false); }}/>}      
-      {receipt && <ReceiptModal sale={receipt} configs={db.configs} onClose={() => setReceipt(null)}/>}      
+      {receipt && <ReceiptModal sale={receipt} configs={receiptDisplayConfig} onClose={() => setReceipt(null)}/>}      
     </div>
   );
 }

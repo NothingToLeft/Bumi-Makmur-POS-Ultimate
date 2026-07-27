@@ -37,8 +37,8 @@ export default function ControlCenterScreen() {
   const printReorder = () => {
     const rows = health.lowStock.map((row, index) => `<tr><td>${index + 1}</td><td><b>${escapeHtml(row.name)}</b><br><small>${escapeHtml(row.sku || '-')} · Rak ${escapeHtml(row.rack || '-')}</small></td><td>${row.stock} ${escapeHtml(row.baseUnit || '')}</td><td>${row.minStock}</td><td><b>${row.suggestedQty} ${escapeHtml(row.baseUnit || '')}</b></td></tr>`).join('');
     printHtmlDocument(
-      `Saran Restock ${db.configs.companyName || 'BUMI MAKMUR'}`,
-      `<div class="center"><h2>${escapeHtml(db.configs.companyName||'BUMI MAKMUR')}</h2><p class="bold">SARAN RESTOCK</p><p>${escapeHtml(branch?.name || branchId)}</p><p>${new Date().toLocaleString('id-ID')}</p></div><div class="line"></div><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th>No</th><th>Produk</th><th>Stok</th><th>Min</th><th>Saran</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Tidak ada stok rendah.</td></tr>'}</tbody></table>`,
+      `Saran Restock ${branch?.name || db.configs.companyName || 'BUMI MAKMUR'}`,
+      `<div class="center"><h2>${escapeHtml(branch?.name||db.configs.companyName||'BUMI MAKMUR')}</h2><p class="bold">SARAN RESTOCK</p><p>${escapeHtml(db.configs.companyName || '')}</p><p>${new Date().toLocaleString('id-ID')}</p></div><div class="line"></div><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th>No</th><th>Produk</th><th>Stok</th><th>Min</th><th>Saran</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Tidak ada stok rendah.</td></tr>'}</tbody></table>`,
       '80mm'
     );
   };

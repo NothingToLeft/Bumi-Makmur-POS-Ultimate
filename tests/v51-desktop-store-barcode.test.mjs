@@ -9,7 +9,7 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   const main = await read('electron/main.cjs');
   const preload = await read('electron/preload.cjs');
   const workflow = await read('.github/workflows/build-windows.yml');
-  assert.equal(pkg.version, '5.1.1');
+  assert.equal(pkg.version, '5.1.2');
   assert.equal(pkg.main, 'electron/main.cjs');
   assert.ok(pkg.devDependencies.electron);
   assert.ok(pkg.devDependencies['electron-builder']);
@@ -44,8 +44,8 @@ test('nama toko dapat diubah Owner dan diterapkan lintas login, shell, nota, QRI
   assert.match(context, /qrisMerchantName/);
   assert.match(context, /receiptWhatsappNote/);
   assert.match(context, /publishPublicLoginDirectory/);
-  assert.match(settings, /Identitas Toko Utama/);
-  assert.match(settings, /Simpan Identitas Toko/);
+  assert.match(settings, /Identitas Cabang Aktif/);
+  assert.match(settings, /Simpan Identitas Cabang/);
   assert.match(app, /db\.configs\.companyName/);
   assert.match(login, /loginDirectory\?\.businessName/);
   assert.match(customerDisplay, /companyName/);

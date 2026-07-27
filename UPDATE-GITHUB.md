@@ -29,7 +29,7 @@ Klik **Commit to main**, lalu **Push origin**.
 
 ## Pemeriksaan dan rilis
 
-1. `Actions → Build Bumi Makmur POS v5.1.1 → test-only`.
+1. `Actions → Build Bumi Makmur POS v5.1.2 → test-only`.
 2. Pastikan test, audit, dan Vite build hijau.
 3. Cloudflare Pages akan memperbarui Web otomatis.
 4. Untuk Android jalankan mode `android-release`.

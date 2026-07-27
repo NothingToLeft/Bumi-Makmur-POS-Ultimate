@@ -66,7 +66,7 @@ const verifySeedUserPin = async (user, pin) => {
 };
 
 const ACTION_PERMISSIONS = {
-  SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage', BRANCH_PAYMENT_UPDATE: 'payments.manage',
+  SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage', BRANCH_UPDATE: 'branches.manage', BRANCH_PAYMENT_UPDATE: 'payments.manage',
   PRODUCT_CREATE: 'products.manage', PRODUCT_UPDATE: 'products.manage', PRODUCT_ARCHIVE: 'products.manage', PRODUCT_TOGGLE: 'products.manage',
   PROMOTION_CREATE: 'promotions.manage', PROMOTION_UPDATE: 'promotions.manage',
   SUPPLIER_CREATE: 'suppliers.manage', SUPPLIER_UPDATE: 'suppliers.manage',
@@ -147,8 +147,8 @@ export function PosProvider({ children }) {
     const activeCampaign = db.campaigns.find(item => item.active !== false);
     const snapshot = {
       ...customerDisplay,
-      companyName: db.configs.companyName || 'BUMI MAKMUR',
-      branchName: activeBranch?.name || '',
+      companyName: activeBranch?.name || db.configs.companyName || 'BUMI MAKMUR',
+      branchName: db.configs.companyName || '',
       message: customerDisplay.message || activeCampaign?.message || '',
       online,
       updatedAt: nowISO()
@@ -863,6 +863,43 @@ export function PosProvider({ children }) {
     return item;
   };
 
+
+  const updateBranch = data => {
+    const activeUser = currentUserRef.current;
+    if (activeUser?.role !== 'owner') throw new Error('Hanya Owner yang dapat mengubah identitas cabang.');
+    const branchIdToUpdate = String(data?.id || '').trim();
+    const name = String(data?.name || '').trim();
+    if (!branchIdToUpdate) throw new Error('ID cabang tidak ditemukan.');
+    if (!name) throw new Error('Nama cabang wajib diisi.');
+    if (name.length > 80) throw new Error('Nama cabang maksimal 80 karakter.');
+    const item = commit('BRANCH_UPDATE', name, next => {
+      const index = next.branches.findIndex(row => row.id === branchIdToUpdate);
+      if (index < 0) throw new Error('Cabang tidak ditemukan.');
+      const duplicate = next.branches.find(row => row.id !== branchIdToUpdate && row.active !== false && String(row.name || '').trim().toLowerCase() === name.toLowerCase());
+      if (duplicate) throw new Error(`Nama cabang ${name} sudah digunakan.`);
+      const updated = {
+        ...next.branches[index],
+        name,
+        address: String(data?.address || '').trim(),
+        phone: String(data?.phone || '').trim(),
+        updatedAt: nowISO(),
+        updatedBy: activeUser.id
+      };
+      next.branches[index] = updated;
+      return updated;
+    });
+    if (navigator.onLine && auth?.currentUser?.uid === activeUser.id) {
+      void publishPublicLoginDirectory(dbRef.current, activeUser.storeId || STORE_ID)
+        .then(directory => {
+          const nextDirectory = { ...directory, storeCode: activeUser.storeCode || storeCode };
+          setLoginDirectory(nextDirectory);
+          localStorage.setItem(LOGIN_DIRECTORY_KEY, JSON.stringify(nextDirectory));
+        })
+        .catch(error => console.warn('Identitas cabang tersimpan, tetapi daftar cabang login menunggu sinkronisasi.', error));
+    }
+    return item;
+  };
+
   const saveProduct = data => commit(data.id ? 'PRODUCT_UPDATE' : 'PRODUCT_CREATE', data.name, next => {
     const productName = String(data.name || '').trim();
     if (!productName) throw new Error('Nama produk wajib diisi.');
@@ -1193,7 +1230,7 @@ export function PosProvider({ children }) {
       });
     }
     const sale = {
-      ...payload, items: normalizedItems, id: saleId, branchId: branchId, createdAt: nowISO(), status: 'COMPLETED',
+      ...payload, items: normalizedItems, id: saleId, branchId: branchId, branchName: next.branches.find(item=>item.id===branchId)?.name || '', branchAddress: next.branches.find(item=>item.id===branchId)?.address || '', branchPhone: next.branches.find(item=>item.id===branchId)?.phone || '', createdAt: nowISO(), status: 'COMPLETED',
       globalDiscount: safeGlobalDiscount, promoDiscount: safePromoDiscount, loyaltyDiscount: safeLoyaltyDiscount,
       subtotal: recalculatedSubtotal, tax: safeTax, service: safeService, rounding: recalculatedTotal - rawTotal,
       total: recalculatedTotal, change: overpayment, pointsRedeemed: safePointsRedeemed,
@@ -1660,7 +1697,7 @@ export function PosProvider({ children }) {
     branchId, branch, customerDisplay, setCustomerDisplay,
     deviceSettings, updateDeviceSettings, login, loginEmployee, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     loginDirectory, loginDirectoryLoading, refreshLoginDirectory,
-    hasPermission, setConfig, saveStoreIdentity, setActiveBranch, addBranch, saveProduct, archiveProduct, toggleProduct,
+    hasPermission, setConfig, saveStoreIdentity, setActiveBranch, addBranch, updateBranch, saveProduct, archiveProduct, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,

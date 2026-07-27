@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   CheckCircle2, KeyRound, LockKeyhole, MapPin, Plus, RefreshCw, Shield,
-  Store, Trash2, UserCog, UserRoundCheck, WifiOff
+  Pencil, Store, Trash2, UserCog, UserRoundCheck, WifiOff
 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { ROLE_PERMISSIONS } from '../data/defaults.js';
@@ -176,7 +176,30 @@ function EmployeeForm({ data, branches, currentUser, busy, onClose, onSave, onDe
 }
 
 export function BranchesScreen(){
- const {db,branchId,setActiveBranch,addBranch,hasPermission}=usePos();const[formOpen,setFormOpen]=useState(false);const canManage=hasPermission('branches.manage');
- return <div className="h-full flex flex-col bg-gray-50 generic-bg"><PageHeader title="Cabang Toko" subtitle="Pemisahan stok, transaksi, pembelian, karyawan, dan laporan per cabang" actions={canManage&&<Button onClick={()=>setFormOpen(true)}><Plus size={17}/> Cabang Baru</Button>}/><div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6"><div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{db.branches.map(branch=><Card key={branch.id} className={`p-5 ${branch.id===branchId?'border-emerald-500 ring-1 ring-emerald-500':''}`}><div className="flex gap-3"><div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><Store size={28}/></div><div className="min-w-0"><div className="flex gap-2 items-center"><p className="font-bold text-gray-800 truncate">{branch.name}</p>{branch.id===branchId&&<Badge tone="green">Aktif</Badge>}</div><p className="text-xs text-gray-500 flex gap-1 mt-1"><MapPin size={13}/>{branch.address||'-'}</p><p className="text-xs text-gray-500">ID: {branch.id}</p></div></div>{canManage&&branch.id!==branchId&&<Button variant="secondary" className="w-full mt-4" onClick={()=>setActiveBranch(branch.id)}><CheckCircle2 size={17}/> Jadikan Cabang Aktif</Button>}</Card>)}</div></div>{formOpen&&canManage&&<BranchForm onClose={()=>setFormOpen(false)} onSave={data=>{addBranch(data);setFormOpen(false)}}/>}</div>;
+ const {db,branchId,setActiveBranch,addBranch,updateBranch,hasPermission}=usePos();
+ const[formOpen,setFormOpen]=useState(false);
+ const[editing,setEditing]=useState(null);
+ const[message,setMessage]=useState('');
+ const canManage=hasPermission('branches.manage');
+ const saveNew=data=>{try{addBranch(data);setFormOpen(false);setMessage('Cabang baru berhasil ditambahkan.')}catch(error){setMessage(error.message||'Cabang gagal ditambahkan.')}};
+ const saveEdit=data=>{try{updateBranch(data);setEditing(null);setMessage('Identitas cabang berhasil diperbarui dan akan dipakai pada login serta tampilan cabang aktif.')}catch(error){setMessage(error.message||'Cabang gagal diperbarui.')}};
+ return <div className="h-full flex flex-col bg-gray-50 generic-bg">
+  <PageHeader title="Cabang Toko" subtitle="Kelola nama, alamat, telepon, stok, transaksi, karyawan, dan laporan per cabang" actions={canManage&&<Button onClick={()=>setFormOpen(true)}><Plus size={17}/> Cabang Baru</Button>}/>
+  <div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6">
+   {message&&<div className={`mb-4 p-3 rounded-2xl border text-sm font-bold ${/gagal|tidak/i.test(message)?'bg-red-50 border-red-200 text-red-700':'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{message}</div>}
+   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {db.branches.map(branch=><Card key={branch.id} className={`p-5 ${branch.id===branchId?'border-emerald-500 ring-1 ring-emerald-500':''}`}>
+     <div className="flex gap-3"><div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><Store size={28}/></div><div className="min-w-0 flex-1"><div className="flex gap-2 items-center"><p className="font-bold text-gray-800 truncate">{branch.name}</p>{branch.id===branchId&&<Badge tone="green">Aktif</Badge>}</div><p className="text-xs text-gray-500 flex gap-1 mt-1"><MapPin size={13}/>{branch.address||'Alamat belum diisi'}</p><p className="text-xs text-gray-500 mt-1">Telp: {branch.phone||'-'}</p><p className="text-xs text-gray-400 mt-1">ID: {branch.id}</p></div></div>
+     {canManage&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4"><Button variant="secondary" onClick={()=>setEditing(branch)}><Pencil size={16}/> Edit Cabang</Button>{branch.id!==branchId?<Button variant="outline" onClick={()=>setActiveBranch(branch.id)}><CheckCircle2 size={17}/> Jadikan Aktif</Button>:<Button variant="outline" disabled><CheckCircle2 size={17}/> Cabang Aktif</Button>}</div>}
+    </Card>)}
+   </div>
+  </div>
+  {formOpen&&canManage&&<BranchForm onClose={()=>setFormOpen(false)} onSave={saveNew}/>} 
+  {editing&&canManage&&<BranchForm data={editing} onClose={()=>setEditing(null)} onSave={saveEdit}/>} 
+ </div>;
 }
-function BranchForm({onClose,onSave}){const[form,setForm]=useState({name:'',address:'',phone:''});return <Modal title="Cabang Baru" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={()=>onSave(form)} disabled={!form.name}>Simpan</Button></>}><div className="space-y-3"><Field label="Nama Cabang"><Input value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field><Field label="Telepon"><Input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></Field><Field label="Alamat"><Textarea value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></Field></div></Modal>}
+function BranchForm({data,onClose,onSave}){
+ const[form,setForm]=useState(data?{...data}:{name:'',address:'',phone:''});
+ const isEditing=Boolean(data?.id);
+ return <Modal title={isEditing?'Edit Identitas Cabang':'Cabang Baru'} onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={()=>onSave(form)} disabled={!String(form.name||'').trim()}>{isEditing?'Simpan Perubahan':'Simpan Cabang'}</Button></>}><div className="space-y-3"><Field label="Nama Cabang"><Input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Contoh: Bumi Makmur Utama" maxLength={80}/></Field><Field label="Telepon"><Input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></Field><Field label="Alamat"><Textarea value={form.address||''} onChange={e=>setForm({...form,address:e.target.value})}/></Field>{isEditing&&<div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-800">Nama dan alamat ini otomatis dipakai pada sidebar, halaman setelah login, nota, layar pelanggan, serta pilihan cabang login ketika cabang ini aktif.</div>}</div></Modal>;
+}

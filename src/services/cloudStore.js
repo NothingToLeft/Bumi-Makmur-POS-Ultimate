@@ -412,9 +412,9 @@ export async function createOnlineReceipt(sale, storeId = STORE_ID) {
   const settingsDocument = settingsSnapshot.exists() ? settingsSnapshot.data() : {};
   const settings = settingsDocument.configs || settingsDocument;
   const store = {
-    companyName: String(settings.companyName || 'BUMI MAKMUR'),
-    address: String(settings.address || ''),
-    phone: String(settings.phone || ''),
+    companyName: String(sale.branchName || settings.companyName || 'BUMI MAKMUR'),
+    address: String(sale.branchAddress || settings.address || ''),
+    phone: String(sale.branchPhone || settings.phone || ''),
     receiptHeader: String(settings.receiptHeader || 'Nota Pembelian'),
     receiptFooter: String(settings.receiptFooter || 'Terima kasih telah berbelanja.'),
     receiptMessage: String(settings.receiptMessage || ''),
