@@ -20,3 +20,7 @@ Rilis distribusi profesional untuk Windows, Android, Web/PWA, dan Firebase Spark
 - Seluruh fitur v5.1 tetap dipertahankan: Desktop Windows, nama toko dinamis, scan barcode produk baru, Firebase Spark, Web/PWA, dan Android.
 
 > Instal pembaruan di atas versi lama. Jangan uninstall lebih dahulu agar data lokal tetap tersimpan.
+
+### Windows Release Build Hotfix
+- Memperbaiki kegagalan build setelah installer selesai dibuat karena electron-builder mencoba publish otomatis tanpa `GH_TOKEN`.
+- Installer tetap dipublikasikan ke GitHub Releases oleh workflow resmi setelah checksum dibuat.

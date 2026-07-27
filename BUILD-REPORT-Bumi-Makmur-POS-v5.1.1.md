@@ -13,3 +13,9 @@
 - Kompilasi Vite diperiksa dalam workflow `test-only`.
 - Installer hanya diterbitkan setelah seluruh langkah build berhasil.
 - Release membutuhkan izin workflow `contents: write`, tanpa secret tambahan.
+
+## Hotfix validasi release Windows
+- Penyebab: electron-builder 26 mendeteksi lingkungan CI dan mencoba implicit publishing.
+- Perbaikan: seluruh script distribusi Windows memakai `--publish never`.
+- Publikasi eksplisit tetap menggunakan GitHub CLI dan token bawaan workflow.
+- Regression test ditambahkan.

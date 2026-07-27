@@ -15,3 +15,12 @@
 - Login Owner/Karyawan terpisah dan role cabang.
 - Firebase Spark FreeSync tanpa Blaze, Functions, atau Storage.
 - Web/PWA, Android, dan sinkronisasi lintas perangkat.
+
+## Windows Release Hotfix
+
+- Menonaktifkan implicit publishing milik electron-builder pada build CI.
+- Build EXE/MSI kini selesai tanpa meminta Personal Access Token.
+- Publikasi tetap dilakukan oleh langkah GitHub CLI menggunakan `github.token` bawaan workflow.
+- Menambahkan regression test agar `--publish never` tidak terhapus pada pembaruan berikutnya.
+- Tidak mengubah data, Firebase, Android, Web, atau fitur operasional POS.
+

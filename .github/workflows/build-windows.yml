@@ -79,10 +79,11 @@ jobs:
         if: ${{ inputs.build_mode == 'test-only' }}
         run: npm run build
 
-      - name: Build Windows EXE and MSI
+      - name: Build Windows EXE and MSI without implicit publishing
         if: ${{ inputs.build_mode == 'windows-release' }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        # Publishing is handled only by the explicit GitHub CLI step below.
         run: npm run desktop:dist
 
       - name: Generate SHA-256 checksums and release metadata

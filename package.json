@@ -21,9 +21,9 @@
     "audit:static": "node scripts/audit-project.mjs",
     "desktop:dev": "npm run build && electron .",
     "desktop:pack": "npm run build && electron-builder --dir --win --x64",
-    "desktop:dist": "npm run build && electron-builder --win --x64",
-    "desktop:dist:nsis": "npm run build && electron-builder --win nsis --x64",
-    "desktop:dist:msi": "npm run build && electron-builder --win msi --x64"
+    "desktop:dist": "npm run build && electron-builder --win --x64 --publish never",
+    "desktop:dist:nsis": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "desktop:dist:msi": "npm run build && electron-builder --win msi --x64 --publish never"
   },
   "dependencies": {
     "@capacitor/android": "7.4.3",

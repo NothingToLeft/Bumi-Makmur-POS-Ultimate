@@ -24,6 +24,9 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   assert.match(preload, /contextBridge\.exposeInMainWorld\('bmDesktop'/);
   assert.match(workflow, /windows-release/);
   assert.match(workflow, /desktop:dist/);
+  assert.match(pkg.scripts['desktop:dist'], /--publish never/);
+  assert.match(pkg.scripts['desktop:dist:nsis'], /--publish never/);
+  assert.match(pkg.scripts['desktop:dist:msi'], /--publish never/);
   assert.match(workflow, /VITE_FIREBASE_PROJECT_ID/);
   assert.match(workflow, /\.env\.production/);
   assert.match(workflow, /release\/windows\/\*\.exe/);
