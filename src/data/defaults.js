@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Tags, Gauge
 } from 'lucide-react';
 
-export const APP_VERSION = '5.1.2';
+export const APP_VERSION = '5.1.3';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -130,6 +130,22 @@ export const createSeedDb = () => ({
   meta: { version: APP_VERSION, createdAt: now, updatedAt: now, lastBackupAt: null, lastSyncAt: null, hybridMode: true, sparkOnly: true, hosting: 'cloudflare-pages' },
   configs: {
     companyName: 'BUMI MAKMUR', address: 'Jl. Pembangunan No. 88, Surabaya', phone: '031-0000000',
+    loginAppearance: {
+      headerText: '',
+      subheaderTemplate: '{branch} · POS Professional v{version}',
+      chooserTitle: 'Pilih jenis akun',
+      chooserSubtitle: 'Owner dan karyawan memiliki alur login terpisah.',
+      ownerTitle: 'Login Owner',
+      ownerSubtitle: 'Seluruh cabang, laporan, pengaturan, dan hak akses.',
+      employeeTitle: 'Login Karyawan',
+      employeeSubtitle: 'Pilih cabang, masukkan nama, lalu PIN 4 digit.',
+      onlineTitle: 'Internet tersedia',
+      onlineSubtitle: 'Login cloud dan sinkronisasi siap digunakan.',
+      offlineTitle: 'Mode offline aktif',
+      offlineSubtitle: 'Login offline tersedia untuk akun yang sebelumnya sudah tersimpan pada perangkat ini.',
+      footerLead: 'Firebase Spark gratis.',
+      footerText: 'Karyawan cukup memakai nama dan PIN setelah akun dibuat Owner atau Store Manager.'
+    },
     activeBranchId: MAIN_BRANCH_ID, darkMode: false, printAuto: false, taxEnabled: false, taxRate: 11,
     cameraPermissionOnStartup: true, shiftWarningHours: 14, reorderMultiplier: 2,
     serviceEnabled: false, serviceRate: 0, roundingStep: 0, loyaltyEnabled: true, pointRate: 10000,

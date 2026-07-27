@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { APP_VERSION, MAIN_BRANCH_ID, can, createSeedDb } from '../data/defaults.js';
 import { generateId, safeJSONParse, downloadFile, localDateKey } from '../utils/helpers.js';
 import { friendlyCloudError } from '../utils/cloudErrors.js';
+import { normalizeLoginAppearance } from '../utils/loginAppearance.js';
 import { auth, firebaseConfigured, DEFAULT_STORE_CODE, STORE_ID } from '../services/firebase.js';
 import { bootstrapCloudStore, connectCloudAccount, connectEmployeeWithNamePin, deleteCloudEmployee, getCloudSessionProfile, signOutCloudAccount, upsertCloudEmployee } from '../services/cloudAuth.js';
 import {
@@ -113,11 +114,16 @@ export function PosProvider({ children }) {
   const [lastSyncAttemptAt, setLastSyncAttemptAt] = useState(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [customerDisplay, setCustomerDisplay] = useState({ cart: [], total: 0, customerName: 'Umum', message: '' });
-  const [loginDirectory, setLoginDirectory] = useState(() => safeJSONParse(localStorage.getItem(LOGIN_DIRECTORY_KEY), {
-    storeId: STORE_ID,
-    businessName: 'BUMI MAKMUR',
-    branches: []
-  }));
+  const [loginDirectory, setLoginDirectory] = useState(() => {
+    const cached = safeJSONParse(localStorage.getItem(LOGIN_DIRECTORY_KEY), {});
+    return {
+      storeId: STORE_ID,
+      businessName: 'BUMI MAKMUR',
+      branches: [],
+      ...cached,
+      loginAppearance: normalizeLoginAppearance(cached?.loginAppearance)
+    };
+  });
   const [loginDirectoryLoading, setLoginDirectoryLoading] = useState(false);
   const cloudUnsubscribeRef = useRef(null);
   const writeChainRef = useRef(Promise.resolve());
@@ -202,7 +208,7 @@ export function PosProvider({ children }) {
     const fallbackBranches = (dbRef.current?.branches || []).filter(item => item?.id && item.active !== false).map(item => ({ id: item.id, name: item.name || item.id, active: true }));
     if (!firebaseConfigured || !navigator.onLine) {
       if (fallbackBranches.length) {
-        const fallback = { storeId: STORE_ID, businessName: dbRef.current?.configs?.companyName || 'BUMI MAKMUR', branches: fallbackBranches };
+        const fallback = { storeId: STORE_ID, businessName: dbRef.current?.configs?.companyName || 'BUMI MAKMUR', loginAppearance: normalizeLoginAppearance(dbRef.current?.configs?.loginAppearance), branches: fallbackBranches };
         setLoginDirectory(fallback);
         localStorage.setItem(LOGIN_DIRECTORY_KEY, JSON.stringify(fallback));
       }
@@ -217,7 +223,7 @@ export function PosProvider({ children }) {
         return directory;
       }
       if (fallbackBranches.length) {
-        const fallback = { storeId: STORE_ID, businessName: dbRef.current?.configs?.companyName || 'BUMI MAKMUR', branches: fallbackBranches };
+        const fallback = { storeId: STORE_ID, businessName: dbRef.current?.configs?.companyName || 'BUMI MAKMUR', loginAppearance: normalizeLoginAppearance(dbRef.current?.configs?.loginAppearance), branches: fallbackBranches };
         setLoginDirectory(fallback);
         localStorage.setItem(LOGIN_DIRECTORY_KEY, JSON.stringify(fallback));
         return fallback;
@@ -802,11 +808,17 @@ export function PosProvider({ children }) {
       const previousGlobalMerchant = String(next.configs?.qrisMerchantName || '').trim();
       const globalMerchantFollowsName = !previousGlobalMerchant || previousGlobalMerchant.toLowerCase() === previousName.toLowerCase();
       const escapedPreviousName = previousName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const currentLoginAppearance = normalizeLoginAppearance(next.configs?.loginAppearance);
+      const loginHeaderFollowsBrand = !currentLoginAppearance.headerText || currentLoginAppearance.headerText.toLowerCase() === previousName.toLowerCase();
       next.configs = {
         ...next.configs,
         companyName,
         address: String(payload?.address || '').trim(),
         phone: String(payload?.phone || '').trim(),
+        loginAppearance: {
+          ...currentLoginAppearance,
+          headerText: loginHeaderFollowsBrand && currentLoginAppearance.headerText ? companyName : currentLoginAppearance.headerText
+        },
         qrisMerchantName: globalMerchantFollowsName ? companyName : next.configs.qrisMerchantName,
         receiptWhatsappNote: previousName && previousWhatsappNote.toLowerCase().includes(previousName.toLowerCase())
           ? previousWhatsappNote.replace(new RegExp(escapedPreviousName, 'gi'), companyName)
@@ -828,6 +840,27 @@ export function PosProvider({ children }) {
         localStorage.setItem(LOGIN_DIRECTORY_KEY, JSON.stringify(nextDirectory));
       } catch (error) {
         console.warn('Nama toko sudah tersimpan, tetapi judul pada layar login menunggu sinkronisasi.', error);
+      }
+    }
+    return result;
+  };
+
+  const saveLoginAppearance = async payload => {
+    if (currentUserRef.current?.role !== 'owner') throw new Error('Hanya Owner yang dapat mengatur tampilan halaman login.');
+    const loginAppearance = normalizeLoginAppearance(payload);
+    const result = commit('SETTING_UPDATE', 'Tampilan halaman login', next => {
+      next.configs = { ...next.configs, loginAppearance };
+      return loginAppearance;
+    });
+
+    if (navigator.onLine && auth?.currentUser?.uid === currentUserRef.current.id) {
+      try {
+        const directory = await publishPublicLoginDirectory(dbRef.current, currentUserRef.current.storeId || STORE_ID);
+        const nextDirectory = { ...directory, storeCode: currentUserRef.current.storeCode || storeCode };
+        setLoginDirectory(nextDirectory);
+        localStorage.setItem(LOGIN_DIRECTORY_KEY, JSON.stringify(nextDirectory));
+      } catch (error) {
+        console.warn('Tampilan login sudah tersimpan, tetapi publikasi ke perangkat lain menunggu sinkronisasi.', error);
       }
     }
     return result;
@@ -1697,7 +1730,7 @@ export function PosProvider({ children }) {
     branchId, branch, customerDisplay, setCustomerDisplay,
     deviceSettings, updateDeviceSettings, login, loginEmployee, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     loginDirectory, loginDirectoryLoading, refreshLoginDirectory,
-    hasPermission, setConfig, saveStoreIdentity, setActiveBranch, addBranch, updateBranch, saveProduct, archiveProduct, toggleProduct,
+    hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, saveProduct, archiveProduct, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,

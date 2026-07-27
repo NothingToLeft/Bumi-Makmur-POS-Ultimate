@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.1.2
+# Bumi Makmur POS FreeSync v5.1.3
 
-Satu source code untuk **Windows Desktop, Web/PWA, Android HP, dan tablet**. Rilis v5.1 berfokus pada pengalaman PC profesional, identitas toko yang dapat diganti Owner, input produk melalui scan barcode, dan layar pelanggan kedua—tanpa mengurangi fitur v5.0.
+Satu source code untuk **Windows Desktop, Web/PWA, Android HP, dan tablet**. Rilis v5.1.3 menambahkan studio pengaturan halaman login, sekaligus mempertahankan Desktop Windows profesional, identitas toko/cabang dinamis, input produk melalui scan barcode, dan layar pelanggan kedua.
 
 ## Platform
 
@@ -10,7 +10,17 @@ Satu source code untuk **Windows Desktop, Web/PWA, Android HP, dan tablet**. Ril
 - **Cloud:** Firebase Authentication + Firestore pada Spark/free tier.
 - **Offline:** IndexedDB, antrean mutasi, rebase konflik, dan sinkronisasi latar belakang.
 
-## Fitur baru v5.1
+## Fitur baru v5.1.3
+
+### Studio tampilan halaman login
+Owner dapat membuka:
+
+```text
+Pengaturan → Toko → Tampilan Halaman Login
+```
+
+Di sana tersedia pengaturan header, teks di bawah header, judul pilihan akun, deskripsi Owner/Karyawan, status online/offline, footer, placeholder dinamis `{branch}`, `{business}`, `{version}`, serta preview langsung.
+
 
 ### Desktop Windows profesional
 - Mode kasir dua panel untuk monitor lebar.
@@ -44,11 +54,11 @@ Kasir, open bill, split bill, refund, multi-harga, stok, transfer antarcabang, p
 ## Upload source penuh melalui GitHub Desktop
 
 1. Backup JSON dan pastikan antrean offline `0`.
-2. Ekstrak ZIP v5.1.
+2. Ekstrak ZIP v5.1.3.
 3. Salin **seluruh isi** folder ke root repository lokal yang sama. Banyak file berubah adalah normal.
 4. Commit dengan pesan:
    ```text
-   Bumi Makmur POS v5.1 Desktop Windows, Dynamic Store Identity, and Product Barcode Scan
+   Bumi Makmur POS v5.1.3 Login Page Content Studio
    ```
 5. Klik **Push origin**.
 
@@ -57,7 +67,7 @@ Kasir, open bill, split bill, refund, multi-harga, stok, transfer antarcabang, p
 ### Pemeriksaan umum/Android
 
 ```text
-Actions → Build Bumi Makmur POS v5.1.2 → test-only
+Actions → Build Bumi Makmur POS v5.1.3 → test-only
 ```
 
 Setelah hijau, Cloudflare Pages memperbarui Web otomatis. Firestore Rules v5.0 tetap kompatibel; jalankan **Deploy Firebase Spark Rules** hanya apabila file `firestore.rules` ikut berubah di repository.
@@ -65,7 +75,7 @@ Setelah hijau, Cloudflare Pages memperbarui Web otomatis. Firestore Rules v5.0 t
 Untuk Android:
 
 ```text
-Actions → Build Bumi Makmur POS v5.1.2 → android-release
+Actions → Build Bumi Makmur POS v5.1.3 → android-release
 ```
 
 Instal APK langsung di atas versi lama. Jangan uninstall agar data lokal tetap tersimpan.
@@ -73,7 +83,7 @@ Instal APK langsung di atas versi lama. Jangan uninstall agar data lokal tetap t
 ### Windows EXE dan MSI
 
 ```text
-Actions → Build Bumi Makmur POS Desktop v5.1
+Actions → Build Bumi Makmur POS Desktop v5.1.3
 → Run workflow
 → windows-release
 ```
@@ -81,7 +91,7 @@ Actions → Build Bumi Makmur POS Desktop v5.1
 Unduh artifact:
 
 ```text
-Bumi-Makmur-POS-Desktop-v5.1-Windows
+Bumi-Makmur-POS-Desktop-v5.1.3-Windows
 ```
 
 Artifact berisi installer `.exe`, `.msi`, dan `SHA256SUMS.txt`.

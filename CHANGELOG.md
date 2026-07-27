@@ -1,3 +1,13 @@
+## v5.1.3 — Login Page Content Studio
+
+- Menambahkan panel khusus Pengaturan → Toko → Tampilan Halaman Login.
+- Owner dapat mengatur header, subheader, judul pilihan akun, deskripsi Owner/Karyawan, status online/offline, dan footer.
+- Menambahkan placeholder dinamis `{branch}`, `{business}`, dan `{version}`.
+- Menambahkan preview langsung sebelum perubahan disimpan.
+- Tampilan login dipublikasikan melalui direktori login publik yang aman agar sama di Web, PC, HP, dan tablet.
+- Data lama otomatis memakai teks standar tanpa migrasi manual.
+- Tidak mengubah Firestore Rules dan tetap kompatibel dengan Firebase Spark.
+
 ## v5.1.2 — Branch Identity & UI Fix
 
 - Memperbaiki tombol sinkronisasi kosong, menambahkan editor cabang, dan menyelaraskan identitas aplikasi dengan cabang aktif.

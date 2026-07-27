@@ -1,129 +1,131 @@
-# FILE MANIFEST SHA-256 — Bumi Makmur POS v5.1.2
-# Format: SHA256  BYTES  PATH
-
-08354c643c1639423bdad001f115531b224261375c2175facba7e26e1eadc748         641  .env.example
-e18feba59d4c07a106ad2e91190b1fab638f45637b39420b2af562f0ecc7994f          74  .firebaserc.example
-034c43a9074e6d152f46828160da81fd0abb8968c20ee1aeb1e831678e541fba        8045  .github/workflows/build-android.yml
-b4da5936fbf73275ea6d7806d7bfb9705b12db331313ed74fcc0ff78a3212ded        5773  .github/workflows/build-windows.yml
-4c5262a17796cd4b4426d9a2d7089e663221ea1a1b087637b0cd23dceefe556f        1576  .github/workflows/deploy-firebase.yml
-4ca0d0403c067c0f8b873b5b76fabf1965c6b7cb6fc792de7bac54ab2939fc56        2496  .github/workflows/generate-signing-key.yml
-6330f26b48fbb2aaef6d48d646f28b9312072ba05e9df30ae3aea8cd7fd57d69         255  .gitignore
-f14b4987904bcb5814e4459a057ed4d20f58a633152288a761214dcd28780b56           3  .node-version
-582708d288c688f298ed15940c09f2bba303cf96d8c8b026e3c955ce639db7bb         567  ANDROID-SIGNING-SETUP.md
-77b2038d86c57cd2eff8bc48a60df2c6545ce013a240ea6063aeab051e793921        1060  BUGFIX-REPORT-v4.5.1.md
-655a3507707929d343bb6a8537dfbc09176dbaedde56207390a263d05b6d7f7e        2752  BUGFIX-REPORT-v4.5.md
-abbe6dcc6d0c47c0f19a6e2d05d476862c0e42fe191340461596c2d6f654245e         493  BUILD-DESKTOP-WINDOWS.bat
-4b5d0628438f8d190306e80318e060f67ba2159c5859d18c6652dc47f8315c04         956  BUILD-REPORT-Bumi-Makmur-POS-v5.1.1.md
-094388ee573864caa1ad3eec7cee631f846a33a78e61073525b348af53fd8edf        1386  BUILD-REPORT-Bumi-Makmur-POS-v5.1.2.md
-58fe46180156b3616d3c8bd0bc8a84052374f9b4b4a7d7b7bdbbb01bb7b2b6d4        2206  BUILD-REPORT-Bumi-Makmur-POS-v5.1.md
-094388ee573864caa1ad3eec7cee631f846a33a78e61073525b348af53fd8edf        1386  BUILD-REPORT.md
-055913e0a63c03a319ab1d4b603dff872e13adfef9859eefc1f31b875f7eedae         365  BUILD-WEB-WINDOWS.bat
-561e68866a34dcac7862365cc21f714ce4c11931ab1ab09138ad509624dcae80        1348  CHANGELOG-Bumi-Makmur-POS-v5.1.1.md
-918d7eae84ecd075a1a93b2fa8d3363318ef1e62d336aeea46b1f775df6b778d        1308  CHANGELOG-Bumi-Makmur-POS-v5.1.2.md
-fc2f15e1be715bfb7c41fa18b361f0249a237f7319a5ca0e8eb83155f71b019f        1198  CHANGELOG-Bumi-Makmur-POS-v5.1.md
-d0cac1bf733e8c9f5a39cff6fc6d1a28747e03ff9f43eb7f28de00ba102c1ae9        2660  CHANGELOG-v5.0-SUMMARY.md
-b7c676a5cf2124145eddecfb8857ccb13c86cf8cc13ef94b2545df0a5e36c8f8       11585  CHANGELOG.md
-495e3152f04af9f79ade80e5240dd2061ffc115c8e5211505a70d58bf3484fae        1957  CLOUDFLARE-PAGES-SETUP.md
-72dd4a20200630007172db02161cae6db0341f6a38596b8ecb8d285c028e938e        2422  FIREBASE-SPARK-SETUP.md
-0b025d53d7728148ef2a778a1fde70bb1274b737aa3e30b992bf4cbf9d3a10fc         774  LANGKAH-SETELAH-DOWNLOAD.txt
-b61d649511e17cce5c9fc2e432ab9d257674cd1091fa76ffe174f7170ff40477         539  MULAI-WINDOWS.bat
-cdc9c721f64edef768759d61bb2cb895b613ea79f8ce9f07caee26915e34c315         763  PC-PWA-INSTALL.md
-172071510fbc7df24dee2421cd9ae01390fce4926c84410e41bb138ed42208e7        1095  PC-WINDOWS-DESKTOP.md
-4d07a076faa506bc9127492a4d5248952c4336b1f01c856966699208c61b6bbc        2250  QA-CHECKLIST.md
-cffd2ec650522870b6273840d5a6e7733de8d4548fab30a81463b6796fa7df02        4498  README.md
-08af06140c75711d897605e80d39c87a5c97343d79d2de7a1cae0000470c50b5        1403  RELEASE-NOTES-Bumi-Makmur-POS-v5.1.1.md
-3ca678f150d04e3ec3d56e708ea0fdc2b78e5032fb622dbea53cf48b2ebf6234        1530  RELEASE-NOTES-Bumi-Makmur-POS-v5.1.2.md
-ccaed5ce9c63a3c208e86dffe65dd4e96a9e1b78b44ef70e9e2de37194cd1cd7        1536  UPDATE-GITHUB.md
-ccaed5ce9c63a3c208e86dffe65dd4e96a9e1b78b44ef70e9e2de37194cd1cd7        1536  UPLOAD-GITHUB-DESKTOP.md
-0c9a9d43610d66f4cc3f42da08cae044483de25894a9daf9dc6a76ff75ca9327           6  VERSION.txt
-834169cd41fa8542d2cce51610db0c57d06bf564e651e782fd27b88d2c3d6ec5       39067  build/icon.ico
-ba2d0e4605df98f3a1f1b3fe4b92ba32fcc65625b161082000a006eff2df5dc6         221  capacitor.config.json
-03237f5a603a62d80f9fceacdf07b78171af31660613ed5426215b0e6f4d4094        2627  docs/FEATURE-MATRIX.md
-4efd5d511f5b410ddf1505a4877a20289d2e8adf0afd77e11cd7d409567cad25         260  docs/NATIVE-ANDROID-NOTES.md
-999f5d26011b76174fac8607433db93eafa5012402ae8971f275dde984dfd298         155  docs/README.md
-a85120c82f13e2ab9bcc8025ea8965f22c0eed490ce9176f6bb64b3bebdb7fdb        3175  docs/archive/BUGFIX-REPORT-v4.3.md
-f05802debc8bbe572518fa93b47382d8a27ba5e6f533d5973d80eea759891fc3       45989  docs/preview-logo-bm-v4.2.png
-6049a3566e0707ea279367724f3ef1f23d66f8ee8745f7776670fd7a5d2a7931       99403  docs/preview-struk-premium-v4.2.png
-8bdbcb3dcf89986d8b5e4dc8973007d3447879ee3f144898716fa2bc72a6798f        5596  electron/main.cjs
-80cf1178565050edba01f8604b2fa93a23241b1d23d48a955dc17bed434d0e45         455  electron/preload.cjs
-e817f89d2f9776ba460ec062be7d40f827b8f910d740cff2522b72232f1cdf5a          97  firebase.json
-c20d8c33be91ce7c1b7ca94b1b4418c5ed1d1eae60c7790ed21ccb3135d7c63c         609  firestore.indexes.json
-58338e8906192fc08957bd19c946b1ad5883723cd480de407306845dc131cb04       21426  firestore.rules
-359745fe277cbff1ec784c17e0211061dd3f8c2e6a35575ab4d1e54c29030657         661  index.html
-11806ee83e892cbd9053414fffe0f7c0557c9aabb2a0e5a54dba269fe6a578d1         337  netlify.toml
-996866b77b5284e33fcba4834200b96120e6f243d68425ce89229edecb694b95        3795  package.json
-26c93c15543eeed1243fe9c633571e38e69709a1e0a6cdd22d8eedeb74328188          69  postcss.config.js
-abd178beb07149d49ea5604e301cc2cfea8ab2e467562664ff8c4b8b48d99763         471  public/_headers
-6036983e5fc00f0169c9e939b1816ed771eee00e27f2fcc517b819041460b9ef          19  public/_redirects
-9dc2f7fa3c2100d9154dccf187670642d5aa8618bb4b3392477c604d36212cb0        1538  public/icon.svg
-d12498e4b7910075fcdb183222d6543846547c6a81097da1f0aee3df7cbdc88c        8511  public/icons/icon-192.png
-855050b25376fd7e0da4a9b5d7eff07687cb0c7f6dfa199214dcc05de29dbb27       28583  public/icons/icon-512.png
-0811f77024bf4658f9460f575dbea8f56defa425b440696f1c153fe13b5f57d8       76535  public/icons/logo-bm-1024.png
-e4463c5b49a50fae26da0526e068cf16f6cd34c12fde06422a9a6c5000a1f77c       34430  public/icons/logo-bm-wordmark.png
-855050b25376fd7e0da4a9b5d7eff07687cb0c7f6dfa199214dcc05de29dbb27       28583  public/icons/maskable-512.png
-d6111bbc9f8ccf3a26e7ec1f2f72b0e5ab73f66d8d64e91f169c6abb5f653ca3       98996  public/icons/splash-landscape.png
-d6111bbc9f8ccf3a26e7ec1f2f72b0e5ab73f66d8d64e91f169c6abb5f653ca3       98996  public/icons/splash-portrait.png
-e1bc0331887b399b3eb2f712205edeed9434803b6f4787a3f8b9bc300ae00f92        1014  public/logo-bm-wordmark.svg
-9dc2f7fa3c2100d9154dccf187670642d5aa8618bb4b3392477c604d36212cb0        1538  public/logo-bm.svg
-87e2d47da0c749d7466dbe1668055338f3d936517f5eb629e8fd41a07821e640        1575  public/manifest.webmanifest
-e3b32d448ed45f164297efc4518c4deb3f05c3079303108e931edb8f76a13629        2413  public/sw.js
-2339b5eea9e293e7da281bcde36715440dbc4546b281ca666a5927997cf865c2        4383  scripts/audit-project.mjs
-987511410138603476dc2ebf39a17400769ef684aff116ee293ea32d9f389ffc       14548  scripts/prepare-android.mjs
-dbf29590d12c71625251ad2ec84a3416431eccd7ea1e94757197375138922b6e       12161  src/App.jsx
-212fead0a4cb8e8328dd7b32d0f23a8a2017d07622310ad0da346196094572b1        8952  src/components/ui.jsx
-5994eb67ccfd579b0d0ab269af59e34b90ac1ea8c12404fa662208e8ad60ee47       13022  src/data/defaults.js
-d978195afe8335ba260cb0ad5b99ab1e3ae22247ae61c1b94f9cb7534c20c6b8       14121  src/index.css
-4e3b7a5a5618d1b2d4ff7f4bb0441d5f75c9564d2247e1179cccd6291f4b6b1d         526  src/main.jsx
-346ca1bf52808773b6289e9e4e1f140ae375031cb6339340641343510bd47f80       19055  src/screens/AdminScreens.jsx
-7370744f1e6e41b1ec4e10b97bc4bbae9e7d44c5094d03f34de946c4eb56957c       14427  src/screens/ControlCenterScreen.jsx
-88908cff7a1a3326e0663f20d5f6ee78aba08b516e81a7b5d6a454632e2e4a44        6106  src/screens/DashboardScreen.jsx
-18f9ffe763a5d2f153e02040dbb518babb9c6739532445ff1e0ae589e7cfad0e        4359  src/screens/DesktopCustomerDisplayScreen.jsx
-e5bc52bb6042e56425ae82bc779faf0f302e73681a072ce0e378ff8b1f2a1282       56267  src/screens/DeviceSettingsScreens.jsx
-21e91dc420c89977060ef2a22a73d7ddcd0a91614c940e63ef14925432f53c94        9359  src/screens/InventoryScreen.jsx
-f06c86d0736f42b09c36d4a96cc2f2267f688745adf84aac8c389768edcb3a17       22482  src/screens/LoginScreen.jsx
-6d70cc8431f3047fcaf8933165a3b23d4119ca76120daaf80dc5d5e47bb5fd95        2227  src/screens/OpenBillsScreen.jsx
-8939093789d0d81c2caec810671d71fd8182b28e76c6e7079f3a8cee5b0a24a6        5804  src/screens/OrdersScreen.jsx
-2e6e6e2730257cf93e94d8772adaca55636db85f27fb96dbb26508eb58e64ab0       55068  src/screens/POSScreen.jsx
-0801235472f2252362a02a8e85d78215768eb3297dbe1a53fb9d4fc583aa8d34       11580  src/screens/PartnersScreens.jsx
-58f9f49ecd8ae0d1ccd16cb382420e8c53abdfc89a337bb90cf4c843d5efd89b       23573  src/screens/ProductsScreen.jsx
-fe96b4e3106a08ec69c735873646538c422601c70dd3ea24990300b4b7ceda07        4286  src/screens/PromotionsScreen.jsx
-0ef3919cdd4397d84963fbf129e6cee615371598977d8252f1a70992a3a22833        5049  src/screens/PublicReceiptScreen.jsx
-8ac973d31fc2f0b10703a9564fb440f0f61d6788caa4e93957af7955cb2838a8       13057  src/screens/PurchasesScreen.jsx
-302c83d2820c7fbf0d38f6344a8b4cd5e1ef336cb13a4ea9a5e05f4a7bfa6f64        9888  src/screens/ReportsScreen.jsx
-1a37caa2845ffa59b1ace071e1a3fb2bfae6c23000e5fcce8c49f9ef8c0bd5f4       11650  src/screens/ShiftFinanceScreens.jsx
-1d9334f037d23c5fc9ab9b56ba867868b3440c9087bd179b007184b79c845389        9292  src/screens/TransactionsScreen.jsx
-173ad8c5f47d2e1b7c6ac348b1a4a02b786c97b256ec9659ffdac370c535f0e5       21310  src/services/cloudAuth.js
-7f11498947dce6b9761191d5dcb10995c486fcc48b415b23b8d897075177efcb       17318  src/services/cloudStore.js
-9e32513e8f65cb3183a2bebe9ded3611e973b39be7bcc7029418e434f7baa562        1975  src/services/firebase.js
-6eab8fe648fdfad811d1b6e58a9d2f97b5623cd060019a45e39109697eae180e        3059  src/services/nativeDevice.js
-be4dee00245e4d855924794229d852bb33a1b09fb03b025200959b52bd08a601       14844  src/services/offlineStore.js
-171079f1337ccec88cbc69886de6dd470f0d8e506999d1730e72f14ce52d959e       13604  src/services/receiptShare.js
-80549ad5f29e19d5c6abeaf26eb3469bbc2f9d04b7560787f5c6da8f59989f71        8456  src/services/syncEngine.js
-e2410f9d56006648489d622a5c8d872b1d2af147d5ed5837c0cd2d2240062d7c       99170  src/store/PosContext.jsx
-2dd679b11300c4030ef6ef6a2f05859afa8fa9af665fc0bd5fb9f7218544b59d        3530  src/utils/accounting.js
-17938314f9a81799582c111c6f1d63710fc9817020bb0fb1ebeed0a259967816       14037  src/utils/assetProcessing.js
-2b0f6a3dbefd0a68fce19fabfd952606c52d0f68e72f4044a872eda4f39e1e40        1368  src/utils/barcode.js
-65ae02635dcb2e5c8123fb12c9d4b2755977c165e1cd1d6afafc513abe59e9e2        2873  src/utils/cloudErrors.js
-46f6e1cd4e679005a4580ed9df32ff56b5541b4d9fad146682481bd57d736bdd         864  src/utils/dbShape.js
-d4a3a0fb4e3904941d87f99c5c6bad6b1c92b6a6577750eaa8bcbbfdb60c5599        2356  src/utils/employeeLogin.js
-a3a4072097f33d39b0b99f934a9fa13d1a8c756581b947c5eead355ab20410ce        5987  src/utils/helpers.js
-0f93e2bafbd6ae83f7322de96bdb21f4b8f05ced60c1a0ba80d76ddb38e29129        6033  src/utils/operationsHealth.js
-9cc350cccf674866734774042810c4cd09b265844a4f4dfb353a553036615ae5         162  tailwind.config.js
-b3e23c9da6788b4dc80e9a5b23c4a841408b48406503c91ffc80ca006f702084        1547  tests/accounting.test.mjs
-ffc9e2a4efd7901fdfe904b70ea6b968f0d63d3e68856928c57059d9c50b6097        1365  tests/barcode.test.mjs
-f4ebb01754c699641df5c97e3b59e83a9d435809a7888a868ef7e01ec4044933        5792  tests/cloud-architecture.test.mjs
-e3e3c5866a05993eb38b70230be9743d7290f7f631e4624d5b69e4124c0bec4c        3330  tests/customer-security.test.mjs
-17f548cc45747e3baf639d53daa08d7297af6d7588102e6a689333a470f0ced8        3350  tests/feature-retention.test.mjs
-7ee2d2a74cddfc29b22f462b66eeb953aec3ed206393839bd503fe5293c8ccf6        1544  tests/helpers.test.mjs
-e786c6f6dce3d7e1852c6103be3e2ecfb4eb022c3f08c9a7d06fc6be68b8e998        4287  tests/hybrid-sync.test.mjs
-b999591f5bb8b01039e2ca7c5f9ff08c7891f8a152fb5f1058651a567319e408         670  tests/payment-methods.test.mjs
-e85992352a0174d37c08f6dfa6619b37f5fb0eec54ba089245c7121a049a113e        3560  tests/professional-auth-ui.test.mjs
-ba72ec64447173fea4e8af5100a2de35ef00138ecb1b889d8693601b29db5d6d        1138  tests/receipt-share.test.mjs
-819c1d6971dfe6f76316a20347c144e2367dd12115a1488b540f5d10e0298951        3227  tests/release-config.test.mjs
-53c69dd40efdde387944c2aa0877d4403035be4e2407bf520357e98e18a82506        2263  tests/stability-branding.test.mjs
-fe627fdf1ac1872f9e4bda2ba91c51d0203efff21c09488fae309ffbcb787c37        4071  tests/v45-branch-employee-cloud.test.mjs
-fc8d3985b75857d35bcc802fb3cccc38ce739a0c99d6e1f689611e03a165094e        5261  tests/v50-professional.test.mjs
-b33ae3a8d258cd678ab1357c9fdb136c205b5d2b57586537caa687048a825235        4503  tests/v51-desktop-store-barcode.test.mjs
-08a3cdd71562427f71914c0feaa72ae54739422bb7d5ce57b358b1438a14c8c7        1399  tests/v512-branch-identity-ui.test.mjs
-2a2fc07b218c68822a89cdd73989146b3f6bab1fdde8664d443534a9aaf9d25f        1877  tests/web-pc-hosting.test.mjs
-afc852f73abfda19c14d190a6b96108cbb2e04c065bb42287f1530907dc97078         210  vite.config.js
+08354c643c1639423bdad001f115531b224261375c2175facba7e26e1eadc748  ./.env.example
+e18feba59d4c07a106ad2e91190b1fab638f45637b39420b2af562f0ecc7994f  ./.firebaserc.example
+15bfdba707263accb88fe66ae91584ee645b36e025513c9d5992578204ea7b9b  ./.github/workflows/build-android.yml
+bc05e56a7a74c89466f65361f0d940bbe146774c1eab32ca1ea74a0ef642260f  ./.github/workflows/build-windows.yml
+4c5262a17796cd4b4426d9a2d7089e663221ea1a1b087637b0cd23dceefe556f  ./.github/workflows/deploy-firebase.yml
+4ca0d0403c067c0f8b873b5b76fabf1965c6b7cb6fc792de7bac54ab2939fc56  ./.github/workflows/generate-signing-key.yml
+6330f26b48fbb2aaef6d48d646f28b9312072ba05e9df30ae3aea8cd7fd57d69  ./.gitignore
+f14b4987904bcb5814e4459a057ed4d20f58a633152288a761214dcd28780b56  ./.node-version
+66c3bb76cfb8ab2acb91cdfcf428af2c96862188dbbd806e9d622b6026977a46  ./ANDROID-SIGNING-SETUP.md
+77b2038d86c57cd2eff8bc48a60df2c6545ce013a240ea6063aeab051e793921  ./BUGFIX-REPORT-v4.5.1.md
+655a3507707929d343bb6a8537dfbc09176dbaedde56207390a263d05b6d7f7e  ./BUGFIX-REPORT-v4.5.md
+abbe6dcc6d0c47c0f19a6e2d05d476862c0e42fe191340461596c2d6f654245e  ./BUILD-DESKTOP-WINDOWS.bat
+4b5d0628438f8d190306e80318e060f67ba2159c5859d18c6652dc47f8315c04  ./BUILD-REPORT-Bumi-Makmur-POS-v5.1.1.md
+094388ee573864caa1ad3eec7cee631f846a33a78e61073525b348af53fd8edf  ./BUILD-REPORT-Bumi-Makmur-POS-v5.1.2.md
+ae61cbf5b7e85f8361b8dc4f97c6877decdf0b07651ab26b5b8df13d896b73dc  ./BUILD-REPORT-Bumi-Makmur-POS-v5.1.3.md
+58fe46180156b3616d3c8bd0bc8a84052374f9b4b4a7d7b7bdbbb01bb7b2b6d4  ./BUILD-REPORT-Bumi-Makmur-POS-v5.1.md
+ae61cbf5b7e85f8361b8dc4f97c6877decdf0b07651ab26b5b8df13d896b73dc  ./BUILD-REPORT.md
+055913e0a63c03a319ab1d4b603dff872e13adfef9859eefc1f31b875f7eedae  ./BUILD-WEB-WINDOWS.bat
+561e68866a34dcac7862365cc21f714ce4c11931ab1ab09138ad509624dcae80  ./CHANGELOG-Bumi-Makmur-POS-v5.1.1.md
+918d7eae84ecd075a1a93b2fa8d3363318ef1e62d336aeea46b1f775df6b778d  ./CHANGELOG-Bumi-Makmur-POS-v5.1.2.md
+c90f9608b446e9f45f55ebbbbe0bb6d68a3605ac426b094f52688a0d1a15f893  ./CHANGELOG-Bumi-Makmur-POS-v5.1.3.md
+fc2f15e1be715bfb7c41fa18b361f0249a237f7319a5ca0e8eb83155f71b019f  ./CHANGELOG-Bumi-Makmur-POS-v5.1.md
+d0cac1bf733e8c9f5a39cff6fc6d1a28747e03ff9f43eb7f28de00ba102c1ae9  ./CHANGELOG-v5.0-SUMMARY.md
+02109c9232ceccef350606511ba12a887e129fbc311440c816143d8b703dd865  ./CHANGELOG.md
+495e3152f04af9f79ade80e5240dd2061ffc115c8e5211505a70d58bf3484fae  ./CLOUDFLARE-PAGES-SETUP.md
+72dd4a20200630007172db02161cae6db0341f6a38596b8ecb8d285c028e938e  ./FIREBASE-SPARK-SETUP.md
+eefb81f9b0925be517f585453f51c21189f911d9adbf58bdcd57d0216a5a64ee  ./LANGKAH-SETELAH-DOWNLOAD.txt
+b61d649511e17cce5c9fc2e432ab9d257674cd1091fa76ffe174f7170ff40477  ./MULAI-WINDOWS.bat
+cdc9c721f64edef768759d61bb2cb895b613ea79f8ce9f07caee26915e34c315  ./PC-PWA-INSTALL.md
+172071510fbc7df24dee2421cd9ae01390fce4926c84410e41bb138ed42208e7  ./PC-WINDOWS-DESKTOP.md
+8fb3d1836d313181f2c5c84e57c90bac365efd94119c09ab0550710b6b094dd8  ./QA-CHECKLIST.md
+27eff4853031fb157ef38b5eacec2b0e7a1b507f7fd30b1cddad22b2bfb0d64d  ./README.md
+08af06140c75711d897605e80d39c87a5c97343d79d2de7a1cae0000470c50b5  ./RELEASE-NOTES-Bumi-Makmur-POS-v5.1.1.md
+3ca678f150d04e3ec3d56e708ea0fdc2b78e5032fb622dbea53cf48b2ebf6234  ./RELEASE-NOTES-Bumi-Makmur-POS-v5.1.2.md
+c90f9608b446e9f45f55ebbbbe0bb6d68a3605ac426b094f52688a0d1a15f893  ./RELEASE-NOTES-Bumi-Makmur-POS-v5.1.3.md
+09f8a45e7ee66b0055aa2745cea27fd641927038e82e04c876fd16dec7c66c54  ./UPDATE-GITHUB.md
+09f8a45e7ee66b0055aa2745cea27fd641927038e82e04c876fd16dec7c66c54  ./UPLOAD-GITHUB-DESKTOP.md
+d915c3cfb280a9fa1bb4cb35ef822c1fdb7a4b759943ab1279a64ff500a1e894  ./VERSION.txt
+834169cd41fa8542d2cce51610db0c57d06bf564e651e782fd27b88d2c3d6ec5  ./build/icon.ico
+ba2d0e4605df98f3a1f1b3fe4b92ba32fcc65625b161082000a006eff2df5dc6  ./capacitor.config.json
+03237f5a603a62d80f9fceacdf07b78171af31660613ed5426215b0e6f4d4094  ./docs/FEATURE-MATRIX.md
+641b865d487aabfe0ab5686c098b6fefaa1e273499e0d0e370786f640f2c0ae5  ./docs/NATIVE-ANDROID-NOTES.md
+29eed67615af2d5475889a16de11b277499571d6f4f3b2d149a768b06a0d9480  ./docs/README.md
+a85120c82f13e2ab9bcc8025ea8965f22c0eed490ce9176f6bb64b3bebdb7fdb  ./docs/archive/BUGFIX-REPORT-v4.3.md
+f05802debc8bbe572518fa93b47382d8a27ba5e6f533d5973d80eea759891fc3  ./docs/preview-logo-bm-v4.2.png
+6049a3566e0707ea279367724f3ef1f23d66f8ee8745f7776670fd7a5d2a7931  ./docs/preview-struk-premium-v4.2.png
+8bdbcb3dcf89986d8b5e4dc8973007d3447879ee3f144898716fa2bc72a6798f  ./electron/main.cjs
+80cf1178565050edba01f8604b2fa93a23241b1d23d48a955dc17bed434d0e45  ./electron/preload.cjs
+e817f89d2f9776ba460ec062be7d40f827b8f910d740cff2522b72232f1cdf5a  ./firebase.json
+c20d8c33be91ce7c1b7ca94b1b4418c5ed1d1eae60c7790ed21ccb3135d7c63c  ./firestore.indexes.json
+58338e8906192fc08957bd19c946b1ad5883723cd480de407306845dc131cb04  ./firestore.rules
+359745fe277cbff1ec784c17e0211061dd3f8c2e6a35575ab4d1e54c29030657  ./index.html
+11806ee83e892cbd9053414fffe0f7c0557c9aabb2a0e5a54dba269fe6a578d1  ./netlify.toml
+cb891732deb6d33a9e917a00b2e92fd58f9d3d32a77dfa27189fb995459d912b  ./package.json
+26c93c15543eeed1243fe9c633571e38e69709a1e0a6cdd22d8eedeb74328188  ./postcss.config.js
+abd178beb07149d49ea5604e301cc2cfea8ab2e467562664ff8c4b8b48d99763  ./public/_headers
+6036983e5fc00f0169c9e939b1816ed771eee00e27f2fcc517b819041460b9ef  ./public/_redirects
+9dc2f7fa3c2100d9154dccf187670642d5aa8618bb4b3392477c604d36212cb0  ./public/icon.svg
+d12498e4b7910075fcdb183222d6543846547c6a81097da1f0aee3df7cbdc88c  ./public/icons/icon-192.png
+855050b25376fd7e0da4a9b5d7eff07687cb0c7f6dfa199214dcc05de29dbb27  ./public/icons/icon-512.png
+0811f77024bf4658f9460f575dbea8f56defa425b440696f1c153fe13b5f57d8  ./public/icons/logo-bm-1024.png
+e4463c5b49a50fae26da0526e068cf16f6cd34c12fde06422a9a6c5000a1f77c  ./public/icons/logo-bm-wordmark.png
+855050b25376fd7e0da4a9b5d7eff07687cb0c7f6dfa199214dcc05de29dbb27  ./public/icons/maskable-512.png
+d6111bbc9f8ccf3a26e7ec1f2f72b0e5ab73f66d8d64e91f169c6abb5f653ca3  ./public/icons/splash-landscape.png
+d6111bbc9f8ccf3a26e7ec1f2f72b0e5ab73f66d8d64e91f169c6abb5f653ca3  ./public/icons/splash-portrait.png
+e1bc0331887b399b3eb2f712205edeed9434803b6f4787a3f8b9bc300ae00f92  ./public/logo-bm-wordmark.svg
+9dc2f7fa3c2100d9154dccf187670642d5aa8618bb4b3392477c604d36212cb0  ./public/logo-bm.svg
+87e2d47da0c749d7466dbe1668055338f3d936517f5eb629e8fd41a07821e640  ./public/manifest.webmanifest
+2f13c00cbe455236a764fc40f6f8ced052fd0688095cd6c28af952cb6e743729  ./public/sw.js
+131b6ea16c4089498612f50a7023e78ffac342994b0efdf8ea6804efeba012cd  ./scripts/audit-project.mjs
+987511410138603476dc2ebf39a17400769ef684aff116ee293ea32d9f389ffc  ./scripts/prepare-android.mjs
+dbf29590d12c71625251ad2ec84a3416431eccd7ea1e94757197375138922b6e  ./src/App.jsx
+212fead0a4cb8e8328dd7b32d0f23a8a2017d07622310ad0da346196094572b1  ./src/components/ui.jsx
+7e4f44583d7a31a8a11b831b96b052876c63462cf78a16069e1189debae471c0  ./src/data/defaults.js
+d978195afe8335ba260cb0ad5b99ab1e3ae22247ae61c1b94f9cb7534c20c6b8  ./src/index.css
+4e3b7a5a5618d1b2d4ff7f4bb0441d5f75c9564d2247e1179cccd6291f4b6b1d  ./src/main.jsx
+346ca1bf52808773b6289e9e4e1f140ae375031cb6339340641343510bd47f80  ./src/screens/AdminScreens.jsx
+7370744f1e6e41b1ec4e10b97bc4bbae9e7d44c5094d03f34de946c4eb56957c  ./src/screens/ControlCenterScreen.jsx
+88908cff7a1a3326e0663f20d5f6ee78aba08b516e81a7b5d6a454632e2e4a44  ./src/screens/DashboardScreen.jsx
+18f9ffe763a5d2f153e02040dbb518babb9c6739532445ff1e0ae589e7cfad0e  ./src/screens/DesktopCustomerDisplayScreen.jsx
+a81abf94f81baf174673319d5f6886aa7affa78d2ba6e6526bddafd507a64ed5  ./src/screens/DeviceSettingsScreens.jsx
+21e91dc420c89977060ef2a22a73d7ddcd0a91614c940e63ef14925432f53c94  ./src/screens/InventoryScreen.jsx
+7209a5103279c4524ac7bd9e629b0ac1e2489d1744da43714aae4068ddb6f50e  ./src/screens/LoginScreen.jsx
+6d70cc8431f3047fcaf8933165a3b23d4119ca76120daaf80dc5d5e47bb5fd95  ./src/screens/OpenBillsScreen.jsx
+8939093789d0d81c2caec810671d71fd8182b28e76c6e7079f3a8cee5b0a24a6  ./src/screens/OrdersScreen.jsx
+2e6e6e2730257cf93e94d8772adaca55636db85f27fb96dbb26508eb58e64ab0  ./src/screens/POSScreen.jsx
+0801235472f2252362a02a8e85d78215768eb3297dbe1a53fb9d4fc583aa8d34  ./src/screens/PartnersScreens.jsx
+58f9f49ecd8ae0d1ccd16cb382420e8c53abdfc89a337bb90cf4c843d5efd89b  ./src/screens/ProductsScreen.jsx
+fe96b4e3106a08ec69c735873646538c422601c70dd3ea24990300b4b7ceda07  ./src/screens/PromotionsScreen.jsx
+0ef3919cdd4397d84963fbf129e6cee615371598977d8252f1a70992a3a22833  ./src/screens/PublicReceiptScreen.jsx
+8ac973d31fc2f0b10703a9564fb440f0f61d6788caa4e93957af7955cb2838a8  ./src/screens/PurchasesScreen.jsx
+302c83d2820c7fbf0d38f6344a8b4cd5e1ef336cb13a4ea9a5e05f4a7bfa6f64  ./src/screens/ReportsScreen.jsx
+1a37caa2845ffa59b1ace071e1a3fb2bfae6c23000e5fcce8c49f9ef8c0bd5f4  ./src/screens/ShiftFinanceScreens.jsx
+1d9334f037d23c5fc9ab9b56ba867868b3440c9087bd179b007184b79c845389  ./src/screens/TransactionsScreen.jsx
+173ad8c5f47d2e1b7c6ac348b1a4a02b786c97b256ec9659ffdac370c535f0e5  ./src/services/cloudAuth.js
+baa48ca93387ef68fc13f0e752cbc5dc41a18c8bcd7ac058d342d25ed62411bf  ./src/services/cloudStore.js
+9e32513e8f65cb3183a2bebe9ded3611e973b39be7bcc7029418e434f7baa562  ./src/services/firebase.js
+6eab8fe648fdfad811d1b6e58a9d2f97b5623cd060019a45e39109697eae180e  ./src/services/nativeDevice.js
+be4dee00245e4d855924794229d852bb33a1b09fb03b025200959b52bd08a601  ./src/services/offlineStore.js
+171079f1337ccec88cbc69886de6dd470f0d8e506999d1730e72f14ce52d959e  ./src/services/receiptShare.js
+80549ad5f29e19d5c6abeaf26eb3469bbc2f9d04b7560787f5c6da8f59989f71  ./src/services/syncEngine.js
+62012e9c87a60ded14e40beb23087162f936dbbe8b4bca2cf03d1d8854c6ed72  ./src/store/PosContext.jsx
+2dd679b11300c4030ef6ef6a2f05859afa8fa9af665fc0bd5fb9f7218544b59d  ./src/utils/accounting.js
+17938314f9a81799582c111c6f1d63710fc9817020bb0fb1ebeed0a259967816  ./src/utils/assetProcessing.js
+2b0f6a3dbefd0a68fce19fabfd952606c52d0f68e72f4044a872eda4f39e1e40  ./src/utils/barcode.js
+65ae02635dcb2e5c8123fb12c9d4b2755977c165e1cd1d6afafc513abe59e9e2  ./src/utils/cloudErrors.js
+19329dd76dc8cee6687162151c9d435839036bad5764462f54a9bb93c9143f10  ./src/utils/dbShape.js
+d4a3a0fb4e3904941d87f99c5c6bad6b1c92b6a6577750eaa8bcbbfdb60c5599  ./src/utils/employeeLogin.js
+a3a4072097f33d39b0b99f934a9fa13d1a8c756581b947c5eead355ab20410ce  ./src/utils/helpers.js
+47ecc2c9e3913f07d1d422e49f3017001dc4e2ad46bae96e4c6f8e28d84b07ce  ./src/utils/loginAppearance.js
+0f93e2bafbd6ae83f7322de96bdb21f4b8f05ced60c1a0ba80d76ddb38e29129  ./src/utils/operationsHealth.js
+9cc350cccf674866734774042810c4cd09b265844a4f4dfb353a553036615ae5  ./tailwind.config.js
+b3e23c9da6788b4dc80e9a5b23c4a841408b48406503c91ffc80ca006f702084  ./tests/accounting.test.mjs
+ffc9e2a4efd7901fdfe904b70ea6b968f0d63d3e68856928c57059d9c50b6097  ./tests/barcode.test.mjs
+706a68ddd3f6cea8499ad53f7e91e9e808ac39da33af0d0a7dc831f58ba0039c  ./tests/cloud-architecture.test.mjs
+e3e3c5866a05993eb38b70230be9743d7290f7f631e4624d5b69e4124c0bec4c  ./tests/customer-security.test.mjs
+8fde249852a81d55ff52c7fd6368dcf1fe66955f901c393be47348b4b1c2a940  ./tests/feature-retention.test.mjs
+7ee2d2a74cddfc29b22f462b66eeb953aec3ed206393839bd503fe5293c8ccf6  ./tests/helpers.test.mjs
+e786c6f6dce3d7e1852c6103be3e2ecfb4eb022c3f08c9a7d06fc6be68b8e998  ./tests/hybrid-sync.test.mjs
+b999591f5bb8b01039e2ca7c5f9ff08c7891f8a152fb5f1058651a567319e408  ./tests/payment-methods.test.mjs
+879e24a7f24ece1ea4c1fb1ab0a10920a5dc644833a0c43a970392f4287e1e49  ./tests/professional-auth-ui.test.mjs
+ba72ec64447173fea4e8af5100a2de35ef00138ecb1b889d8693601b29db5d6d  ./tests/receipt-share.test.mjs
+1b7832226bedb9b78ba59a7791109f64665374797538544a975bd748f99e0005  ./tests/release-config.test.mjs
+53c69dd40efdde387944c2aa0877d4403035be4e2407bf520357e98e18a82506  ./tests/stability-branding.test.mjs
+fe627fdf1ac1872f9e4bda2ba91c51d0203efff21c09488fae309ffbcb787c37  ./tests/v45-branch-employee-cloud.test.mjs
+fc8d3985b75857d35bcc802fb3cccc38ce739a0c99d6e1f689611e03a165094e  ./tests/v50-professional.test.mjs
+cd2049ab2870ca59f6296dbaa6df41a2de7fe573fe7885123ee65482fb1a6e34  ./tests/v51-desktop-store-barcode.test.mjs
+08a3cdd71562427f71914c0feaa72ae54739422bb7d5ce57b358b1438a14c8c7  ./tests/v512-branch-identity-ui.test.mjs
+d41cd0c966314c113c8346743883cac42f138f821a3422615492ad56e82734cc  ./tests/v513-login-appearance.test.mjs
+2a2fc07b218c68822a89cdd73989146b3f6bab1fdde8664d443534a9aaf9d25f  ./tests/web-pc-hosting.test.mjs
+afc852f73abfda19c14d190a6b96108cbb2e04c065bb42287f1530907dc97078  ./vite.config.js

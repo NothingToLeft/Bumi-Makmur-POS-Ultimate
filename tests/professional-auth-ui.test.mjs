@@ -7,8 +7,11 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 test('halaman login memisahkan Owner dan Karyawan secara tegas', async () => {
   const login = await read('src/screens/LoginScreen.jsx');
   const context = await read('src/store/PosContext.jsx');
-  assert.match(login, /Login Owner/);
-  assert.match(login, /Login Karyawan/);
+  const appearance = await read('src/utils/loginAppearance.js');
+  assert.match(login, /appearance\.ownerTitle/);
+  assert.match(login, /appearance\.employeeTitle/);
+  assert.match(appearance, /Login Owner/);
+  assert.match(appearance, /Login Karyawan/);
   assert.match(login, /Toko \/ Cabang/);
   assert.match(login, /Nama Login Karyawan/);
   assert.match(login, /Biometrik tidak akan muncul otomatis/);

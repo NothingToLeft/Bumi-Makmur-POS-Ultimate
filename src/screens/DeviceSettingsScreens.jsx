@@ -8,6 +8,7 @@ import { authenticateBiometric, checkCameraPermission, getBiometricAvailability,
 import { uploadStoreAsset } from '../services/cloudStore.js';
 import { formatAssetBytes } from '../utils/assetProcessing.js';
 import { EmployeeManagementPanel } from './AdminScreens.jsx';
+import { DEFAULT_LOGIN_APPEARANCE, normalizeLoginAppearance, renderLoginTemplate } from '../utils/loginAppearance.js';
 
 export function DevicesScreen(){
  const {db,branch,hasPermission,savePrinterProfile}=usePos();const[editing,setEditing]=useState(null);const canManage=hasPermission('devices.manage');const typeIcon={bluetooth:Bluetooth,usb:Usb,lan:Wifi,browser:FileText,pdf:FileText};
@@ -28,14 +29,81 @@ function CampaignForm({data,onClose,onSave}){const[form,setForm]=useState(data);
 function FeedbackForm({onSave}){const[rating,setRating]=useState(5);const[comment,setComment]=useState('');return <Card className="p-4"><p className="font-bold mb-3">Form Feedback Pelanggan</p><Select value={rating} onChange={e=>setRating(Number(e.target.value))}><option value="5">5 - Sangat Puas</option><option value="4">4 - Puas</option><option value="3">3 - Cukup</option><option value="2">2 - Kurang</option><option value="1">1 - Buruk</option></Select><Textarea className="mt-2" value={comment} onChange={e=>setComment(e.target.value)} placeholder="Komentar"/><Button className="w-full mt-2" onClick={()=>{onSave({rating,comment,customerName:'Anonim'});setComment('')}}>Kirim Feedback</Button></Card>}
 
 export function SettingsScreen(){
- const {db,branch,online,localReady,cloudReady,cloudSaving,cloudError,pendingSyncCount,syncConflictCount,lastSyncAttemptAt,currentUser,branchId,deviceSettings,updateDeviceSettings,setConfig,saveStoreIdentity,updateBranch,saveBranchPaymentProfile,exportBackup,importBackup,syncNow,resetDemo,signOutAccount,hasPermission}=usePos();
+ const {db,branch,online,localReady,cloudReady,cloudSaving,cloudError,pendingSyncCount,syncConflictCount,lastSyncAttemptAt,currentUser,branchId,deviceSettings,updateDeviceSettings,setConfig,saveStoreIdentity,saveLoginAppearance,updateBranch,saveBranchPaymentProfile,exportBackup,importBackup,syncNow,resetDemo,signOutAccount,hasPermission}=usePos();
  const fileRef=useRef(null);const isOwner=currentUser?.role==='owner';const canManageEmployees=hasPermission('employees.manage');const canManagePayments=isOwner||hasPermission('payments.manage');
  const tabs=[...(isOwner?[['business','Toko']]:[]),...(canManagePayments?[['payment','Pembayaran']]:[]),['security','Keamanan'],...(canManageEmployees?[['employees','Karyawan']]:[]),['system','Cloud & Backup'],['audit','Audit Cloud'],['changelog','Changelog']];
  const[tab,setTab]=useState(isOwner?'business':canManageEmployees?'employees':'security');
  useEffect(()=>{if(!tabs.some(([id])=>id===tab))setTab(tabs[0]?.[0]||'security')},[isOwner,canManageEmployees,tab]);
  const config=db.configs; const patch=(key,value)=>{if(!isOwner){alert('Pengaturan toko global hanya dapat diubah oleh Owner.');return}setConfig({[key]:value})};
  const addPayment=()=>{if(!isOwner)return;const name=prompt('Nama metode pembayaran baru');if(name)patch('paymentMethods',[...config.paymentMethods,{id:`custom-${Date.now()}`,name,type:'other',active:true}])};
- return <div className="h-full flex flex-col bg-gray-50 generic-bg"><PageHeader title="Pengaturan Sistem" subtitle={`${branch?.name||config.companyName||'BUMI MAKMUR'} · ${config.companyName&&branch?.name!==config.companyName?`${config.companyName} · `:''}POS Desktop/Web/Android v${APP_VERSION} · Firebase Spark FreeSync`}/><div className="bg-white border-b px-4 md:px-6 flex overflow-x-auto no-scrollbar card-element">{tabs.map(([id,label])=><button key={id} onClick={()=>setTab(id)} className={`px-4 min-h-[52px] font-bold text-sm border-b-2 whitespace-nowrap ${tab===id?'border-emerald-600 text-emerald-700':'border-transparent text-gray-500'}`}>{label}</button>)}</div><div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6">{tab==='business'&&isOwner&&<BusinessSettings config={config} branch={branch} patch={patch} saveStoreIdentity={saveStoreIdentity} updateBranch={updateBranch}/>} {tab==='payment'&&canManagePayments&&<PaymentSettings db={db} config={config} patch={patch} addPayment={addPayment} currentUser={currentUser} branchId={branchId} saveBranchPaymentProfile={saveBranchPaymentProfile}/>} {tab==='security'&&<SecuritySettings config={config} patch={patch} currentUser={currentUser} deviceSettings={deviceSettings} updateDeviceSettings={updateDeviceSettings}/>} {tab==='employees'&&canManageEmployees&&<EmployeeManagementPanel/>} {tab==='system'&&<SystemSettings currentUser={currentUser} db={db} online={online} localReady={localReady} cloudReady={cloudReady} cloudSaving={cloudSaving} cloudError={cloudError} pendingSyncCount={pendingSyncCount} syncConflictCount={syncConflictCount} lastSyncAttemptAt={lastSyncAttemptAt} exportBackup={exportBackup} importBackup={importBackup} fileRef={fileRef} syncNow={syncNow} resetDemo={resetDemo} signOutAccount={signOutAccount}/>} {tab==='audit'&&<AuditSettings db={db} online={online} localReady={localReady} cloudReady={cloudReady} pendingSyncCount={pendingSyncCount} syncConflictCount={syncConflictCount} syncNow={syncNow}/>} {tab==='changelog'&&<ReleaseNotesSettings/>}</div></div>;
+ return <div className="h-full flex flex-col bg-gray-50 generic-bg"><PageHeader title="Pengaturan Sistem" subtitle={`${branch?.name||config.companyName||'BUMI MAKMUR'} · ${config.companyName&&branch?.name!==config.companyName?`${config.companyName} · `:''}POS Desktop/Web/Android v${APP_VERSION} · Firebase Spark FreeSync`}/><div className="bg-white border-b px-4 md:px-6 flex overflow-x-auto no-scrollbar card-element">{tabs.map(([id,label])=><button key={id} onClick={()=>setTab(id)} className={`px-4 min-h-[52px] font-bold text-sm border-b-2 whitespace-nowrap ${tab===id?'border-emerald-600 text-emerald-700':'border-transparent text-gray-500'}`}>{label}</button>)}</div><div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6">{tab==='business'&&isOwner&&<BusinessSettings config={config} branch={branch} patch={patch} saveStoreIdentity={saveStoreIdentity} saveLoginAppearance={saveLoginAppearance} updateBranch={updateBranch}/>} {tab==='payment'&&canManagePayments&&<PaymentSettings db={db} config={config} patch={patch} addPayment={addPayment} currentUser={currentUser} branchId={branchId} saveBranchPaymentProfile={saveBranchPaymentProfile}/>} {tab==='security'&&<SecuritySettings config={config} patch={patch} currentUser={currentUser} deviceSettings={deviceSettings} updateDeviceSettings={updateDeviceSettings}/>} {tab==='employees'&&canManageEmployees&&<EmployeeManagementPanel/>} {tab==='system'&&<SystemSettings currentUser={currentUser} db={db} online={online} localReady={localReady} cloudReady={cloudReady} cloudSaving={cloudSaving} cloudError={cloudError} pendingSyncCount={pendingSyncCount} syncConflictCount={syncConflictCount} lastSyncAttemptAt={lastSyncAttemptAt} exportBackup={exportBackup} importBackup={importBackup} fileRef={fileRef} syncNow={syncNow} resetDemo={resetDemo} signOutAccount={signOutAccount}/>} {tab==='audit'&&<AuditSettings db={db} online={online} localReady={localReady} cloudReady={cloudReady} pendingSyncCount={pendingSyncCount} syncConflictCount={syncConflictCount} syncNow={syncNow}/>} {tab==='changelog'&&<ReleaseNotesSettings/>}</div></div>;
+}
+
+
+function LoginAppearanceSettings({config,branch,saveLoginAppearance}){
+ const normalized=normalizeLoginAppearance(config.loginAppearance);
+ const[form,setForm]=useState(normalized);
+ const[state,setState]=useState({saving:false,message:'',tone:'success'});
+ useEffect(()=>setForm(normalizeLoginAppearance(config.loginAppearance)),[config.loginAppearance]);
+ const saved=normalizeLoginAppearance(config.loginAppearance);
+ const dirty=JSON.stringify(form)!==JSON.stringify(saved);
+ const setField=(key,value)=>{setForm(previous=>({...previous,[key]:value}));setState({saving:false,message:'',tone:'success'})};
+ const save=async()=>{setState({saving:true,message:'',tone:'success'});try{await saveLoginAppearance(form);setState({saving:false,message:'Tampilan login tersimpan dan dipublikasikan ke Web, PC, HP, serta tablet.',tone:'success'});}catch(error){setState({saving:false,message:error.message||'Tampilan login gagal disimpan.',tone:'error'})}};
+ const reset=()=>{setForm({...DEFAULT_LOGIN_APPEARANCE});setState({saving:false,message:'Nilai standar dimuat. Klik Simpan Tampilan Login untuk menerapkannya.',tone:'success'})};
+ const branchName=branch?.name||'Pilih cabang';
+ const header=form.headerText||config.companyName||'BUMI MAKMUR';
+ const subheader=renderLoginTemplate(form.subheaderTemplate,{branch:branchName,version:APP_VERSION,business:config.companyName||'BUMI MAKMUR'});
+ return <Card className="p-5 border-blue-200">
+  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3 mb-5"><div><div className="flex items-center gap-2"><MonitorSmartphone size={21} className="text-blue-700"/><p className="font-black text-lg text-gray-900">Tampilan Halaman Login</p></div><p className="text-xs text-gray-500 mt-1 max-w-2xl">Bagian khusus untuk mengatur tulisan di luar aplikasi: header, teks di bawah header, pilihan akun, status internet, dan footer login.</p></div><Badge tone={dirty?'orange':'green'}>{dirty?'Belum disimpan':'Tersimpan'}</Badge></div>
+  <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_.75fr] gap-5">
+   <div className="space-y-4">
+    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+     <p className="font-black text-sm text-gray-900 mb-3">Bagian Header</p>
+     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <Field label="Judul Besar Login" hint="Kosongkan agar otomatis mengikuti Nama Brand / Grup Usaha."><Input value={form.headerText} onChange={e=>setField('headerText',e.target.value)} placeholder={config.companyName||'BUMI MAKMUR'} maxLength={80}/></Field>
+      <Field label="Teks di Bawah Header" hint="Bisa memakai {branch}, {business}, dan {version}."><Input value={form.subheaderTemplate} onChange={e=>setField('subheaderTemplate',e.target.value)} maxLength={140}/></Field>
+     </div>
+    </div>
+    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+     <p className="font-black text-sm text-gray-900 mb-3">Pilihan Akun</p>
+     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <Field label="Judul Pilihan"><Input value={form.chooserTitle} onChange={e=>setField('chooserTitle',e.target.value)} maxLength={60}/></Field>
+      <Field label="Keterangan Pilihan"><Input value={form.chooserSubtitle} onChange={e=>setField('chooserSubtitle',e.target.value)} maxLength={160}/></Field>
+      <Field label="Judul Owner"><Input value={form.ownerTitle} onChange={e=>setField('ownerTitle',e.target.value)} maxLength={60}/></Field>
+      <Field label="Keterangan Owner"><Textarea value={form.ownerSubtitle} onChange={e=>setField('ownerSubtitle',e.target.value)} maxLength={180}/></Field>
+      <Field label="Judul Karyawan"><Input value={form.employeeTitle} onChange={e=>setField('employeeTitle',e.target.value)} maxLength={60}/></Field>
+      <Field label="Keterangan Karyawan"><Textarea value={form.employeeSubtitle} onChange={e=>setField('employeeSubtitle',e.target.value)} maxLength={180}/></Field>
+     </div>
+    </div>
+    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+     <p className="font-black text-sm text-gray-900 mb-3">Status Koneksi & Footer</p>
+     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <Field label="Judul Saat Online"><Input value={form.onlineTitle} onChange={e=>setField('onlineTitle',e.target.value)} maxLength={60}/></Field>
+      <Field label="Keterangan Saat Online"><Textarea value={form.onlineSubtitle} onChange={e=>setField('onlineSubtitle',e.target.value)} maxLength={180}/></Field>
+      <Field label="Judul Saat Offline"><Input value={form.offlineTitle} onChange={e=>setField('offlineTitle',e.target.value)} maxLength={60}/></Field>
+      <Field label="Keterangan Saat Offline"><Textarea value={form.offlineSubtitle} onChange={e=>setField('offlineSubtitle',e.target.value)} maxLength={180}/></Field>
+      <Field label="Tulisan Tebal Footer"><Input value={form.footerLead} onChange={e=>setField('footerLead',e.target.value)} maxLength={80}/></Field>
+      <Field label="Keterangan Footer"><Textarea value={form.footerText} onChange={e=>setField('footerText',e.target.value)} maxLength={220}/></Field>
+     </div>
+    </div>
+   </div>
+   <div>
+    <p className="font-black text-sm text-gray-900 mb-3">Preview Langsung</p>
+    <div className="rounded-[1.75rem] bg-gradient-to-br from-emerald-950 via-emerald-900 to-slate-900 p-4 shadow-inner sticky top-4">
+     <div className="bg-white rounded-[1.35rem] overflow-hidden shadow-xl">
+      <div className="p-4">
+       <div className="flex items-center gap-3"><img src={config.receiptLogo||'/logo-bm.svg'} alt="Preview logo" className="w-12 h-12 rounded-xl border object-contain"/><div className="min-w-0"><p className="font-black text-base text-gray-900 truncate">{header}</p><p className="text-[10px] text-gray-500 leading-relaxed">{subheader}</p></div></div>
+       <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-100"><p className="font-bold text-[11px] text-emerald-900">{form.onlineTitle}</p><p className="text-[9px] text-emerald-800 mt-0.5">{form.onlineSubtitle}</p></div>
+       <div className="text-center my-3"><p className="font-black text-sm">{form.chooserTitle}</p><p className="text-[10px] text-gray-500">{form.chooserSubtitle}</p></div>
+       <div className="space-y-2"><div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50"><p className="font-black text-xs text-emerald-900">{form.ownerTitle}</p><p className="text-[9px] text-emerald-800 mt-0.5">{form.ownerSubtitle}</p></div><div className="p-3 rounded-xl border border-blue-200 bg-blue-50"><p className="font-black text-xs text-blue-900">{form.employeeTitle}</p><p className="text-[9px] text-blue-800 mt-0.5">{form.employeeSubtitle}</p></div></div>
+      </div>
+      <div className="px-4 py-3 bg-slate-50 border-t text-[9px] text-slate-600"><b className="text-slate-800">{form.footerLead}</b>{form.footerText?` ${form.footerText}`:''}</div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-5"><Button onClick={save} disabled={!dirty||state.saving}><Save size={17}/>{state.saving?'Menyimpan...':'Simpan Tampilan Login'}</Button><Button variant="secondary" onClick={reset} disabled={state.saving}>Kembalikan Teks Standar</Button>{state.message&&<p className={`text-xs font-bold ${state.tone==='error'?'text-red-600':'text-emerald-700'}`}>{state.message}</p>}</div>
+ </Card>;
 }
 
 function SecuritySettings({config,patch,currentUser,deviceSettings,updateDeviceSettings}){
@@ -50,7 +118,7 @@ function SecuritySettings({config,patch,currentUser,deviceSettings,updateDeviceS
 }
 
 function Toggle({label,checked,onChange,description}){return <label className="flex items-center justify-between gap-3 p-4 border-b last:border-0 cursor-pointer"><div><p className="font-bold text-sm text-gray-800">{label}</p>{description&&<p className="text-xs text-gray-500">{description}</p>}</div><input type="checkbox" className="w-5 h-5" checked={checked} onChange={e=>onChange(e.target.checked)}/></label>}
-function BusinessSettings({config,branch,patch,saveStoreIdentity,updateBranch}){
+function BusinessSettings({config,branch,patch,saveStoreIdentity,saveLoginAppearance,updateBranch}){
   const logoRef=useRef(null);
   const [branchIdentity,setBranchIdentity]=useState({id:branch?.id||'',name:branch?.name||'',address:branch?.address||'',phone:branch?.phone||''});
   const [brandName,setBrandName]=useState(config.companyName||'');
@@ -80,6 +148,8 @@ function BusinessSettings({config,branch,patch,saveStoreIdentity,updateBranch}){
       <Field label="Nama Brand / Usaha"><Input value={brandName} onChange={e=>setBrandName(e.target.value)} placeholder="Contoh: Bumi Makmur" maxLength={80}/></Field>
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4"><Button variant="secondary" onClick={saveBrand} disabled={!brandDirty||brandState.saving}><Save size={17}/>{brandState.saving?'Menyimpan...':'Simpan Nama Brand'}</Button>{brandState.message&&<p className={`text-xs font-bold ${brandState.tone==='error'?'text-red-600':'text-emerald-700'}`}>{brandState.message}</p>}</div>
     </Card>
+
+    <LoginAppearanceSettings config={config} branch={branch} saveLoginAppearance={saveLoginAppearance}/>
 
     <Card className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
       <Field label="Judul Nota"><Input value={config.receiptHeader || ''} onChange={e=>patch('receiptHeader',e.target.value)} placeholder="NOTA PEMBELIAN"/></Field>
@@ -239,6 +309,7 @@ function SystemSettings({currentUser,db,online,localReady,cloudReady,cloudSaving
 
 function ReleaseNotesSettings(){
  const groups=[
+  ['Login Page Content Studio v5.1.3',['Menambahkan bagan khusus Pengaturan → Toko → Tampilan Halaman Login.','Owner dapat mengatur header, teks di bawah header, judul pilihan akun, deskripsi Owner/Karyawan, status online/offline, serta footer.','Mendukung placeholder dinamis {branch}, {business}, dan {version} serta preview langsung sebelum disimpan.','Tampilan yang disimpan otomatis dipublikasikan ke Web, PC, HP, dan tablet melalui direktori login publik yang aman.']],
   ['Desktop Windows v5.1',['Menambahkan installer Windows EXE dan MSI melalui GitHub Actions tanpa Android Studio.','Menambahkan layout desktop yang lebih padat, shortcut F2/F4/F8/F9, scanner USB, dan mode layar pelanggan kedua.','Menjalankan aplikasi desktop dalam Electron dengan context isolation, sandbox, serta Node integration dinonaktifkan.']],
   ['Identitas Toko Dinamis',['Owner dapat mengganti nama toko, alamat, dan telepon dari Pengaturan → Bisnis.','Nama baru tampil pada sidebar, login karyawan, judul aplikasi, nota, layar pelanggan, dan QRIS default yang sebelumnya mengikuti nama toko.','Perubahan identitas dipublikasikan ke direktori login seluruh perangkat tanpa membuat akun atau toko baru.']],
   ['Scan Barcode saat Input Produk',['Kolom barcode produk baru kini dapat diisi melalui kamera HP/tablet atau scanner USB/Bluetooth di PC.','Sistem memeriksa barcode ganda sebelum produk disimpan.','Izin kamera dapat dibuka langsung dari modal scanner dan input manual tetap tersedia sebagai cadangan.']],
@@ -249,7 +320,7 @@ function ReleaseNotesSettings(){
   ['Cloud FreeSync v5',['Memisahkan aset QRIS dari settings global untuk mengurangi konflik web–HP.','Mempertahankan rebase konflik, antrean offline, retry bertahap, cache IndexedDB, dan audit log idempotent.','Menambahkan koleksi branchPaymentProfiles dengan Firestore Rules per cabang.','Tetap memakai Firebase Auth + Firestore Spark tanpa Storage, Functions, Blaze, atau billing.']],
   ['Stabilitas & Kompatibilitas',['Mempertahankan seluruh modul kasir, open bill, refund, stok, pembelian, keuangan, laporan, printer, nota digital, PWA, dan Android.','Menambahkan regression test QRIS, Pusat Kontrol, role Manager, rules, versi, dan retensi fitur.','Dioptimalkan untuk Infinix Note 40 Pro+ serta Huawei MatePad SE 11 pada portrait dan landscape.']]
  ];
- return <div className="max-w-4xl space-y-4"><Card className="p-5 bg-gradient-to-br from-emerald-950 to-slate-950 text-white border-0"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-300">Major Release</p><h3 className="text-2xl font-black mt-1">Bumi Makmur POS v{APP_VERSION}</h3><p className="text-sm text-emerald-100 mt-2">Desktop Windows, Identitas Toko Dinamis, Scan Barcode Produk, Professional Control Center, dan QRIS Adaptive per Cabang.</p></Card>{groups.map(([title,items])=><Card key={title} className="p-5"><p className="font-black text-gray-900 mb-3">{title}</p><div className="space-y-2">{items.map(item=><div key={item} className="flex gap-3 text-sm text-gray-600"><CheckCircle2 size={17} className="text-emerald-600 shrink-0 mt-0.5"/><span>{item}</span></div>)}</div></Card>)}</div>;
+ return <div className="max-w-4xl space-y-4"><Card className="p-5 bg-gradient-to-br from-emerald-950 to-slate-950 text-white border-0"><p className="text-xs font-black uppercase tracking-[.18em] text-emerald-300">Major Release</p><h3 className="text-2xl font-black mt-1">Bumi Makmur POS v{APP_VERSION}</h3><p className="text-sm text-emerald-100 mt-2">Login Page Content Studio, Desktop Windows, Identitas Cabang Dinamis, Scan Barcode Produk, Professional Control Center, dan QRIS Adaptive per Cabang.</p></Card>{groups.map(([title,items])=><Card key={title} className="p-5"><p className="font-black text-gray-900 mb-3">{title}</p><div className="space-y-2">{items.map(item=><div key={item} className="flex gap-3 text-sm text-gray-600"><CheckCircle2 size={17} className="text-emerald-600 shrink-0 mt-0.5"/><span>{item}</span></div>)}</div></Card>)}</div>;
 }
 
 function AuditSettings({db,online,localReady,cloudReady,pendingSyncCount,syncConflictCount,syncNow}){

@@ -1,28 +1,33 @@
-# Build & QA Report — Bumi Makmur POS v5.1.2
+# Build & QA Report — Bumi Makmur POS v5.1.3
 
-## Ruang lingkup perbaikan
+## Ruang lingkup
 
-- Tombol sinkronisasi Desktop/Windows yang sebelumnya tampak sebagai kotak putih kosong.
-- Editor nama, alamat, dan telepon pada setiap cabang.
-- Identitas aplikasi, nota, layar pelanggan, dan login mengikuti cabang aktif.
-- Pemisahan identitas cabang dari nama brand/grup usaha.
-- Snapshot identitas cabang pada transaksi agar nota lama tidak berubah setelah cabang diganti nama.
+- Editor lengkap teks halaman login.
+- Preview langsung tampilan login.
+- Publikasi konfigurasi login lintas Web, PC, Android, HP, dan tablet.
+- Normalisasi data lama agar tetap kompatibel.
 
-## Pemeriksaan yang dijalankan
+## Hasil pemeriksaan lokal
 
-- Core test Node: **85/85 lulus**.
-- Static audit: **lulus**.
-- File JS/JSX/MJS yang diperiksa audit: **63**.
-- File JSON valid: **4**.
-- Pemeriksaan import relatif, file wajib, layanan berbayar terlarang, dan kemungkinan secret: **lulus**.
+```text
+Core tests   : 88/88 lulus
+Static audit : lulus
+JS/JSX/MJS   : 65 file diperiksa
+JSON         : 4 file valid
+```
 
-## Kompilasi final
+Kompilasi Vite lokal belum dapat diselesaikan karena registry dependency internal mengembalikan HTTP 503 saat `npm install`. Workflow GitHub `test-only` tetap wajib dijalankan untuk kompilasi Vite final.
 
-Instalasi dependency dan kompilasi Vite tidak dijalankan pada lingkungan penyusunan karena dependency registry tidak tersedia secara andal. Jalankan workflow GitHub Actions **test-only** setelah source di-push. Workflow tersebut menjadi pemeriksaan kompilasi Vite final sebelum Windows/Android release dibuat.
+## Urutan rilis
+
+1. Jalankan workflow `test-only`.
+2. Cloudflare Pages memperbarui Web otomatis setelah branch `main` dipush.
+3. Jalankan `windows-release` untuk EXE/MSI.
+4. Jalankan `android-release` untuk APK/AAB.
+5. Firestore Rules tidak perlu di-deploy ulang untuk v5.1.3.
 
 ## Kompatibilitas data
 
-- Tidak mengubah package ID Android atau app ID Desktop.
-- Tidak menghapus data lokal, akun, transaksi, cabang, maupun konfigurasi Firebase.
-- APK/EXE/MSI v5.1.2 dapat dipasang sebagai pembaruan di atas versi sebelumnya.
-- Firestore Rules tidak berubah pada hotfix ini dan tidak perlu deploy ulang.
+- Dapat dipasang langsung di atas v5.1.2.
+- Jangan uninstall APK/aplikasi Desktop lama bila ingin mempertahankan cache lokal.
+- Konfigurasi baru menggunakan fallback aman untuk database lama.

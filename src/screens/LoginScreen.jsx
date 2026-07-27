@@ -9,20 +9,11 @@ import { APP_VERSION, MAIN_BRANCH_ID } from '../data/defaults.js';
 import { authenticateBiometric, getBiometricAvailability } from '../services/nativeDevice.js';
 import { Field, Input, Select } from '../components/ui.jsx';
 import { friendlyCloudError } from '../utils/cloudErrors.js';
+import { normalizeLoginAppearance, renderLoginTemplate } from '../utils/loginAppearance.js';
 
 const ROLE_CONFIG = {
-  owner: {
-    title: 'Login Owner',
-    subtitle: 'Akses seluruh cabang, laporan, pengaturan, dan pengelolaan akun.',
-    icon: BriefcaseBusiness,
-    expectedRole: 'owner'
-  },
-  employee: {
-    title: 'Login Karyawan',
-    subtitle: 'Store Manager dan Kasir masuk dengan cabang, nama, dan PIN.',
-    icon: UsersRound,
-    expectedRole: 'employee'
-  }
+  owner: { icon: BriefcaseBusiness, expectedRole: 'owner' },
+  employee: { icon: UsersRound, expectedRole: 'employee' }
 };
 
 export default function LoginScreen() {
@@ -47,7 +38,21 @@ export default function LoginScreen() {
     const rows = (loginDirectory?.branches || []).filter(item => item?.id && item.active !== false);
     return rows.length ? rows : [{ id: MAIN_BRANCH_ID, name: 'Pusat BUMI MAKMUR', active: true }];
   }, [loginDirectory]);
-  const activeRole = ROLE_CONFIG[mode] || null;
+  const loginAppearance = useMemo(() => normalizeLoginAppearance(loginDirectory?.loginAppearance), [loginDirectory?.loginAppearance]);
+  const selectedBranchName = branches.find(branch => branch.id === selectedBranchId)?.name || 'Pilih cabang';
+  const loginHeader = loginAppearance.headerText || loginDirectory?.businessName || 'BUMI MAKMUR';
+  const loginSubheader = renderLoginTemplate(loginAppearance.subheaderTemplate, {
+    branch: selectedBranchName,
+    version: APP_VERSION,
+    business: loginDirectory?.businessName || 'BUMI MAKMUR'
+  });
+  const activeRole = useMemo(() => ROLE_CONFIG[mode]
+    ? {
+        ...ROLE_CONFIG[mode],
+        title: mode === 'owner' ? loginAppearance.ownerTitle : loginAppearance.employeeTitle,
+        subtitle: mode === 'owner' ? loginAppearance.ownerSubtitle : loginAppearance.employeeSubtitle
+      }
+    : null, [mode, loginAppearance]);
   const activationModeRequested = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('activate') === '1';
   const setupAvailable = Boolean(activationModeRequested && directoryChecked && !loginDirectoryLoading && (loginDirectory?.branches || []).length === 0);
   const biometricEnabled = Boolean(deviceSettings.biometricEnabled && deviceSettings.biometricUserId && biometric.available);
@@ -154,15 +159,15 @@ export default function LoginScreen() {
           <div className="flex items-center justify-center gap-3 mb-4">
             <img src="/logo-bm.svg" alt="Logo Bumi Makmur" className="w-16 h-16 rounded-[1.25rem] shadow-xl ring-1 ring-emerald-100"/>
             <div className="text-left min-w-0">
-              <h1 className="font-black text-2xl tracking-tight text-gray-900">{loginDirectory?.businessName || 'BUMI MAKMUR'}</h1>
-              <p className="text-xs text-gray-500">{branches.find(branch=>branch.id===selectedBranchId)?.name || 'Pilih cabang'} · POS Professional v{APP_VERSION}</p>
+              <h1 className="font-black text-2xl tracking-tight text-gray-900">{loginHeader}</h1>
+              <p className="text-xs text-gray-500">{loginSubheader}</p>
             </div>
           </div>
 
-          <ConnectionStatus online={online}/>
+          <ConnectionStatus online={online} appearance={loginAppearance}/>
 
           {mode === 'choose' ? (
-            <LoginChooser onSelect={selectMode} cloudConfigured={cloudConfigured}/>
+            <LoginChooser onSelect={selectMode} cloudConfigured={cloudConfigured} appearance={loginAppearance}/>
           ) : (
             <RoleLogin
               mode={mode}
@@ -192,7 +197,7 @@ export default function LoginScreen() {
 
         <div className="px-5 sm:px-7 py-4 bg-slate-50 border-t border-slate-100 text-xs text-slate-600 flex gap-2">
           <ShieldCheck size={18} className="text-emerald-700 shrink-0"/>
-          <p><b className="text-slate-800">Firebase Spark gratis.</b> Karyawan cukup memakai nama dan PIN setelah akun dibuat Owner atau Store Manager.</p>
+          <p><b className="text-slate-800">{loginAppearance.footerLead}</b>{loginAppearance.footerText ? ` ${loginAppearance.footerText}` : ''}</p>
         </div>
       </div>
 
@@ -215,34 +220,34 @@ export default function LoginScreen() {
   );
 }
 
-function ConnectionStatus({ online }) {
+function ConnectionStatus({ online, appearance }) {
   return (
     <div className={`mb-5 p-3 rounded-2xl border text-left flex gap-3 ${online ? 'bg-emerald-50 border-emerald-100 text-emerald-900' : 'bg-amber-50 border-amber-100 text-amber-900'}`}>
       {online ? <Cloud size={20} className="shrink-0"/> : <WifiOff size={20} className="shrink-0"/>}
       <div>
-        <p className="font-bold text-sm">{online ? 'Internet tersedia' : 'Mode offline aktif'}</p>
-        <p className="text-xs leading-relaxed">{online ? 'Login cloud dan sinkronisasi siap digunakan.' : 'Login offline tersedia untuk akun yang sebelumnya sudah tersimpan pada perangkat ini.'}</p>
+        <p className="font-bold text-sm">{online ? appearance.onlineTitle : appearance.offlineTitle}</p>
+        <p className="text-xs leading-relaxed">{online ? appearance.onlineSubtitle : appearance.offlineSubtitle}</p>
       </div>
     </div>
   );
 }
 
-function LoginChooser({ onSelect, cloudConfigured }) {
+function LoginChooser({ onSelect, cloudConfigured, appearance }) {
   return (
     <div>
       <div className="text-center mb-4">
-        <h2 className="font-black text-xl text-gray-900">Pilih jenis akun</h2>
-        <p className="text-sm text-gray-500 mt-1">Owner dan karyawan memiliki alur login terpisah.</p>
+        <h2 className="font-black text-xl text-gray-900">{appearance.chooserTitle}</h2>
+        <p className="text-sm text-gray-500 mt-1">{appearance.chooserSubtitle}</p>
       </div>
       <div className="space-y-3">
         <button onClick={() => onSelect('owner')} className="login-role-card owner-card w-full text-left">
           <span className="login-role-icon"><BriefcaseBusiness size={26}/></span>
-          <span className="flex-1 min-w-0"><b className="block text-base">Login Owner</b><small>Seluruh cabang, laporan, pengaturan, dan hak akses.</small></span>
+          <span className="flex-1 min-w-0"><b className="block text-base">{appearance.ownerTitle}</b><small>{appearance.ownerSubtitle}</small></span>
           <Store size={21} className="shrink-0 opacity-60"/>
         </button>
         <button onClick={() => onSelect('employee')} className="login-role-card employee-card w-full text-left">
           <span className="login-role-icon"><UsersRound size={26}/></span>
-          <span className="flex-1 min-w-0"><b className="block text-base">Login Karyawan</b><small>Pilih cabang, masukkan nama, lalu PIN 4 digit.</small></span>
+          <span className="flex-1 min-w-0"><b className="block text-base">{appearance.employeeTitle}</b><small>{appearance.employeeSubtitle}</small></span>
           <UserRound size={21} className="shrink-0 opacity-60"/>
         </button>
       </div>

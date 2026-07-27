@@ -22,6 +22,7 @@ import {
   STORE_ID
 } from './firebase.js';
 import { processStoreAsset } from '../utils/assetProcessing.js';
+import { normalizeLoginAppearance } from '../utils/loginAppearance.js';
 import {
   CLOUD_ENTITY_COLLECTIONS,
   SETTINGS_KEYS,
@@ -148,6 +149,7 @@ export async function loadPublicLoginDirectory(storeId = STORE_ID) {
     storeId,
     storeCode: String(data.storeCode || ''),
     businessName: String(data.businessName || 'BUMI MAKMUR'),
+    loginAppearance: normalizeLoginAppearance(data.loginAppearance),
     branches: Array.isArray(data.branches)
       ? data.branches.filter(item => item?.id && item?.active !== false).map(item => ({ id: String(item.id), name: String(item.name || item.id), active: true }))
       : []
@@ -161,14 +163,16 @@ export async function publishPublicLoginDirectory(db, storeId = STORE_ID) {
     .filter(item => item?.id && item.active !== false)
     .slice(0, 100)
     .map(item => ({ id: String(item.id), name: String(item.name || item.id), active: true }));
+  const loginAppearance = normalizeLoginAppearance(db?.configs?.loginAppearance);
   await setDoc(publicLoginRef(storeId), {
     storeId,
     storeCode: String(db?.configs?.storeCode || ''),
     businessName: String(db?.configs?.companyName || 'BUMI MAKMUR'),
+    loginAppearance,
     branches,
     updatedAt: serverTimestamp()
   }, { merge: true });
-  return { storeId, businessName: String(db?.configs?.companyName || 'BUMI MAKMUR'), branches };
+  return { storeId, businessName: String(db?.configs?.companyName || 'BUMI MAKMUR'), loginAppearance, branches };
 }
 
 export async function loadCloudDb(seed, profile, storeId = STORE_ID) {

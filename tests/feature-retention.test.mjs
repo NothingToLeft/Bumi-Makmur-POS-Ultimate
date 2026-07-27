@@ -48,12 +48,15 @@ test('pengelolaan karyawan tersedia langsung di Pengaturan Owner', async () => {
   const settings = await read('src/screens/DeviceSettingsScreens.jsx');
   const admin = await read('src/screens/AdminScreens.jsx');
   const login = await read('src/screens/LoginScreen.jsx');
+  const appearance = await read('src/utils/loginAppearance.js');
   assert.match(settings, /EmployeeManagementPanel/);
   assert.match(settings, /\['employees','Karyawan'\]/);
   assert.match(admin, /Karyawan & Hak Akses/);
   assert.match(admin, /export function EmployeeManagementPanel/);
-  assert.match(login, /Login Owner/);
-  assert.match(login, /Login Karyawan/);
+  assert.match(login, /appearance\.ownerTitle/);
+  assert.match(login, /appearance\.employeeTitle/);
+  assert.match(appearance, /Login Owner/);
+  assert.match(appearance, /Login Karyawan/);
 });
 
 test('seluruh koleksi cloud memiliki wadah data pada seed database', async () => {

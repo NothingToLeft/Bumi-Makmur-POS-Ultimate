@@ -9,7 +9,14 @@ export function normalizeDbShape(input, seed, version = '') {
     ...clone(safeSeed),
     ...clone(source),
     meta: { ...(safeSeed.meta || {}), ...(source.meta || {}), ...(version ? { version } : {}) },
-    configs: { ...(safeSeed.configs || {}), ...(source.configs || {}) }
+    configs: {
+      ...(safeSeed.configs || {}),
+      ...(source.configs || {}),
+      loginAppearance: {
+        ...((safeSeed.configs || {}).loginAppearance || {}),
+        ...((source.configs || {}).loginAppearance || {})
+      }
+    }
   };
 
   for (const [key, seedValue] of Object.entries(safeSeed)) {
