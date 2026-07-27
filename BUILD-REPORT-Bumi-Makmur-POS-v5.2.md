@@ -1,4 +1,4 @@
-# Build & QA Report — Bumi Makmur POS v5.2.0
+# Build & QA Report — Bumi Makmur POS v5.2.1
 
 ## Lingkup perubahan
 

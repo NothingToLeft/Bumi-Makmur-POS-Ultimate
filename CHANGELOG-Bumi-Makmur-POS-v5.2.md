@@ -1,4 +1,4 @@
-# Changelog Bumi Makmur POS v5.2.0
+# Changelog Bumi Makmur POS v5.2.1
 
 ## Smart Inventory & Fractional Sales
 

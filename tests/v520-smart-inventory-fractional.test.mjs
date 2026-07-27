@@ -7,6 +7,8 @@ import {
   normalizeQuantity,
   normalizeQuantityStep,
   priceForUnit,
+  quickQuantityOptions,
+  recommendedQuantityStep,
   toBaseQuantity
 } from '../src/utils/fractionalUnits.js';
 import { normalizeDbShape } from '../src/utils/dbShape.js';
@@ -17,7 +19,7 @@ const cable = {
   name: 'Kabel NYM',
   baseUnit: 'meter',
   allowFractional: true,
-  quantityStep: 0.1,
+  quantityStep: 0.5,
   conversions: [{ unit: 'roll', factor: 50 }]
 };
 
@@ -25,7 +27,7 @@ test('konversi kabel roll dan penjualan meter pecahan menjaga stok dasar yang be
   assert.equal(conversionFactor(cable, 'roll'), 50);
   assert.equal(toBaseQuantity(cable, 1, 'roll'), 50);
   assert.equal(toBaseQuantity(cable, 3.5, 'meter'), 3.5);
-  assert.equal(normalizeQuantity(3.47, { allowFractional: true, step: 0.1 }), 3.5);
+  assert.equal(normalizeQuantity(3.47, { allowFractional: true, step: 0.5 }), 3.5);
   assert.equal(normalizeQuantityStep(0.01, true), 0.01);
 });
 
@@ -35,7 +37,7 @@ test('migrasi data lama mengaktifkan pecahan ketika konversi memakai bagian dari
   const seed = { meta: {}, configs: {}, categories: [], units: [], products: [] };
   const migrated = normalizeDbShape({
     products: [{ id: 'OLD', baseUnit: 'box', stock: 40, minStock: 2, allowFractional: false, conversions: [{ unit: 'pcs', factor: 0.01 }] }]
-  }, seed, '5.2.0');
+  }, seed, '5.2.1');
   assert.equal(migrated.products[0].allowFractional, true);
   assert.equal(migrated.products[0].quantityStep, 0.01);
 });
@@ -93,9 +95,9 @@ test('checkout dan pembelian mendukung satuan konversi serta jumlah desimal', as
   assert.match(pos, /Pilih Jumlah & Satuan/);
   assert.match(pos, /baseQty/);
   assert.match(pos, /quantityStep/);
-  assert.match(pos, /contoh 2 atau 3,5/);
-  assert.match(pos, /step=\{line\.quantityStep \|\| 1\}/);
-  assert.match(pos, /Math\.max\(0\.001, Number\(line\.qty\)/);
+  assert.match(pos, /Pilihan cepat/);
+  assert.match(pos, /quickQuantityOptions/);
+  assert.match(pos, /normalizeQuantity/);
   assert.match(purchases, /toBaseQuantity/);
   assert.match(purchases, /baseUnitCost/);
   assert.match(purchases, /Masuk stok/);

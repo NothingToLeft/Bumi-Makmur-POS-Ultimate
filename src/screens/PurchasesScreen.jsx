@@ -2,7 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { Truck, Plus, PackageCheck, Undo2, Trash2 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { escapeHtml, formatRp, generateId, localDateKey, printHtmlDocument } from '../utils/helpers.js';
-import { baseUnitCost, conversionFactor, formatQuantity, normalizeQuantity, normalizeQuantityStep, priceForUnit, toBaseQuantity } from '../utils/fractionalUnits.js';
+import {
+  baseUnitCost, conversionFactor, formatQuantity, normalizeQuantity, normalizeQuantityStep,
+  priceForUnit, quantityStepLabel, toBaseQuantity
+} from '../utils/fractionalUnits.js';
 import { Button, Card, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, SearchBox, Select, StatusBadge, Textarea } from '../components/ui.jsx';
 
 export default function PurchasesScreen() {
@@ -109,6 +112,29 @@ function PurchaseForm({ products, suppliers, onClose, onSave }) {
     });
   };
 
+
+  const changeItemUnit = (index, nextUnit) => setItems(previous => previous.map((row, rowIndex) => {
+    if (rowIndex !== index) return row;
+    const product = activeProducts.find(item => item.id === row.productId);
+    if (!product) return row;
+    const oldFactor = conversionFactor(product, row.unit);
+    const nextFactor = conversionFactor(product, nextUnit);
+    const effectiveBaseCost = baseUnitCost(row.price, oldFactor);
+    const nextStep = quantityStepFor(product, nextUnit);
+    const nextQty = normalizeQuantity(row.qty, { allowFractional: nextStep < 1, step: nextStep, min: nextStep });
+    return {
+      ...row,
+      unit: nextUnit,
+      factor: nextFactor,
+      qty: nextQty,
+      baseQty: toBaseQuantity(product, nextQty, nextUnit),
+      quantityStep: nextStep,
+      allowFractional: nextStep < 1,
+      price: priceForUnit(effectiveBaseCost, nextFactor),
+      baseUnitCost: effectiveBaseCost
+    };
+  }));
+
   const updateItem = (index, patch) => setItems(previous => previous.map((row, rowIndex) => {
     if (rowIndex !== index) return row;
     const product = activeProducts.find(item => item.id === row.productId);
@@ -148,21 +174,24 @@ function PurchaseForm({ products, suppliers, onClose, onSave }) {
         </div></Card>
 
         <Card className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-[minmax(220px,1fr)_140px_110px_160px_auto] gap-2 mb-4 items-end">
-            <Field label="Barang"><Select value={productId} onChange={event => chooseProduct(event.target.value)}>{activeProducts.map(product => <option key={product.id} value={product.id}>{product.name} · stok {formatQuantity(product.stock)} {product.baseUnit}</option>)}</Select></Field>
+          <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-[minmax(220px,1fr)_140px_110px_160px_auto] gap-3 mb-4 items-end purchase-entry-grid">
+            <Field label="Barang" className="sm:col-span-2 2xl:col-span-1"><Select value={productId} onChange={event => chooseProduct(event.target.value)}>{activeProducts.map(product => <option key={product.id} value={product.id}>{product.name} · stok {formatQuantity(product.stock)} {product.baseUnit}</option>)}</Select></Field>
             <Field label="Satuan Beli"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && availableUnits(selectedProduct).map(item => <option key={item.unit} value={item.unit}>{item.unit}{item.factor !== 1 ? ` = ${formatQuantity(item.factor)} ${selectedProduct.baseUnit}` : ''}</option>)}</Select></Field>
-            <Field label="Jumlah"><Input type="number" min={selectedStep} step={selectedStep} value={qty} onChange={event => setQty(event.target.value)}/></Field>
-            <Field label={`Harga per ${unit}`}><MoneyInput value={unitPrice} onValueChange={setUnitPrice}/></Field>
-            <Button variant="orange" onClick={addItem}><Plus size={17}/> Tambah</Button>
+            <Field label="Jumlah" hint={selectedStep < 1 ? quantityStepLabel(selectedStep, unit) : ''}><Input type="number" min={selectedStep} step={selectedStep} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: selectedStep < 1, step: selectedStep, min: selectedStep }))}/></Field>
+            <Field label={`Harga beli per ${unit}`}><MoneyInput value={unitPrice} onValueChange={setUnitPrice}/></Field>
+            <Button variant="orange" onClick={addItem} className="sm:col-span-2 2xl:col-span-1 w-full 2xl:w-auto whitespace-nowrap"><Plus size={17}/> Tambah ke Daftar</Button>
           </div>
-          {selectedProduct && <p className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4">{formatQuantity(qty)} {unit} akan menambah stok {formatQuantity(toBaseQuantity(selectedProduct, qty, unit))} {selectedProduct.baseUnit}. Modal per {selectedProduct.baseUnit}: {formatRp(baseUnitCost(unitPrice, factor))}.</p>}
+          {selectedProduct && <div className="space-y-2 mb-4">
+            <p className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded-xl p-3">{formatQuantity(normalizeQuantity(qty, { allowFractional: selectedStep < 1, step: selectedStep, min: selectedStep }))} {unit} akan menambah stok {formatQuantity(toBaseQuantity(selectedProduct, normalizeQuantity(qty, { allowFractional: selectedStep < 1, step: selectedStep, min: selectedStep }), unit))} {selectedProduct.baseUnit}. Modal efektif per {selectedProduct.baseUnit}: {formatRp(baseUnitCost(unitPrice, factor))}.</p>
+            {selectedProduct.allowFractional && !(selectedProduct.conversions || []).length && <p className="text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded-xl p-3">Barang ini dijual per {selectedProduct.baseUnit}, tetapi belum memiliki kemasan pembelian. Buka Produk & Stok lalu tambahkan konversi, misalnya <b>roll=50</b>, agar restok dapat dimasukkan per roll.</p>}
+          </div>}
 
-          {items.length === 0 ? <EmptyState icon={PackageCheck} title="Belum ada barang"/> : <div className="space-y-2">{items.map((item, index) => {
+          {items.length === 0 ? <EmptyState icon={PackageCheck} title="Belum ada barang dalam pembelian" subtitle="Pilih barang, satuan beli, jumlah, dan harga lalu tekan Tambah ke Daftar."/> : <div className="space-y-2">{items.map((item, index) => {
             const product = activeProducts.find(row => row.id === item.productId);
-            return <Card key={item.id} className="p-3 grid grid-cols-1 md:grid-cols-[minmax(180px,1fr)_130px_90px_150px_120px_48px] gap-2 items-center">
+            return <Card key={item.id} className="p-3 grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-[minmax(180px,1fr)_130px_90px_150px_120px_48px] gap-2 items-center purchase-item-row">
               <div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Masuk stok {formatQuantity(item.baseQty)} {item.baseUnit}</p></div>
-              <Select value={item.unit} onChange={event => updateItem(index, { unit: event.target.value })}>{product && availableUnits(product).map(unitOption => <option key={unitOption.unit} value={unitOption.unit}>{unitOption.unit}</option>)}</Select>
-              <Input type="number" min={quantityStepFor(product, item.unit)} step={quantityStepFor(product, item.unit)} value={item.qty} onChange={event => updateItem(index, { qty: event.target.value })}/>
+              <Select value={item.unit} onChange={event => changeItemUnit(index, event.target.value)}>{product && availableUnits(product).map(unitOption => <option key={unitOption.unit} value={unitOption.unit}>{unitOption.unit}</option>)}</Select>
+              <Input type="number" min={quantityStepFor(product, item.unit)} step={quantityStepFor(product, item.unit)} value={item.qty} onChange={event => updateItem(index, { qty: event.target.value })} onBlur={event => updateItem(index, { qty: normalizeQuantity(event.target.value, { allowFractional: quantityStepFor(product, item.unit) < 1, step: quantityStepFor(product, item.unit), min: quantityStepFor(product, item.unit) }) })}/>
               <MoneyInput value={item.price} onValueChange={value => updateItem(index, { price: value })}/>
               <MoneyInput max={Math.max(0, item.qty * item.price)} value={item.discount} onValueChange={value => updateItem(index, { discount: value })} placeholder="Diskon"/>
               <button onClick={() => setItems(previous => previous.filter((_, rowIndex) => rowIndex !== index))} className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><Trash2 size={18}/></button>
@@ -189,6 +218,6 @@ function PurchaseDetail({ purchase, configs, onClose, onReceive, onReturn }) {
   const printInvoice = () => printHtmlDocument(`Pembelian ${purchase.invoiceNo || purchase.id}`, `<div class="center"><h2>${escapeHtml(configs?.companyName || 'BUMI MAKMUR')}</h2><p class="bold">FAKTUR PEMBELIAN</p><p>${escapeHtml(purchase.invoiceNo || purchase.id)}</p></div><div class="line"></div><p>Pemasok: <b>${escapeHtml(purchase.supplierName)}</b></p>${purchase.items.map(item => `<div class="item"><p class="bold">${escapeHtml(item.name)}</p><div class="row small"><span>${formatQuantity(item.qty)} ${escapeHtml(item.unit)} x ${escapeHtml(formatRp(item.price))}</span><span>${escapeHtml(formatRp(item.qty * item.price - item.discount))}</span></div><p class="small">Masuk stok: ${formatQuantity(item.baseQty ?? item.qty)} ${escapeHtml(item.baseUnit || item.unit)}</p></div>`).join('')}<div class="line"></div><div class="row bold"><span>TOTAL</span><span>${escapeHtml(formatRp(purchase.total))}</span></div>`);
   return <Modal title="Detail Pembelian" onClose={onClose} size="xl" footer={<>{purchase.status === 'ORDERED' && <Button onClick={onReceive}><PackageCheck size={17}/> Terima Barang</Button>}{purchase.status === 'RECEIVED' && <Button variant="danger" onClick={() => setReturnOpen(true)}><Undo2 size={17}/> Retur</Button>}<Button variant="secondary" onClick={printInvoice}>Cetak</Button></>}>
     <div className="space-y-4"><div className="flex justify-between"><div><p className="font-bold text-lg">{purchase.invoiceNo || purchase.id}</p><p className="text-sm text-gray-500">{purchase.supplierName}</p></div><StatusBadge status={purchase.status}/></div><div className="space-y-2">{purchase.items.map(item => <Card key={item.id || item.productId} className="p-3 flex justify-between gap-3"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">{formatQuantity(item.qty)} {item.unit} × {formatRp(item.price)}</p><p className="text-xs text-blue-600">Stok masuk {formatQuantity(item.baseQty ?? item.qty)} {item.baseUnit || item.unit}</p></div><b>{formatRp(item.qty * item.price - item.discount)}</b></Card>)}</div><Card className="p-4 space-y-1"><div className="flex justify-between"><span>Total</span><b>{formatRp(purchase.total)}</b></div><div className="flex justify-between"><span>Dibayar</span><b>{formatRp(purchase.paid)}</b></div><div className="flex justify-between text-orange-600"><span>Sisa</span><b>{formatRp(Math.max(0, purchase.total - purchase.paid))}</b></div></Card></div>
-    {returnOpen && <Modal title="Retur Pembelian" onClose={() => setReturnOpen(false)} size="lg" footer={<><Button variant="secondary" onClick={() => setReturnOpen(false)}>Batal</Button><Button variant="danger" onClick={() => onReturn({ purchaseId: purchase.id, reason, items: returnItems.filter(item => item.qtyReturn > 0).map(item => ({ ...item, qty: item.qtyReturn })) })} disabled={!returnItems.some(item => item.qtyReturn > 0)}>Proses Retur</Button></>}><Field label="Alasan"><Textarea value={reason} onChange={event => setReason(event.target.value)}/></Field><div className="mt-3 space-y-2">{returnItems.map((item, index) => <Card key={item.id || item.productId} className="p-3 grid grid-cols-[1fr_120px] gap-2 items-center"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Sisa dapat diretur {formatQuantity(item.returnableQty)} {item.unit}</p></div><Input type="number" min="0" step={item.quantityStep || 1} max={item.returnableQty} value={item.qtyReturn} onChange={event => setReturnItems(previous => previous.map((row, rowIndex) => rowIndex === index ? { ...row, qtyReturn: Math.min(item.returnableQty, Math.max(0, Number(event.target.value || 0))) } : row))}/></Card>)}</div></Modal>}
+    {returnOpen && <Modal title="Retur Pembelian" onClose={() => setReturnOpen(false)} size="lg" footer={<><Button variant="secondary" onClick={() => setReturnOpen(false)}>Batal</Button><Button variant="danger" onClick={() => onReturn({ purchaseId: purchase.id, reason, items: returnItems.filter(item => item.qtyReturn > 0).map(item => ({ ...item, qty: item.qtyReturn })) })} disabled={!returnItems.some(item => item.qtyReturn > 0)}>Proses Retur</Button></>}><Field label="Alasan"><Textarea value={reason} onChange={event => setReason(event.target.value)}/></Field><div className="mt-3 space-y-2">{returnItems.map((item, index) => <Card key={item.id || item.productId} className="p-3 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_140px] gap-2 items-center"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Sisa dapat diretur {formatQuantity(item.returnableQty)} {item.unit}</p></div><Input type="number" inputMode="decimal" min="0" step={normalizeQuantityStep(item.quantityStep, Number(item.quantityStep) < 1)} max={item.returnableQty} value={item.qtyReturn} title={quantityStepLabel(normalizeQuantityStep(item.quantityStep, Number(item.quantityStep) < 1), item.unit)} onChange={event => setReturnItems(previous => previous.map((row, rowIndex) => rowIndex === index ? { ...row, qtyReturn: event.target.value } : row))} onBlur={event => setReturnItems(previous => previous.map((row, rowIndex) => rowIndex === index ? { ...row, qtyReturn: Math.min(item.returnableQty, normalizeQuantity(event.target.value, { allowFractional: Number(item.quantityStep) < 1, step: item.quantityStep || 1, min: 0 })) } : row))}/></Card>)}</div></Modal>}
   </Modal>;
 }

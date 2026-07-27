@@ -98,11 +98,11 @@ function OrderForm({ products, customers, onClose, onSave }) {
         <Field label="Catatan"><Textarea value={notes} onChange={event => setNotes(event.target.value)}/></Field>
       </Card>
       <Card className="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-[minmax(180px,1fr)_120px_100px_auto] gap-2 items-end">
-          <Field label="Barang"><Select value={productId} onChange={event => chooseProduct(event.target.value)}>{productsAvailable.map(product => <option key={product.id} value={product.id}>{product.name} · stok {formatQuantity(product.stock)} {product.baseUnit}</option>)}</Select></Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-[minmax(180px,1fr)_120px_100px_auto] gap-3 items-end">
+          <Field label="Barang" className="sm:col-span-2 2xl:col-span-1"><Select value={productId} onChange={event => chooseProduct(event.target.value)}>{productsAvailable.map(product => <option key={product.id} value={product.id}>{product.name} · stok {formatQuantity(product.stock)} {product.baseUnit}</option>)}</Select></Field>
           <Field label="Satuan"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && productUnits(selectedProduct).map(option => <option key={option.unit} value={option.unit}>{option.unit}{option.factor !== 1 ? ` = ${formatQuantity(option.factor)} ${selectedProduct.baseUnit}` : ''}</option>)}</Select></Field>
-          <Field label="Jumlah"><Input type="number" min={step} step={step} value={qty} onChange={event => setQty(event.target.value)}/></Field>
-          <Button onClick={add}><Plus size={17}/> Tambah</Button>
+          <Field label="Jumlah"><Input type="number" inputMode="decimal" min={step} step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: step < 1, step, min: step }))}/></Field>
+          <Button onClick={add} className="sm:col-span-2 2xl:col-span-1 w-full 2xl:w-auto"><Plus size={17}/> Tambah</Button>
         </div>
         {selectedProduct && <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold text-blue-700">{formatQuantity(qty)} {unit} = {formatQuantity(toBaseQuantity(selectedProduct, qty, unit))} {selectedProduct.baseUnit}. Harga: {formatRp(priceForUnit(selectedProduct.prices?.retail || 0, conversionFactor(selectedProduct, unit)))} per {unit}.</div>}
         <div className="space-y-2 mt-4">{items.map((item, index) => <Card key={item.lineId} className="p-3 flex justify-between gap-3"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">{formatQuantity(item.qty)} {item.unit} × {formatRp(item.price)}</p><p className="text-xs text-blue-600">Mengurangi stok {formatQuantity(item.baseQty)} {item.baseUnit}</p></div><div className="text-right"><b>{formatRp(item.qty * item.price)}</b><button type="button" onClick={() => setItems(previous => previous.filter((_, rowIndex) => rowIndex !== index))} className="mt-2 ml-auto flex items-center gap-1 text-xs font-bold text-red-600"><Trash2 size={13}/> Hapus</button></div></Card>)}</div>

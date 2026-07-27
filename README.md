@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.2.0
+# Bumi Makmur POS FreeSync v5.2.1
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.2.0 berfokus pada alur yang lebih mudah bagi toko bahan bangunan, listrik, dan air: login karyawan tinggal memilih nama, Produk dan Stok disatukan, serta barang seperti kabel dapat dijual 2 meter atau 3,5 meter meskipun dibeli per roll.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.2.1 berfokus pada alur yang lebih mudah bagi toko bahan bangunan, listrik, dan air: login karyawan tinggal memilih nama, Produk dan Stok disatukan, serta barang seperti kabel dapat dijual 2 meter atau 3,5 meter meskipun dibeli per roll.
 
 ## Platform dan arsitektur
 
@@ -11,7 +11,7 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rili
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Fitur utama v5.2.0
+## Fitur utama v5.2.1
 
 ### Login karyawan: pilih nama lalu PIN
 
@@ -47,7 +47,7 @@ Produk dapat memakai satuan dasar terkecil dan konversi kemasan. Contoh kabel:
 ```text
 Satuan dasar : meter
 Konversi     : 1 roll = 50 meter
-Langkah jual : 0,1 meter
+Kelipatan jual: 0,5 meter
 ```
 
 Kasir dapat menjual `2 meter`, `3,5 meter`, atau `1 roll`. Stok selalu dikurangi dalam meter, sedangkan harga checkout mengikuti satuan yang dipilih. Pembelian `1 roll` otomatis menambah stok `50 meter` dan menghitung biaya modal per meter. Pesanan WhatsApp/online juga dapat memilih meter, roll, box, atau konversi lain sebelum diteruskan ke Kasir.
@@ -82,7 +82,7 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v5.2.0.
+2. Ekstrak ZIP v5.2.1.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
@@ -99,7 +99,7 @@ Bumi Makmur POS v5.2 Smart Inventory, Fractional Sales, and Employee Picker
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.2.0
+→ Build Bumi Makmur POS v5.2.1
 → test-only
 ```
 
@@ -107,7 +107,7 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Deploy Firestore Rules — wajib
 
-v5.2.0 menambahkan dokumen `publicEmployees` untuk dropdown nama karyawan. Jalankan:
+v5.2.1 menambahkan dokumen `publicEmployees` untuk dropdown nama karyawan. Jalankan:
 
 ```text
 Actions
@@ -121,7 +121,7 @@ Tetap memakai Firebase Spark gratis.
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.2.0
+→ Build Bumi Makmur POS v5.2.1
 → android-release
 ```
 
@@ -131,11 +131,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v5.2.0
+→ Build Bumi Makmur POS Desktop v5.2.1
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.2.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.2.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 

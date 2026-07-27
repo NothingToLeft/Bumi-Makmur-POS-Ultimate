@@ -1,4 +1,4 @@
-# Upload Bumi Makmur POS v5.2.0 melalui GitHub Desktop
+# Upload Bumi Makmur POS v5.2.1 melalui GitHub Desktop
 
 ## Sebelum mengganti source
 
@@ -25,9 +25,9 @@ Klik **Commit to main**, lalu **Push origin**. Banyak file berubah dan dua scree
 
 ## Pemeriksaan dan rilis
 
-1. `Actions → Build Bumi Makmur POS v5.2.0 → test-only`.
+1. `Actions → Build Bumi Makmur POS v5.2.1 → test-only`.
 2. Setelah hijau, jalankan `Deploy Firebase Spark Rules` — wajib untuk dropdown nama karyawan.
 3. Cloudflare Pages memperbarui Web otomatis.
 4. Jalankan `android-release` untuk APK/AAB.
-5. Jalankan `Build Bumi Makmur POS Desktop v5.2.0 → windows-release` untuk EXE/MSI.
-6. Unduh dari menu **Releases → Bumi Makmur POS v5.2.0**.
+5. Jalankan `Build Bumi Makmur POS Desktop v5.2.1 → windows-release` untuk EXE/MSI.
+6. Unduh dari menu **Releases → Bumi Makmur POS v5.2.1**.

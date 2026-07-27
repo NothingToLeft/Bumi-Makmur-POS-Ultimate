@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Gauge
 } from 'lucide-react';
 
-export const APP_VERSION = '5.2.0';
+export const APP_VERSION = '5.2.1';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -86,7 +86,7 @@ const defaultProducts = [
     sku: 'LST-001', barcode: '899000000001', baseUnit: 'meter', stock: 150, minStock: 25, rack: 'A-01',
     modalPrice: 7500, initialModalPrice: 7500, prices: { retail: 9000, wholesale: 8500, project: 8200 },
     variants: [{ id: 'VAR-001', name: 'Per Meter', barcode: '899000000001', factor: 1, priceDelta: 0 }],
-    conversions: [{ unit: 'roll', factor: 50 }], allowFractional: true, quantityStep: 0.1, bundleItems: [], favorite: true, available: true, active: true, trackStock: true
+    conversions: [{ unit: 'roll', factor: 50 }], allowFractional: true, quantityStep: 0.5, bundleItems: [], favorite: true, available: true, active: true, trackStock: true
   },
   {
     id: 'PRD-002', branchId: MAIN_BRANCH_ID, name: 'Lampu LED Philips 10W Putih', category: 'Listrik',

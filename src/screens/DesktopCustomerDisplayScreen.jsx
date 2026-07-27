@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MonitorSmartphone, QrCode, WifiOff } from 'lucide-react';
 import { formatRp } from '../utils/helpers.js';
+import { formatQuantity } from '../utils/fractionalUnits.js';
 
 const STORAGE_KEY = 'bm_pos_customer_display_v1';
 const CHANNEL_NAME = 'bm-pos-customer-display';
@@ -30,7 +31,7 @@ export default function DesktopCustomerDisplayScreen() {
     </header>
     <main className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-8 mt-8">
       <section className="bg-white/10 backdrop-blur-xl rounded-[2rem] border border-white/10 p-6 overflow-y-auto custom-scrollbar">
-        {snapshot.cart.length === 0 ? <div className="h-full min-h-[420px] flex flex-col items-center justify-center text-center text-emerald-100"><QrCode size={100} className="opacity-70 mb-5"/><p className="text-3xl font-black">Selamat Datang</p><p className="text-lg mt-3 max-w-2xl text-emerald-200">{snapshot.message || 'Silakan mulai transaksi di kasir. Harga dan total belanja akan tampil di layar ini.'}</p></div> : <div className="space-y-3">{snapshot.cart.map(line => <div key={line.lineId} className="grid grid-cols-[1fr_auto] gap-6 p-5 rounded-2xl bg-white/10 border border-white/10"><div><p className="font-black text-xl">{line.name}</p><p className="text-emerald-200 mt-1">{line.qty} {line.unit} × {formatRp(line.price)}</p></div><p className="text-2xl font-black text-orange-300">{formatRp(Number(line.price || 0) * Number(line.qty || 0) - Number(line.itemDiscount || 0))}</p></div>)}</div>}
+        {snapshot.cart.length === 0 ? <div className="h-full min-h-[420px] flex flex-col items-center justify-center text-center text-emerald-100"><QrCode size={100} className="opacity-70 mb-5"/><p className="text-3xl font-black">Selamat Datang</p><p className="text-lg mt-3 max-w-2xl text-emerald-200">{snapshot.message || 'Silakan mulai transaksi di kasir. Harga dan total belanja akan tampil di layar ini.'}</p></div> : <div className="space-y-3">{snapshot.cart.map(line => <div key={line.lineId} className="grid grid-cols-[1fr_auto] gap-6 p-5 rounded-2xl bg-white/10 border border-white/10"><div><p className="font-black text-xl">{line.name}</p><p className="text-emerald-200 mt-1">{formatQuantity(line.qty)} {line.unit} × {formatRp(line.price)}</p></div><p className="text-2xl font-black text-orange-300">{formatRp(Number(line.price || 0) * Number(line.qty || 0) - Number(line.itemDiscount || 0))}</p></div>)}</div>}
       </section>
       <aside className="bg-white text-slate-900 rounded-[2rem] p-7 shadow-2xl flex flex-col justify-between">
         <div><p className="text-xs uppercase tracking-[.2em] font-black text-emerald-700">Ringkasan Belanja</p><p className="text-2xl font-black mt-3">{snapshot.customerName || 'Pelanggan Umum'}</p><p className="text-gray-500 mt-1">{itemCount} item</p></div>

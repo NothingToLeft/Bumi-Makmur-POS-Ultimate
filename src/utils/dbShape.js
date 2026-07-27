@@ -1,3 +1,5 @@
+import { normalizeQuantityStep, recommendedQuantityStep } from './fractionalUnits.js';
+
 const clone = value => value == null
   ? value
   : (typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
@@ -43,10 +45,10 @@ export function normalizeDbShape(input, seed, version = '') {
       || fractionalConversionSteps.length > 0;
     const inferredStep = fractionalConversionSteps.length
       ? Math.min(...fractionalConversionSteps)
-      : 0.1;
+      : recommendedQuantityStep(product.baseUnit, product.category);
     const requestedStep = Number(product.quantityStep);
     const quantityStep = inferredFractional
-      ? Math.min(1, Math.max(0.001, Number.isFinite(requestedStep) && requestedStep > 0 && requestedStep < 1 ? requestedStep : inferredStep))
+      ? normalizeQuantityStep(requestedStep, true, inferredStep)
       : 1;
 
     return {

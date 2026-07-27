@@ -40,7 +40,10 @@ import {
 import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
 import { dataUrlByteLength } from '../utils/assetProcessing.js';
 import { normalizeDbShape } from '../utils/dbShape.js';
-import { baseUnitCost as calculateBaseUnitCost, conversionFactor, normalizeQuantityStep } from '../utils/fractionalUnits.js';
+import {
+  baseUnitCost as calculateBaseUnitCost, conversionFactor, formatQuantity,
+  normalizeQuantityStep, recommendedQuantityStep
+} from '../utils/fractionalUnits.js';
 
 const PosContext = createContext(null);
 const DEVICE_SETTINGS_KEY = 'bm_pos_device_security_v1';
@@ -57,8 +60,8 @@ const isStepAligned = (value, step) => Math.abs(Number(value) / Number(step) - M
 const validateBaseQuantity = (product, value, label = 'Jumlah') => {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`${label} ${product?.name || 'barang'} tidak valid.`);
-  const step = normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true);
-  if (!isStepAligned(number, step)) throw new Error(`${label} ${product?.name || 'barang'} harus kelipatan ${step} ${product?.baseUnit || 'satuan'}.`);
+  const step = normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true, recommendedQuantityStep(product?.baseUnit, product?.category));
+  if (!isStepAligned(number, step)) throw new Error(`${label} ${product?.name || 'barang'} harus kelipatan ${formatQuantity(step)} ${product?.baseUnit || 'satuan'}.`);
   return signedQuantity(number);
 };
 const isConflictError = error => String(error?.code || '').includes('aborted') || /telah berubah|menggabungkan pembaruan/i.test(String(error?.message || ''));
@@ -1038,7 +1041,7 @@ export function PosProvider({ children }) {
       if (duplicateBarcode) throw new Error(`Barcode ${barcode} sudah dipakai oleh produk ${duplicateBarcode.name}.`);
     }
     const allowFractional = data.allowFractional === true;
-    const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional);
+    const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional, recommendedQuantityStep(data.baseUnit, data.category));
     const quantityProfile = { name: productName, baseUnit: data.baseUnit || 'pcs', allowFractional, quantityStep };
     const initialStock = existing?.stock ?? validateBaseQuantity(quantityProfile, data.stock || 0, 'Stok awal');
     const minimumStock = validateBaseQuantity(quantityProfile, data.minStock || 0, 'Stok minimum');
@@ -1431,7 +1434,7 @@ export function PosProvider({ children }) {
       const refundQty = Number(refundItem.qty || 0);
       const refundStep = Math.max(0.001, Number(original.quantityStep || 1));
       if (refundQty <= 0 || refundQty > remaining) throw new Error(`Jumlah refund ${original.name} melebihi sisa yang dapat direfund (${remaining}).`);
-      if (!isStepAligned(refundQty, refundStep)) throw new Error(`Jumlah refund ${original.name} harus kelipatan ${refundStep} ${original.unit || 'satuan'}.`);
+      if (!isStepAligned(refundQty, refundStep)) throw new Error(`Jumlah refund ${original.name} harus kelipatan ${formatQuantity(refundStep)} ${original.unit || 'satuan'}.`);
     }
     const itemNetTotal = sale.items.reduce((sum, item) => sum + Math.max(0, Number(item.netUnitPrice ?? item.price) || 0) * Number(item.qty || 0), 0);
     const saleAllocationRatio = itemNetTotal > 0 ? money(sale.total) / itemNetTotal : 0;
@@ -1565,7 +1568,7 @@ export function PosProvider({ children }) {
       if (!product) throw new Error(`Produk ${original.name || item.productId} tidak ditemukan di cabang pembelian.`);
       const returnQty = quantity(item.qty);
       const returnStep = Number(original.quantityStep || (original.unit === original.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true) : 1));
-      if (!isStepAligned(returnQty, returnStep)) throw new Error(`Jumlah retur ${original.name} harus mengikuti kelipatan ${returnStep} ${original.unit || ''}.`);
+      if (!isStepAligned(returnQty, returnStep)) throw new Error(`Jumlah retur ${original.name} harus mengikuti kelipatan ${formatQuantity(returnStep)} ${original.unit || ''}.`);
       const factor = quantity(original.factor || 1);
       const returnBaseQty = validateBaseQuantity(product, returnQty * factor, `Jumlah retur ${original.name}`);
       if (product.stock < returnBaseQty) throw new Error(`Stok ${item.name} tidak cukup untuk retur. Dibutuhkan ${returnBaseQty} ${product.baseUnit || 'satuan dasar'}.`);
@@ -1691,7 +1694,7 @@ export function PosProvider({ children }) {
       const factor = quantity(line.factor || conversionFactor(product, unit));
       const baseQty = validateBaseQuantity(product, line.baseQty ?? qty * factor, `Jumlah ${product.name}`);
       const quantityStep = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true) : 1;
-      if (qty <= 0 || factor <= 0 || !isStepAligned(qty, quantityStep)) throw new Error(`Jumlah ${product.name} harus mengikuti kelipatan ${quantityStep} ${unit}.`);
+      if (qty <= 0 || factor <= 0 || !isStepAligned(qty, quantityStep)) throw new Error(`Jumlah ${product.name} harus mengikuti kelipatan ${formatQuantity(quantityStep)} ${unit}.`);
       const price = money(line.price);
       return { ...line, productId: product.id, name: product.name, qty, unit, factor, baseQty, baseUnit: product.baseUnit, quantityStep, allowFractional: quantityStep < 1, price, netUnitPrice: money(line.netUnitPrice ?? price), itemDiscount: 0 };
     });

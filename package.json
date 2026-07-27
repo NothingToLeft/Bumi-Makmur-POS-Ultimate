@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "5.2.0",
+  "version": "5.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -45,7 +45,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v5.2.0: login karyawan via daftar nama dan PIN, Produk & Stok terpadu, penjualan pecahan seperti kabel per meter, restok multi-satuan, audit sinkronisasi, Windows EXE/MSI, Android, Web, dan Firebase Spark FreeSync.",
+  "description": "Bumi Makmur POS v5.2.1: login karyawan via daftar nama dan PIN, Produk & Stok terpadu, penjualan pecahan seperti kabel per meter, restok multi-satuan, audit sinkronisasi, Windows EXE/MSI, Android, Web, dan Firebase Spark FreeSync.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

@@ -1,10 +1,25 @@
 const roundQuantity = value => Math.round((Number(value) || 0) * 1000) / 1000;
 
-export function normalizeQuantityStep(value, allowFractional = false) {
+export const QUANTITY_STEP_PRESETS = Object.freeze([1, 0.5, 0.25, 0.2, 0.1, 0.05, 0.01, 0.001]);
+
+export function recommendedQuantityStep(baseUnit = '', category = '') {
+  const unit = String(baseUnit || '').trim().toLowerCase();
+  const group = String(category || '').trim().toLowerCase();
+  if (unit === 'meter' || unit === 'm' || group.includes('kabel')) return 0.5;
+  if (unit === 'kg' || unit === 'liter') return 0.1;
+  if (unit === 'cm') return 1;
+  return 0.1;
+}
+
+export function normalizeQuantityStep(value, allowFractional = false, fallbackStep = 0.1) {
   if (!allowFractional) return 1;
+  const fallback = Number(fallbackStep);
+  const safeFallback = Number.isFinite(fallback) && fallback > 0 ? fallback : 0.1;
   const step = Number(value);
-  if (!Number.isFinite(step) || step <= 0) return 0.1;
-  return Math.min(1, Math.max(0.001, roundQuantity(step)));
+  if (!Number.isFinite(step) || step <= 0) return Math.min(1, Math.max(0.001, roundQuantity(safeFallback)));
+  const rounded = Math.min(1, Math.max(0.001, roundQuantity(step)));
+  const nearbyPreset = QUANTITY_STEP_PRESETS.find(preset => Math.abs(preset - rounded) <= 0.002);
+  return nearbyPreset ?? rounded;
 }
 
 export function normalizeQuantity(value, { allowFractional = true, step = 0.001, min = 0 } = {}) {
@@ -15,6 +30,19 @@ export function normalizeQuantity(value, { allowFractional = true, step = 0.001,
   return Math.max(min, roundQuantity(snapped));
 }
 
+export function normalizeSignedQuantity(value, { allowFractional = true, step = 0.001 } = {}) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw === 0) return 0;
+  const sign = raw < 0 ? -1 : 1;
+  return sign * normalizeQuantity(Math.abs(raw), { allowFractional, step, min: 0 });
+}
+
+export function isQuantityAligned(value, step = 1) {
+  const safeStep = normalizeQuantityStep(step, Number(step) < 1);
+  const ratio = Number(value) / safeStep;
+  return Number.isFinite(ratio) && Math.abs(ratio - Math.round(ratio)) < 0.000001;
+}
+
 export function formatQuantity(value, maximumFractionDigits = 3) {
   const number = Number(value);
   if (!Number.isFinite(number)) return '0';
@@ -22,6 +50,23 @@ export function formatQuantity(value, maximumFractionDigits = 3) {
     minimumFractionDigits: 0,
     maximumFractionDigits
   }).format(number);
+}
+
+export function quantityStepLabel(step, unit = '') {
+  const safeStep = normalizeQuantityStep(step, Number(step) < 1);
+  if (safeStep === 0.5) return `Setengah ${unit}`.trim();
+  if (safeStep === 0.25) return `Seperempat ${unit}`.trim();
+  return `Kelipatan ${formatQuantity(safeStep)} ${unit}`.trim();
+}
+
+export function quickQuantityOptions(step = 1) {
+  const safeStep = normalizeQuantityStep(step, Number(step) < 1);
+  if (safeStep === 0.5) return [0.5, 1, 1.5, 2, 2.5, 3.5];
+  if (safeStep === 0.25) return [0.25, 0.5, 1, 1.5, 2, 2.5];
+  if (safeStep === 0.1) return [0.5, 1, 1.5, 2, 2.5, 3.5];
+  return [safeStep, safeStep * 2, safeStep * 5, safeStep * 10]
+    .map(value => roundQuantity(value))
+    .filter((value, index, values) => value > 0 && values.indexOf(value) === index);
 }
 
 export function findConversion(product, unit) {
@@ -51,6 +96,6 @@ export function baseUnitCost(unitPrice, factor = 1) {
 
 export function fractionalSaleLabel(product) {
   if (!product?.allowFractional) return '';
-  const step = normalizeQuantityStep(product.quantityStep, true);
-  return `Bisa dijual pecahan mulai ${formatQuantity(step)} ${product.baseUnit}`;
+  const step = normalizeQuantityStep(product.quantityStep, true, recommendedQuantityStep(product.baseUnit, product.category));
+  return `Dijual per ${formatQuantity(step)} ${product.baseUnit}`;
 }
