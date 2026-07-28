@@ -1,4 +1,4 @@
-# Changelog Bumi Makmur POS v5.2.2
+# Changelog Bumi Makmur POS v5.2.3
 
 ## Responsive Sidebar Identity Fix
 - Nama cabang panjang tampil utuh hingga dua baris.

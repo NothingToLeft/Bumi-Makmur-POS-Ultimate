@@ -1,4 +1,12 @@
-# Changelog Bumi Makmur POS
+# Changelog
+
+## v5.2.3 — Purchase & Restock Responsive Layout Fix
+
+- Memperbaiki tombol **Tambah ke Daftar** yang meluber dan menimpa panel Ringkasan.
+- Mengubah layout modal Pembelian menjadi satu kolom pada layar sempit dan dua kolom aman mulai layar lebar.
+- Mengganti grid lima kolom berbasis viewport dengan grid 12 kolom yang menyesuaikan ruang kontainer.
+- Menambahkan `min-width: 0`, batas lebar, wrapping tombol, dan panel ringkasan responsif.
+- Menambahkan regression test agar kerusakan layout tidak kembali.
 
 ## v5.2.2 — Responsive Sidebar Identity Fix
 

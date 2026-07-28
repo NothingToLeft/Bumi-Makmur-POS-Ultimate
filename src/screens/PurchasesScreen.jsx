@@ -162,8 +162,8 @@ function PurchaseForm({ products, suppliers, onClose, onSave }) {
   };
 
   return <Modal title="Pembelian Baru / Restok" onClose={onClose} size="full" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={save}>Simpan Pembelian</Button></>}>
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2 space-y-4">
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] gap-4 items-start purchase-form-layout">
+      <div className="min-w-0 space-y-4">
         <Card className="p-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Field label="Nomor Faktur / PO"><Input value={invoiceNo} onChange={event => setInvoiceNo(event.target.value)}/></Field>
           <Field label="Pemasok"><Select value={supplierId} onChange={event => setSupplierId(event.target.value)}><option value="">Pilih pemasok</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</Select></Field>
@@ -174,12 +174,12 @@ function PurchaseForm({ products, suppliers, onClose, onSave }) {
         </div></Card>
 
         <Card className="p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-[minmax(220px,1fr)_140px_110px_160px_auto] gap-3 mb-4 items-end purchase-entry-grid">
-            <Field label="Barang" className="sm:col-span-2 2xl:col-span-1"><Select value={productId} onChange={event => chooseProduct(event.target.value)}>{activeProducts.map(product => <option key={product.id} value={product.id}>{product.name} · stok {formatQuantity(product.stock)} {product.baseUnit}</option>)}</Select></Field>
-            <Field label="Satuan Beli"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && availableUnits(selectedProduct).map(item => <option key={item.unit} value={item.unit}>{item.unit}{item.factor !== 1 ? ` = ${formatQuantity(item.factor)} ${selectedProduct.baseUnit}` : ''}</option>)}</Select></Field>
-            <Field label="Jumlah" hint={selectedStep < 1 ? quantityStepLabel(selectedStep, unit) : ''}><Input type="number" min={selectedStep} step={selectedStep} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: selectedStep < 1, step: selectedStep, min: selectedStep }))}/></Field>
-            <Field label={`Harga beli per ${unit}`}><MoneyInput value={unitPrice} onValueChange={setUnitPrice}/></Field>
-            <Button variant="orange" onClick={addItem} className="sm:col-span-2 2xl:col-span-1 w-full 2xl:w-auto whitespace-nowrap"><Plus size={17}/> Tambah ke Daftar</Button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-12 gap-3 mb-4 items-end purchase-entry-grid">
+            <Field label="Barang" className="sm:col-span-2 xl:col-span-6"><Select value={productId} onChange={event => chooseProduct(event.target.value)}>{activeProducts.map(product => <option key={product.id} value={product.id}>{product.name} · stok {formatQuantity(product.stock)} {product.baseUnit}</option>)}</Select></Field>
+            <Field label="Satuan Beli" className="xl:col-span-3"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && availableUnits(selectedProduct).map(item => <option key={item.unit} value={item.unit}>{item.unit}{item.factor !== 1 ? ` = ${formatQuantity(item.factor)} ${selectedProduct.baseUnit}` : ''}</option>)}</Select></Field>
+            <Field label="Jumlah" hint={selectedStep < 1 ? quantityStepLabel(selectedStep, unit) : ''} className="xl:col-span-3"><Input type="number" min={selectedStep} step={selectedStep} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: selectedStep < 1, step: selectedStep, min: selectedStep }))}/></Field>
+            <Field label={`Harga beli per ${unit}`} className="xl:col-span-6"><MoneyInput value={unitPrice} onValueChange={setUnitPrice}/></Field>
+            <Button variant="orange" onClick={addItem} className="sm:col-span-1 xl:col-span-6 w-full min-w-0 whitespace-normal leading-tight"><Plus size={17}/> Tambah ke Daftar</Button>
           </div>
           {selectedProduct && <div className="space-y-2 mb-4">
             <p className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded-xl p-3">{formatQuantity(normalizeQuantity(qty, { allowFractional: selectedStep < 1, step: selectedStep, min: selectedStep }))} {unit} akan menambah stok {formatQuantity(toBaseQuantity(selectedProduct, normalizeQuantity(qty, { allowFractional: selectedStep < 1, step: selectedStep, min: selectedStep }), unit))} {selectedProduct.baseUnit}. Modal efektif per {selectedProduct.baseUnit}: {formatRp(baseUnitCost(unitPrice, factor))}.</p>
@@ -200,8 +200,8 @@ function PurchaseForm({ products, suppliers, onClose, onSave }) {
         </Card>
       </div>
 
-      <div className="space-y-4">
-        <Card className="p-4 space-y-3"><h3 className="font-bold">Ringkasan</h3><div className="flex justify-between text-sm"><span>Subtotal</span><b>{formatRp(subtotal)}</b></div><Field label="Diskon Faktur"><MoneyInput max={Math.max(0, subtotal + Number(additional))} value={discount} onValueChange={setDiscount}/></Field><Field label="Biaya Tambahan"><MoneyInput value={additional} onValueChange={setAdditional}/></Field><div className="flex justify-between border-t pt-3 text-lg"><b>Total</b><b className="text-emerald-600">{formatRp(total)}</b></div><div className="flex justify-between text-orange-600"><b>Sisa Hutang</b><b>{formatRp(Math.max(0, total - Number(paid)))}</b></div></Card>
+      <div className="min-w-0 space-y-4 xl:sticky xl:top-0 purchase-summary-column">
+        <Card className="p-4 space-y-3 overflow-hidden"><h3 className="font-bold">Ringkasan</h3><div className="flex justify-between text-sm"><span>Subtotal</span><b>{formatRp(subtotal)}</b></div><Field label="Diskon Faktur"><MoneyInput max={Math.max(0, subtotal + Number(additional))} value={discount} onValueChange={setDiscount}/></Field><Field label="Biaya Tambahan"><MoneyInput value={additional} onValueChange={setAdditional}/></Field><div className="flex justify-between border-t pt-3 text-lg"><b>Total</b><b className="text-emerald-600">{formatRp(total)}</b></div><div className="flex justify-between text-orange-600"><b>Sisa Hutang</b><b>{formatRp(Math.max(0, total - Number(paid)))}</b></div></Card>
         <Field label="Catatan"><Textarea value={notes} onChange={event => setNotes(event.target.value)}/></Field>
       </div>
     </div>

@@ -325,3 +325,17 @@ body.is-electron .sidebar-premium {
 @media (min-width: 1024px) {
   body.is-electron .sidebar-premium { width: 288px; }
 }
+
+
+/* v5.2.3 purchase/restock responsive layout fix */
+.purchase-form-layout > * { min-width: 0; }
+.purchase-entry-grid > * { min-width: 0; max-width: 100%; }
+.purchase-entry-grid .field-input { min-width: 0; max-width: 100%; }
+.purchase-entry-grid button { max-width: 100%; overflow-wrap: anywhere; }
+.purchase-summary-column { min-width: 0; max-width: 100%; }
+@media (max-width: 1279px) {
+  .purchase-summary-column { position: static; }
+}
+@media (max-width: 639px) {
+  .purchase-entry-grid button { min-height: 52px; }
+}

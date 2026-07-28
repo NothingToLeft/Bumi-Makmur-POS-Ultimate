@@ -1,15 +1,15 @@
-# Bumi Makmur POS Desktop Windows v5.2.2
+# Bumi Makmur POS Desktop Windows v5.2.3
 
 ## Build cloud tanpa program berat
 
 Buka GitHub:
 
 ```text
-Actions → Build Bumi Makmur POS Desktop v5.2.2
+Actions → Build Bumi Makmur POS Desktop v5.2.3
 → Run workflow → windows-release
 ```
 
-Unduh artifact `Bumi-Makmur-POS-Desktop-v5.2.2-Windows`.
+Unduh artifact `Bumi-Makmur-POS-Desktop-v5.2.3-Windows`.
 
 ## Isi artifact
 

@@ -9,7 +9,7 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   const main = await read('electron/main.cjs');
   const preload = await read('electron/preload.cjs');
   const workflow = await read('.github/workflows/build-windows.yml');
-  assert.equal(pkg.version, '5.2.2');
+  assert.equal(pkg.version, '5.2.3');
   assert.equal(pkg.main, 'electron/main.cjs');
   assert.ok(pkg.devDependencies.electron);
   assert.ok(pkg.devDependencies['electron-builder']);

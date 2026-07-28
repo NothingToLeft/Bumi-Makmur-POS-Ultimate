@@ -1,4 +1,4 @@
-name: Build Bumi Makmur POS v5.2.2
+name: Build Bumi Makmur POS v5.2.3
 
 on:
   workflow_dispatch:
@@ -92,7 +92,7 @@ jobs:
         if: ${{ inputs.run_mode == 'web-only' || inputs.run_mode == 'web-and-android' }}
         uses: actions/upload-artifact@v6
         with:
-          name: Bumi-Makmur-POS-v5.2.2-Web-PC-PWA
+          name: Bumi-Makmur-POS-v5.2.3-Web-PC-PWA
           path: dist
           if-no-files-found: error
           retention-days: 30
@@ -158,13 +158,13 @@ jobs:
           cp "$APK" "release/android/Bumi-Makmur-POS-Android-v${VERSION}.apk"
           cp "$AAB" "release/android/Bumi-Makmur-POS-Android-v${VERSION}.aab"
           sha256sum release/android/*.apk release/android/*.aab > release/android/SHA256SUMS-Android.txt
-          cp RELEASE-NOTES-Bumi-Makmur-POS-v5.2.2.md release/android/RELEASE-NOTES.md
+          cp RELEASE-NOTES-Bumi-Makmur-POS-v5.2.3.md release/android/RELEASE-NOTES.md
 
       - name: Upload signed Android release to Actions artifact
         if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}
         uses: actions/upload-artifact@v6
         with:
-          name: Bumi-Makmur-POS-v5.2.2-Android-Signed
+          name: Bumi-Makmur-POS-v5.2.3-Android-Signed
           path: |
             release/android/*.apk
             release/android/*.aab

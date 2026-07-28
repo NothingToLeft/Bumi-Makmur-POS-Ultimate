@@ -1,10 +1,10 @@
-# Android Signing — Bumi Makmur POS v5.2.2
+# Android Signing — Bumi Makmur POS v5.2.3
 
-Gunakan keystore yang sama dengan v4.x/v5.x agar APK v5.2.2 dapat dipasang sebagai pembaruan tanpa uninstall.
+Gunakan keystore yang sama dengan v4.x/v5.x agar APK v5.2.3 dapat dipasang sebagai pembaruan tanpa uninstall.
 
 - Package ID: `app.bumimakmur.pos`
-- Version name: `5.2.2`
-- Workflow: **Build Bumi Makmur POS v5.2.2**
+- Version name: `5.2.3`
+- Workflow: **Build Bumi Makmur POS v5.2.3**
 - Mode: `android-release` atau `web-and-android`
 
 GitHub Secrets:
@@ -19,7 +19,7 @@ ANDROID_KEY_PASSWORD
 Artifact:
 
 ```text
-Bumi-Makmur-POS-v5.2.2-Android-Signed
+Bumi-Makmur-POS-v5.2.3-Android-Signed
 ```
 
 Jangan mengunggah `.jks`, password, atau base64 ke repository.

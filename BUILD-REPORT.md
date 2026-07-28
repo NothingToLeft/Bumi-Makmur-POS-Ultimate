@@ -1,4 +1,4 @@
-# Build & QA Report — Bumi Makmur POS v5.2.2
+# Build & QA Report — Bumi Makmur POS v5.2.3
 
 ## Ruang lingkup
 
@@ -9,7 +9,7 @@ Hotfix responsif untuk identitas cabang pada sidebar Web dan Desktop Windows.
 - `src/App.jsx`: struktur identitas sidebar diubah dari teks `truncate` satu baris menjadi blok nama adaptif dua baris.
 - `src/index.css`: menambahkan aturan wrapping, line clamp dua baris, ukuran font adaptif, tinggi header fleksibel, dan lebar sidebar desktop 288 px.
 - `tests/v522-sidebar-branding.test.mjs`: regression test khusus nama cabang panjang.
-- Versi aplikasi, cache service worker, workflow Android/Windows, dokumentasi, dan catatan rilis dinaikkan ke 5.2.2.
+- Versi aplikasi, cache service worker, workflow Android/Windows, dokumentasi, dan catatan rilis dinaikkan ke 5.2.3.
 
 ## Hasil pemeriksaan
 

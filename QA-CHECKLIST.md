@@ -1,12 +1,12 @@
-# QA Checklist Bumi Makmur POS v5.2.2
+# QA Checklist Bumi Makmur POS v5.2.3
 
 ## Build, versi, dan keamanan
 - [ ] `npm run test:core` lulus seluruh test.
 - [ ] `npm run audit:static` menampilkan `AUDIT LULUS`.
 - [ ] Workflow `test-only` berhasil menjalankan Vite build.
 - [ ] Workflow Firebase Rules hijau setelah perubahan `publicEmployees`.
-- [ ] Cloudflare Pages menampilkan v5.2.2.
-- [ ] EXE/MSI dan APK/AAB muncul pada GitHub Releases v5.2.2.
+- [ ] Cloudflare Pages menampilkan v5.2.3.
+- [ ] EXE/MSI dan APK/AAB muncul pada GitHub Releases v5.2.3.
 - [ ] Tidak ada Cloud Functions, Firebase Storage, Blaze, atau secret di repository.
 
 ## Login karyawan berbasis daftar nama

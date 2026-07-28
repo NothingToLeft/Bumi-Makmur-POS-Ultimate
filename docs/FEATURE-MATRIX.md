@@ -1,4 +1,4 @@
-# Feature Matrix — Bumi Makmur POS FreeSync v5.2.2
+# Feature Matrix — Bumi Makmur POS FreeSync v5.2.3
 
 | Area | Implementasi | Status |
 |---|---|---|
