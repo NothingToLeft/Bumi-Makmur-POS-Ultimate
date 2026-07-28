@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Package, Plus, Star, Archive, ArchiveRestore, Eye, EyeOff, Pencil, Printer, Percent, TrendingUp,
   ScanLine, Camera, Keyboard, Boxes, AlertTriangle, ArrowLeftRight, ClipboardCheck,
-  SlidersHorizontal, History, Download, PackagePlus, CircleDollarSign, Ruler, Layers3, Trash2, WandSparkles, Copy, Tags, FolderPlus
+  SlidersHorizontal, History, Download, Upload, PackagePlus, CircleDollarSign, Ruler, Layers3, Trash2, WandSparkles, Copy, Tags, FolderPlus, Barcode
 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import {
@@ -26,6 +26,8 @@ import {
   PageHeader, SearchBox, Select, SummaryCard, Textarea
 } from '../components/ui.jsx';
 import ProductPicker from '../components/ProductPicker.jsx';
+import InventoryImportModal from '../components/InventoryImportModal.jsx';
+import BulkBarcodeLabelsModal from '../components/BulkBarcodeLabelsModal.jsx';
 
 const DEFAULT_MARKUPS = { retail: 30, wholesale: 20, project: 15 };
 const PRICE_TIERS = [
@@ -79,7 +81,7 @@ const csvCell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
 export default function ProductsScreen() {
   const {
     db, scoped, branch, hasPermission, saveProduct, archiveProduct, restoreProduct, deleteProduct, zeroProductStock, toggleProduct,
-    adjustStock, stockOpname, transferStock, saveCategory, deleteCategory
+    adjustStock, stockOpname, transferStock, saveCategory, deleteCategory, importInventoryRows
   } = usePos();
   const [tab, setTab] = useState('catalog');
   const [search, setSearch] = useState('');
@@ -91,11 +93,14 @@ export default function ProductsScreen() {
   const [transferOpen, setTransferOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [lifecycleProduct, setLifecycleProduct] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [bulkLabelsOpen, setBulkLabelsOpen] = useState(false);
 
   const canManageProducts = hasPermission('products.manage');
   const canManageStock = hasPermission('inventory.manage');
   const canManageCategories = hasPermission('categories.manage');
   const canDeleteProducts = hasPermission('products.delete');
+  const canImportInventory = hasPermission('inventory.import');
 
   const catalogProducts = useMemo(() => sortProductsByName(groupVariantProducts(scoped.products)), [scoped.products]);
   const products = useMemo(() => catalogProducts.filter(product => {
@@ -183,6 +188,8 @@ export default function ProductsScreen() {
         actions={<>
           <Button variant="outline" onClick={exportInventory}><Download size={17}/> Ekspor</Button>
           <Button variant="outline" onClick={printStockSheet}><Printer size={17}/> Lembar Stok</Button>
+          <Button variant="outline" onClick={() => setBulkLabelsOpen(true)}><Barcode size={17}/> Label Massal</Button>
+          {canImportInventory && <Button variant="outline" onClick={() => setImportOpen(true)}><Upload size={17}/> Impor Excel/CSV</Button>}
           {canManageCategories && <Button variant="outline" onClick={() => setCategoryOpen(true)}><Tags size={17}/> Kategori</Button>}
           {canManageProducts && <Button onClick={newProduct}><PackagePlus size={18}/> Tambah Barang & Stok</Button>}
         </>}
@@ -240,6 +247,8 @@ export default function ProductsScreen() {
         {tab === 'transfer' && <HistoryActionTab title="Transfer Antar-Cabang" description="Pindahkan persediaan dari cabang aktif ke cabang lain tanpa membuat ulang produk." icon={ArrowLeftRight} disabled={!canManageStock || db.branches.length < 2 || activeProducts.length === 0} button="Transfer Stok" onClick={() => setTransferOpen(true)} rows={scoped.transfers}/>} 
       </div>
 
+      {importOpen && canImportInventory && <InventoryImportModal products={scoped.products} categories={db.categories} branchId={branch?.id || db.configs.activeBranchId} onClose={() => setImportOpen(false)} onImport={(rows, options) => importInventoryRows(rows, options)}/>}
+      {bulkLabelsOpen && <BulkBarcodeLabelsModal products={activeProducts} onClose={() => setBulkLabelsOpen(false)}/>}
       {editing && <ProductForm product={editing} categories={sortCategories(db.categories)} units={db.units} products={scoped.products} onAddCategory={canManageCategories ? (name => saveCategory({ name })) : null} onClose={() => setEditing(null)} onSave={save}/>} 
       {adjusting && <AdjustModal product={adjusting} products={activeProducts} onClose={() => setAdjusting(null)} onSelect={setAdjusting} onSave={data => { try { adjustStock(data); setAdjusting(null); } catch (error) { alert(error.message); } }}/>} 
       {opnameOpen && <OpnameModal products={activeProducts} onClose={() => setOpnameOpen(false)} onSave={data => { try { stockOpname(data); setOpnameOpen(false); } catch (error) { alert(error.message); } }}/>} 
@@ -322,6 +331,12 @@ function ProductLifecycleModal({ product, db, canManageProducts, canManageStock,
         <div className="grid grid-cols-2 gap-3 mt-4 text-sm"><div className="rounded-xl bg-white border p-3"><p className="text-gray-500">Total stok</p><p className="font-black text-blue-700">{formatQuantity(summary.stock)}</p></div><div className="rounded-xl bg-white border p-3"><p className="text-gray-500">Referensi riwayat</p><p className="font-black text-purple-700">{summary.historyCount}</p></div></div>
         {summary.usage.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{summary.usage.map(([label, count]) => <Badge key={label}>{label}: {count}</Badge>)}</div>}
       </div>
+
+      {(() => {
+        const history = (db.productPriceHistory || []).filter(item => ids.includes(item.productId)).slice(0, 8);
+        if (!history.length) return null;
+        return <Card className="p-4 border-blue-200 bg-blue-50/50"><div className="flex items-center justify-between gap-2"><div><p className="font-black text-blue-950">Riwayat Harga</p><p className="text-xs text-blue-800 mt-1">Jejak harga modal, eceran, grosir, proyek, dan kemasan.</p></div><Badge tone="blue">{history.length} terbaru</Badge></div><div className="mt-3 space-y-2">{history.map(item => <div key={item.id} className="rounded-xl bg-white border p-3 text-xs"><div className="flex flex-wrap justify-between gap-2"><b>{item.reason || 'Perubahan harga'}</b><span className="text-gray-500">{new Date(item.createdAt).toLocaleString('id-ID')}</span></div><p className="mt-1 text-gray-600">Modal {formatRp(item.before?.modalPrice || 0)} → {formatRp(item.after?.modalPrice || 0)} · Eceran {formatRp(item.before?.retail || 0)} → {formatRp(item.after?.retail || 0)}</p></div>)}</div></Card>;
+      })()}
 
       {summary.stock > 0 && canManageStock && <Card className="p-4 border-orange-200 bg-orange-50/70"><p className="font-black text-orange-900">Kosongkan stok menjadi 0</p><p className="text-xs text-orange-800 mt-1">Ini membuat penyesuaian stok dan jejak audit. Riwayat lama tidak dihapus.</p><Field label="Alasan" className="mt-3"><Input value={reason} onChange={event => setReason(event.target.value)} maxLength={180}/></Field><Button variant="danger" className="mt-3" onClick={() => run(() => onZeroStock(ids, reason))} disabled={!reason.trim()}><SlidersHorizontal size={17}/> Kosongkan Stok</Button></Card>}
 
@@ -810,6 +825,8 @@ function VariantGroupFormModal({
 }) {
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [lifecycleProduct, setLifecycleProduct] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [bulkLabelsOpen, setBulkLabelsOpen] = useState(false);
   const [categoryName, setCategoryName] = useState('');
   const addCategory = () => {
     try {

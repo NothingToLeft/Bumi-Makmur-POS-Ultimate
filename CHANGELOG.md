@@ -1,3 +1,16 @@
+# Changelog Bumi Makmur POS
+
+## v5.6.0 — Stability, Sync, Import & Operational Audit
+
+- Menambahkan Pusat Diagnostik Cloud dan status sinkronisasi yang membedakan offline, antrean, sesi salah, konflik, izin, dan tersinkron.
+- Menambahkan impor Excel/CSV produk dan stok dengan preview, validasi, kategori otomatis, varian, SKU otomatis, serta harga per kemasan.
+- Menambahkan riwayat perubahan harga dan cetak label barcode massal.
+- Memisahkan Purchase Order dari penerimaan/restok.
+- Menambahkan approval PIN untuk diskon di atas batas role.
+- Menambahkan preview/validasi backup sebelum restore dan cetak closing shift 80 mm.
+- Menambahkan koleksi serta Firestore Rules untuk PO, riwayat harga, approval, dan sesi perangkat.
+- 125 core/regression tests lulus; audit statis dan parser source lulus.
+
 # Changelog
 
 ## v5.5.0 — Store Manager Operational Admin & Safe Product Lifecycle

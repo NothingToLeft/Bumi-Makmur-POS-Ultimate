@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Truck, Plus, PackageCheck, Undo2, Trash2 } from 'lucide-react';
+import { Truck, Plus, PackageCheck, Undo2, Trash2, ClipboardList, ReceiptText } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { escapeHtml, formatRp, generateId, localDateKey, printHtmlDocument } from '../utils/helpers.js';
 import {
@@ -14,6 +14,7 @@ export default function PurchasesScreen() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('Semua');
   const [formOpen, setFormOpen] = useState(false);
+  const [formStatus, setFormStatus] = useState('ORDERED');
   const [selected, setSelected] = useState(null);
   const rows = useMemo(() => scoped.purchases.filter(row =>
     (status === 'Semua' || row.status === status) &&
@@ -22,8 +23,9 @@ export default function PurchasesScreen() {
   const canManage = hasPermission('purchases.manage');
 
   return <div className="h-full flex flex-col bg-gray-50 generic-bg">
-    <PageHeader title="Pembelian & Restok" subtitle="Terima barang dalam roll, box, dus, atau satuan dasar; stok selalu dikonversi otomatis" actions={canManage && <Button onClick={() => setFormOpen(true)}><Plus size={18}/> Pembelian Baru</Button>}/>
+    <PageHeader title="Purchase Order, Pembelian & Restok" subtitle="Buat PO terlebih dahulu atau terima barang langsung; roll, box, dus, dan satuan dasar dikonversi otomatis" actions={canManage && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setFormStatus('ORDERED'); setFormOpen(true); }}><ClipboardList size={18}/> Buat PO</Button><Button onClick={() => { setFormStatus('RECEIVED'); setFormOpen(true); }}><PackageCheck size={18}/> Terima Barang</Button></div>}/>
     <div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4"><Card className="p-3"><p className="text-xs text-gray-500">Draft</p><p className="font-black text-2xl">{scoped.purchases.filter(row=>row.status==='DRAFT').length}</p></Card><Card className="p-3"><p className="text-xs text-gray-500">PO Menunggu Barang</p><p className="font-black text-2xl text-blue-700">{scoped.purchases.filter(row=>row.status==='ORDERED').length}</p></Card><Card className="p-3"><p className="text-xs text-gray-500">Sudah Diterima</p><p className="font-black text-2xl text-emerald-700">{scoped.purchases.filter(row=>row.status==='RECEIVED').length}</p></Card><Card className="p-3"><p className="text-xs text-gray-500">Nilai Pembelian</p><p className="font-black text-lg text-emerald-700">{formatRp(scoped.purchases.filter(row=>row.status==='RECEIVED').reduce((sum,row)=>sum+Number(row.total||0),0))}</p></Card></div>
       <div className="flex flex-col md:flex-row gap-3 mb-4">
         <SearchBox value={search} onChange={setSearch} placeholder="Cari faktur atau pemasok..."/>
         <div className="flex gap-2 overflow-x-auto no-scrollbar">{['Semua', 'DRAFT', 'ORDERED', 'RECEIVED', 'CANCELLED'].map(item => <button key={item} onClick={() => setStatus(item)} className={`px-4 min-h-[48px] rounded-xl border text-sm font-bold whitespace-nowrap ${status === item ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-white text-gray-600 border-gray-200'}`}>{item === 'Semua' ? 'Semua' : item}</button>)}</div>
@@ -33,7 +35,7 @@ export default function PurchasesScreen() {
         <div className="mt-3 flex justify-between items-end border-t border-dashed pt-3"><div><p className="text-xs text-gray-500">{purchase.items?.length || 0} jenis barang</p>{purchase.dueDate && <p className="text-xs text-orange-600">Jatuh tempo {purchase.dueDate}</p>}</div><p className="font-black text-emerald-600">{formatRp(purchase.total)}</p></div>
       </Card>)}</div>}
     </div>
-    {formOpen && <PurchaseForm products={scoped.products} suppliers={scoped.suppliers} onClose={() => setFormOpen(false)} onSave={data => { try { savePurchase(data); setFormOpen(false); } catch (error) { alert(error.message); } }}/>} 
+    {formOpen && <PurchaseForm initialStatus={formStatus} products={scoped.products} suppliers={scoped.suppliers} onClose={() => setFormOpen(false)} onSave={data => { try { savePurchase(data); setFormOpen(false); } catch (error) { alert(error.message); } }}/>} 
     {selected && <PurchaseDetail purchase={selected} configs={db.configs} onClose={() => setSelected(null)} onReceive={() => { try { savePurchase({ ...selected, status: 'RECEIVED' }); setSelected(null); } catch (error) { alert(error.message); } }} onReturn={data => { try { returnPurchase(data); setSelected(null); } catch (error) { alert(error.message); } }}/>} 
   </div>;
 }
@@ -46,11 +48,11 @@ function quantityStepFor(product, unit) {
   return unit === product?.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional) : 1;
 }
 
-function PurchaseForm({ products, suppliers, onClose, onSave }) {
+function PurchaseForm({ products, suppliers, initialStatus = 'ORDERED', onClose, onSave }) {
   const activeProducts = products.filter(product => product.active !== false);
   const [invoiceNo, setInvoiceNo] = useState(generateId('PO'));
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
-  const [status, setStatus] = useState('ORDERED');
+  const [status, setStatus] = useState(initialStatus);
   const [items, setItems] = useState([]);
   const [discount, setDiscount] = useState(0);
   const [additional, setAdditional] = useState(0);

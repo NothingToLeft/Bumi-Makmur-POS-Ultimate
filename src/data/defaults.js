@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Gauge
 } from 'lucide-react';
 
-export const APP_VERSION = '5.5.0';
+export const APP_VERSION = '5.6.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -32,10 +32,10 @@ export const ROLE_PERMISSIONS = {
   owner: ['*'],
   manager: [
     'dashboard.view', 'control.view', 'payments.manage', 'pos.use', 'transactions.view', 'transactions.refund', 'transactions.void',
-    'products.view', 'products.manage', 'products.delete', 'categories.manage', 'inventory.view', 'inventory.manage', 'purchases.view',
+    'products.view', 'products.manage', 'products.delete', 'categories.manage', 'inventory.view', 'inventory.manage', 'inventory.import', 'prices.view', 'purchases.view',
     'purchases.manage', 'suppliers.view', 'suppliers.manage', 'customers.view', 'customers.manage',
     'shifts.view', 'shifts.manage', 'finance.view', 'finance.manage', 'reports.view', 'orders.view',
-    'orders.manage', 'devices.view', 'devices.manage', 'display.view', 'display.manage',
+    'orders.manage', 'approvals.manage', 'devices.view', 'devices.manage', 'display.view', 'display.manage',
     'settings.view', 'employees.view', 'employees.manage'
   ],
   kasir: [
@@ -148,6 +148,8 @@ export const createSeedDb = () => ({
     cameraPermissionOnStartup: true, shiftWarningHours: 14, reorderMultiplier: 2,
     serviceEnabled: false, serviceRate: 0, roundingStep: 0, loyaltyEnabled: true, pointRate: 10000,
     pointValue: 100, refundApprovalLimit: 500000, requireShiftForCash: true,
+    cashierMaxDiscountPercent: 5, managerMaxDiscountPercent: 20, stockAdjustmentApprovalThreshold: 1000000,
+    autoBackupReminderDays: 7, syncDiagnosticRetention: 80,
     receiptHeader: 'NOTA PEMBELIAN', receiptFooter: 'Terima kasih telah berbelanja.',
     receiptMessage: 'Barang yang sudah dibeli harap diperiksa kembali. Simpan nota sebagai bukti transaksi.',
     receiptWhatsappNote: 'Terima kasih. Bumi Makmur siap melayani kebutuhan bangunan, listrik, dan air Anda.',
@@ -186,7 +188,8 @@ export const createSeedDb = () => ({
     { id: 'CUS-GENERAL', branchId: MAIN_BRANCH_ID, name: 'Umum (Non-Member)', phone: '-', email: '', type: 'Reguler', priceTier: 'retail', creditLimit: 0, points: 0, address: '', project: '', notes: '', active: true },
     { id: 'CUS-001', branchId: MAIN_BRANCH_ID, name: 'Pak Budi Tukang', phone: '081111111111', email: '', type: 'Tukang', priceTier: 'wholesale', creditLimit: 3000000, points: 120, address: 'Surabaya', project: 'Renovasi Rumah', notes: '', active: true }
   ],
-  sales: [], heldSales: [], purchases: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [],
+  sales: [], heldSales: [], purchases: [], purchaseOrders: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [],
+  productPriceHistory: [], approvalRequests: [], deviceSessions: [],
   branchPaymentProfiles: [{ id: MAIN_BRANCH_ID, branchId: MAIN_BRANCH_ID, merchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.', qrisAssetMeta: null, enabled: true, updatedAt: now, updatedBy: 'SYSTEM' }],
   expenses: [], receivables: [], payables: [], refunds: [], shifts: [
     { id: 'SHIFT-DEMO', branchId: MAIN_BRANCH_ID, userId: 'USR-KASIR', userName: 'Kasir Satu', startAt: now, endAt: null, startingCash: 500000, actualEndingCash: null, expectedEndingCash: null, difference: null, status: 'OPEN', notes: 'Shift demo awal' }

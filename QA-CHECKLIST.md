@@ -1,77 +1,75 @@
-# QA Checklist Bumi Makmur POS v5.5.0
+# QA Checklist Bumi Makmur POS v5.6.0
 
 ## Build, versi, dan keamanan
-- [ ] `npm run test:core` lulus seluruh test.
+- [ ] `npm run test:core` menghasilkan 125 lulus, 0 gagal.
 - [ ] `npm run audit:static` menampilkan `AUDIT LULUS`.
 - [ ] Workflow `test-only` berhasil menjalankan Vite build.
-- [ ] Workflow Firebase Rules hijau setelah perubahan `publicEmployees`.
-- [ ] Cloudflare Pages menampilkan v5.5.0.
-- [ ] EXE/MSI dan APK/AAB muncul pada GitHub Releases v5.5.0.
-- [ ] Tidak ada Cloud Functions, Firebase Storage, Blaze, atau secret di repository.
+- [ ] Firestore Rules v5.6.0 berhasil dideploy.
+- [ ] Cloudflare Pages menampilkan v5.6.0.
+- [ ] EXE/MSI dan APK/AAB muncul pada GitHub Release v5.6.0.
+- [ ] Tidak ada Cloud Functions, Firebase Storage, Blaze, secret, atau private key di repository.
 
-## Login karyawan berbasis daftar nama
-- [ ] Pilih cabang menampilkan hanya karyawan aktif pada cabang tersebut.
-- [ ] Daftar menampilkan nama dan role, tanpa email atau UID.
-- [ ] Memilih nama lalu PIN 4 digit berhasil login.
-- [ ] Nama tidak perlu diketik manual.
-- [ ] Tombol muat ulang memperbarui daftar.
-- [ ] Akun yang dinonaktifkan atau dihapus hilang dari daftar.
-- [ ] Store Manager hanya muncul pada cabang tugasnya.
-- [ ] Daftar cache tetap tersedia pada perangkat yang pernah tersambung.
-- [ ] Biometrik hanya berjalan setelah tombol ditekan.
+## Sinkronisasi Web–PC–Android
+- [ ] Perubahan produk dari Web muncul di Windows dan Android.
+- [ ] Perubahan stok simultan digabung sebagai delta.
+- [ ] Transaksi offline tersimpan dan terkirim setelah internet kembali.
+- [ ] Antrean offline kembali menjadi 0.
+- [ ] Status sinkronisasi membedakan offline, antrean, tersinkron, dan sesi salah.
+- [ ] Diagnostik menampilkan koleksi/operasi yang gagal dan dapat diekspor.
+- [ ] Konflik sementara tidak memunculkan banner error permanen.
 
-## Produk & Stok terpadu
-- [ ] Menu hanya menampilkan **Produk & Stok**, bukan Produk dan Stok terpisah.
-- [ ] Tambah Barang & Stok menerima nama, SKU, barcode, satuan, harga, dan stok awal.
-- [ ] Stok awal membuat pergerakan `INITIAL_STOCK`.
-- [ ] Scan kamera dan scanner USB/Bluetooth mengisi barcode.
-- [ ] SKU/barcode ganda ditolak per cabang.
-- [ ] Filter stok rendah, kosong, dan pecahan bekerja.
-- [ ] Penyesuaian stok mencatat alasan.
-- [ ] Stok opname mencatat selisih.
-- [ ] Transfer cabang memakai cabang aktif yang benar.
-- [ ] Ekspor CSV dan lembar hitung stok dapat dibuat.
+## Impor Excel/CSV
+- [ ] Template CSV dapat diunduh dan dibuka.
+- [ ] Template Excel dapat diunduh dan dibuka.
+- [ ] Preview membedakan create, update, kategori baru, warning, dan error.
+- [ ] Produk pcs, meter/roll, pcs/pack, serta produk varian dapat diimpor.
+- [ ] Harga khusus kemasan tetap benar saat checkout.
+- [ ] SKU otomatis unik dan barcode duplikat lintas produk ditolak.
+- [ ] Mode tambah stok dan ganti stok menghasilkan audit movement.
+- [ ] Baris gagal tidak ikut mengubah database.
 
-## Penjualan pecahan dan konversi
-- [ ] Produk kabel dapat memakai satuan dasar `meter`.
-- [ ] Konversi `1 roll = 50 meter` tersimpan.
-- [ ] Langkah pecahan `0,1` menerima `2` dan `3,5` meter.
-- [ ] Checkout `3,5 meter × harga per meter` menghasilkan total yang benar.
-- [ ] Stok berkurang tepat `3,5 meter`.
-- [ ] Checkout `1 roll` mengurangi `50 meter`.
-- [ ] Refund mengembalikan jumlah dasar yang benar.
-- [ ] Hold, split bill, nota, dan layar pelanggan menampilkan jumlah desimal.
-- [ ] Pesanan WhatsApp/online `3,5 meter` masuk ke tagihan Kasir dengan base quantity yang sama.
-- [ ] Produk nonpecahan tetap hanya menerima jumlah utuh.
+## Produk, varian, satuan, dan harga
+- [ ] Shared barcode memunculkan pemilih varian.
+- [ ] Barcode internal langsung memilih varian.
+- [ ] Harga pcs/pack/dus/roll sesuai pengaturan.
+- [ ] Kabel 3,5 meter mengurangi stok 3,5 meter.
+- [ ] Riwayat perubahan harga tampil pada lifecycle produk.
+- [ ] Label barcode massal 58 mm, 80 mm, dan A4 dapat dicetak.
+- [ ] Produk bersejarah hanya dapat diarsipkan, bukan dihapus permanen.
 
-## Pembelian dan restok multi-satuan
-- [ ] Restok dapat memilih satuan dasar atau konversi.
-- [ ] Pembelian `1 roll` menambah stok `50 meter`.
-- [ ] Harga beli per roll menghasilkan HPP per meter yang benar.
-- [ ] Retur pembelian mengurangi stok dalam satuan dasar dan menolak jumlah yang tidak sesuai langkah satuan.
-- [ ] Utang pemasok dan pembayaran tetap tercatat.
-- [ ] Riwayat pergerakan mencantumkan jumlah kemasan dan stok dasar.
+## Kasir, diskon, refund, dan nota
+- [ ] Scanner kamera/USB/Bluetooth bekerja.
+- [ ] Hold bill, split payment, pembulatan, dan metode digital bekerja.
+- [ ] Diskon di atas batas Kasir meminta PIN approval.
+- [ ] Approval mencatat approver, waktu, dan transaksi.
+- [ ] Refund penuh/sebagian menjaga stok dan HPP.
+- [ ] Nota cetak, digital, WhatsApp, dan layar pelanggan konsisten.
 
-## Promo dan histori
-- [ ] Menu Promo tidak tampil.
-- [ ] Transaksi baru memiliki `promoDiscount = 0`.
-- [ ] Diskon item, diskon transaksi manual, loyalti, pajak, dan service tetap berjalan.
-- [ ] Transaksi lama yang pernah memiliki promo tetap dapat dibuka dan dicetak.
-- [ ] Pesan layar pelanggan tidak disebut promo diskon.
+## PO, pembelian, dan pemasok
+- [ ] PO dapat dibuat tanpa menambah stok.
+- [ ] Barang diterima menambah stok dan memperbarui HPP.
+- [ ] Pembelian pack/roll dikonversi ke satuan dasar.
+- [ ] Utang, pembayaran, retur, dan laporan pembelian benar.
 
-## Multi-cabang, role, dan cloud
-- [ ] Owner dapat mengelola seluruh cabang dan karyawan.
-- [ ] Store Manager hanya mengelola Kasir cabangnya.
-- [ ] Kasir hanya melihat data sesuai hak akses.
-- [ ] Perubahan PC muncul di Web/Android dan sebaliknya.
-- [ ] Antrean offline kembali ke `0` setelah internet pulih.
-- [ ] Konflik stok digabung sebagai delta, bukan overwrite.
-- [ ] Transfer Manager memuat sumber dan tujuan tanpa error izin.
-- [ ] QRIS setiap cabang tetap dapat dipindai.
+## Role dan cabang
+- [ ] Owner dapat mengakses semua cabang tanpa memilih cabang saat login.
+- [ ] Store Manager hanya mengakses operasional cabangnya.
+- [ ] Store Manager tidak dapat mengubah Owner, brand global, restore/reset, atau Manager lain.
+- [ ] Kasir hanya mengakses fungsi yang diizinkan.
+- [ ] Direktori login hanya menampilkan karyawan aktif cabang terpilih.
+
+## Backup, shift, dan audit
+- [ ] Backup JSON memuat metadata versi dan tanggal.
+- [ ] Preview restore menampilkan jumlah data.
+- [ ] File backup rusak ditolak sebelum mengganti data.
+- [ ] Closing shift menampilkan expected cash, actual cash, dan selisih.
+- [ ] Laporan closing 80 mm dapat dicetak.
+- [ ] Audit log mencatat perubahan penting.
 
 ## Perangkat target
 - [ ] Infinix Note 40 Pro+ portrait.
 - [ ] Huawei MatePad SE 11 portrait dan landscape.
-- [ ] Windows Desktop pada resolusi 1366×768 dan Full HD.
-- [ ] Scanner barcode USB/Bluetooth.
-- [ ] Printer browser/thermal sesuai profil yang dipakai.
+- [ ] Windows 1366×768 dan Full HD.
+- [ ] Chrome/Edge PWA.
+- [ ] Scanner barcode USB/Bluetooth/kamera.
+- [ ] Printer thermal/browser sesuai profil.

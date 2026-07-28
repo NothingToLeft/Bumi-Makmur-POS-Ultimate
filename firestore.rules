@@ -456,5 +456,42 @@ service cloud.firestore {
       allow update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
       allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
     }
+
+
+    // Riwayat harga bersifat append-only agar perubahan modal dan harga jual
+    // dapat diaudit tanpa membiarkan histori lama ditulis ulang.
+    match /stores/{storeId}/productPriceHistory/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create: if ownerOrManager(storeId) && incomingBranchAllowed(storeId)
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Purchase Order menggunakan pembatasan cabang yang sama dengan pembelian.
+    match /stores/{storeId}/purchaseOrders/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    // Persetujuan diskon/refund dapat dibuat oleh kasir pada cabangnya, tetapi
+    // hanya Owner/Manager yang boleh memutuskan atau menghapusnya.
+    match /stores/{storeId}/approvalRequests/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if activeMember(storeId) && incomingBranchAllowed(storeId)
+        && request.resource.data.requestedBy == request.auth.uid;
+      allow update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    // Sesi perangkat tidak berisi PIN atau password. Pengguna hanya dapat
+    // menulis sesi miliknya sendiri; Owner dapat melihat seluruh daftar.
+    match /stores/{storeId}/deviceSessions/{id} {
+      allow read: if owner(storeId) || (activeMember(storeId) && resource.data.userId == request.auth.uid);
+      allow create, update: if activeMember(storeId)
+        && request.resource.data.userId == request.auth.uid
+        && incomingBranchAllowed(storeId);
+      allow delete: if owner(storeId) || (activeMember(storeId) && resource.data.userId == request.auth.uid);
+    }
   }
 }

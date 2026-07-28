@@ -49,7 +49,7 @@ const GLOBAL_COLLECTIONS = new Set(['printerProfiles', 'campaigns']);
 const CASHIER_COLLECTIONS = new Set([
   'branches', 'products', 'promotions', 'customers', 'sales', 'heldSales',
   'stockMovements', 'receivables', 'refunds', 'shifts', 'cashMovements',
-  'onlineOrders', 'printerProfiles', 'campaigns', 'branchPaymentProfiles'
+  'onlineOrders', 'printerProfiles', 'campaigns', 'branchPaymentProfiles', 'approvalRequests'
 ]);
 const MANAGER_COLLECTIONS = new Set(CLOUD_ENTITY_COLLECTIONS);
 const clone = value => value == null

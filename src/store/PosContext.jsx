@@ -42,6 +42,8 @@ import { dataUrlByteLength } from '../utils/assetProcessing.js';
 import { normalizeDbShape } from '../utils/dbShape.js';
 import { buildProductLifecycleSummary } from '../utils/productLifecycle.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
+import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, classifySyncError, summarizePendingMutations } from '../utils/syncDiagnostics.js';
+import { validateBackupPayload } from '../utils/backupValidation.js';
 import {
   baseUnitCost as calculateBaseUnitCost, conversionFactor, formatQuantity,
   normalizeQuantityStep, recommendedQuantityStep
@@ -53,6 +55,8 @@ const LOGIN_DIRECTORY_KEY = 'bm_pos_public_login_directory_v1';
 const LOGIN_EMPLOYEES_KEY = 'bm_pos_public_employee_directory_v1';
 const CUSTOMER_DISPLAY_KEY = 'bm_pos_customer_display_v1';
 const CUSTOMER_DISPLAY_CHANNEL = 'bm-pos-customer-display';
+const SYNC_DIAGNOSTICS_KEY = 'bm_pos_sync_diagnostics_v1';
+const SYNC_SUCCESS_KEY = 'bm_pos_last_sync_success_v1';
 const clone = value => typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const nowISO = () => new Date().toISOString();
 const money = value => Math.max(0, Math.round(Number(value) || 0));
@@ -84,9 +88,30 @@ const verifySeedUserPin = async (user, pin) => {
   return bytesToHex(bits) === user.pinHash;
 };
 
+
+const priceSnapshot = product => ({
+  modalPrice: money(product?.modalPrice),
+  retail: money(product?.prices?.retail),
+  wholesale: money(product?.prices?.wholesale),
+  project: money(product?.prices?.project),
+  conversions: normalizeConversionRows(product?.conversions || [], product?.baseUnit || 'pcs').map(row => ({ unit: row.unit, factor: row.factor, prices: row.prices }))
+});
+const priceSnapshotEqual = (first, second) => JSON.stringify(priceSnapshot(first)) === JSON.stringify(priceSnapshot(second));
+const appendProductPriceHistory = (next, beforeProduct, afterProduct, reason = 'Perubahan harga', userId = '') => {
+  if (!afterProduct || (beforeProduct && priceSnapshotEqual(beforeProduct, afterProduct))) return null;
+  if (!Array.isArray(next.productPriceHistory)) next.productPriceHistory = [];
+  const item = {
+    id: generateId('PRICE'), branchId: afterProduct.branchId, productId: afterProduct.id, productName: afterProduct.name,
+    before: beforeProduct ? priceSnapshot(beforeProduct) : null, after: priceSnapshot(afterProduct),
+    reason: String(reason || 'Perubahan harga').slice(0, 160), createdAt: nowISO(), userId: String(userId || '')
+  };
+  next.productPriceHistory.unshift(item);
+  return item;
+};
+
 const ACTION_PERMISSIONS = {
   SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage', BRANCH_UPDATE: 'branches.manage', BRANCH_DELETE: 'branches.manage', BRANCH_RESTORE: 'branches.manage', BRANCH_PAYMENT_UPDATE: 'payments.manage',
-  PRODUCT_CREATE: 'products.manage', PRODUCT_UPDATE: 'products.manage', PRODUCT_ARCHIVE: 'products.manage', PRODUCT_RESTORE: 'products.manage', PRODUCT_TOGGLE: 'products.manage', PRODUCT_DELETE: 'products.delete',
+  PRODUCT_CREATE: 'products.manage', PRODUCT_UPDATE: 'products.manage', INVENTORY_IMPORT: 'inventory.import', PRODUCT_ARCHIVE: 'products.manage', PRODUCT_RESTORE: 'products.manage', PRODUCT_TOGGLE: 'products.manage', PRODUCT_DELETE: 'products.delete',
   CATEGORY_CREATE: 'categories.manage', CATEGORY_UPDATE: 'categories.manage', CATEGORY_DELETE: 'categories.manage',
   PROMOTION_CREATE: 'promotions.manage', PROMOTION_UPDATE: 'promotions.manage',
   SUPPLIER_CREATE: 'suppliers.manage', SUPPLIER_UPDATE: 'suppliers.manage',
@@ -94,7 +119,7 @@ const ACTION_PERMISSIONS = {
   SHIFT_START: 'shifts.manage', SHIFT_END: 'shifts.manage', CASH_MOVEMENT: 'shifts.manage',
   BILL_HOLD: 'pos.use', BILL_DELETE: 'pos.use', SALE_COMPLETE: 'pos.use',
   SALE_REFUND: 'transactions.refund', SALE_VOID: 'transactions.void',
-  PURCHASE_CREATE: 'purchases.manage', PURCHASE_UPDATE: 'purchases.manage', PURCHASE_RETURN: 'purchases.manage',
+  PURCHASE_CREATE: 'purchases.manage', PURCHASE_UPDATE: 'purchases.manage', PURCHASE_RETURN: 'purchases.manage', PURCHASE_ORDER_CREATE: 'purchases.manage', PURCHASE_ORDER_UPDATE: 'purchases.manage',
   RECEIVABLE_PAYMENT: 'finance.manage', PAYABLE_PAYMENT: 'finance.manage', EXPENSE_CREATE: 'finance.manage',
   STOCK_ADJUST: 'inventory.manage', STOCK_RESET: 'inventory.manage', STOCK_OPNAME: 'inventory.manage', STOCK_TRANSFER: 'inventory.manage',
   ORDER_CREATE: 'orders.manage', ORDER_UPDATE: 'orders.manage', ORDER_TO_BILL: 'orders.manage',
@@ -104,7 +129,7 @@ const ACTION_PERMISSIONS = {
 
 export function PosProvider({ children }) {
   const seedRef = useRef(createSeedDb());
-  const [db, setDb] = useState(() => ({ ...seedRef.current, users: [], branches: [], products: [], suppliers: [], customers: [], promotions: [], sales: [], heldSales: [], purchases: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [], branchPaymentProfiles: [], expenses: [], receivables: [], payables: [], refunds: [], shifts: [], cashMovements: [], onlineOrders: [], printerProfiles: [], campaigns: [], feedback: [], auditLogs: [] }));
+  const [db, setDb] = useState(() => ({ ...seedRef.current, users: [], branches: [], products: [], suppliers: [], customers: [], promotions: [], sales: [], heldSales: [], purchases: [], purchaseOrders: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [], branchPaymentProfiles: [], productPriceHistory: [], approvalRequests: [], deviceSessions: [], expenses: [], receivables: [], payables: [], refunds: [], shifts: [], cashMovements: [], onlineOrders: [], printerProfiles: [], campaigns: [], feedback: [], auditLogs: [] }));
   const dbRef = useRef(db);
   const [currentUser, setCurrentUser] = useState(null);
   const currentUserRef = useRef(null);
@@ -131,6 +156,8 @@ export function PosProvider({ children }) {
   const [pendingSyncCount, setPendingSyncCount] = useState(() => getOfflineQueueStats(storeCode).count);
   const [syncConflictCount, setSyncConflictCount] = useState(0);
   const [lastSyncAttemptAt, setLastSyncAttemptAt] = useState(null);
+  const [lastSyncSuccessAt, setLastSyncSuccessAt] = useState(() => localStorage.getItem(SYNC_SUCCESS_KEY) || '');
+  const [syncDiagnostics, setSyncDiagnostics] = useState(() => safeJSONParse(localStorage.getItem(SYNC_DIAGNOSTICS_KEY), []));
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [customerDisplay, setCustomerDisplay] = useState({ cart: [], total: 0, customerName: 'Umum', message: '' });
   const [loginDirectory, setLoginDirectory] = useState(() => {
@@ -155,6 +182,25 @@ export function PosProvider({ children }) {
   const activeSubscriptionKeyRef = useRef('');
   const initialLoadFinishedRef = useRef(false);
   const employeeDirectoryPublishSignatureRef = useRef('');
+
+  const recordSyncDiagnostic = useCallback((errorOrEntry, context = {}) => {
+    const entry = errorOrEntry?.category && errorOrEntry?.at
+      ? errorOrEntry
+      : classifySyncError(errorOrEntry, { ...context, deviceId: deviceSettings.deviceId, branchId: context.branchId || currentUserRef.current?.branchId || '' });
+    setSyncDiagnostics(previous => {
+      const next = appendSyncDiagnostic(previous, entry);
+      localStorage.setItem(SYNC_DIAGNOSTICS_KEY, JSON.stringify(next));
+      return next;
+    });
+    return entry;
+  }, [deviceSettings.deviceId]);
+
+  const markSyncSuccess = useCallback(() => {
+    const value = nowISO();
+    setLastSyncSuccessAt(value);
+    localStorage.setItem(SYNC_SUCCESS_KEY, value);
+    return value;
+  }, []);
 
   useEffect(() => {
     const onOnline = () => { setOnline(true); setCloudError(''); };
@@ -410,6 +456,12 @@ export function PosProvider({ children }) {
               if (!mutationConflicted) {
                 mutationConflicted = true;
                 conflicts += 1;
+                const firstOperation = mutation.operations?.[0] || {};
+                recordSyncDiagnostic(error, {
+                  mutationId: mutation.id, mutationAction: mutation.action,
+                  collection: firstOperation.collectionName, entityId: firstOperation.id,
+                  branchId: mutation.branchId || profile.branchId || ''
+                });
               }
               const operations = await refreshOperationsAgainstCloud(mutation.operations, profile.storeId || STORE_ID);
               if (!operations.length) {
@@ -437,13 +489,21 @@ export function PosProvider({ children }) {
         setSyncConflictCount(previous => previous + conflicts);
         const pending = getOfflineQueueStats(storeCode).count;
         setPendingSyncCount(pending);
+        if (pending === 0) markSyncSuccess();
         // Konflik lintas perangkat bukan error pengguna. Antrean tetap aman dan akan dicoba lagi di latar belakang.
         setCloudError('');
         return { synced, pending, conflicts, deferredConflict };
       } catch (error) {
         console.error('Sinkronisasi antrean offline gagal.', error);
         setPendingSyncCount(getOfflineQueueStats(storeCode).count);
-        if (!isConflictError(error)) {
+        const queued = readPendingMutations(storeCode)[0];
+        const operation = queued?.operations?.[0] || {};
+        const diagnostic = recordSyncDiagnostic(error, {
+          mutationId: queued?.id, mutationAction: queued?.action,
+          collection: operation.collectionName, entityId: operation.id,
+          branchId: queued?.branchId || profile?.branchId || ''
+        });
+        if (!isConflictError(error) && diagnostic.permanent) {
           setCloudError(friendlyCloudError(error, 'Pembaruan lokal belum berhasil dikirim. Aplikasi tetap dapat digunakan.'));
         }
         throw error;
@@ -453,7 +513,7 @@ export function PosProvider({ children }) {
     };
     writeChainRef.current = writeChainRef.current.then(run, run);
     return writeChainRef.current;
-  }, [deviceSettings.deviceId, storeCode]);
+  }, [deviceSettings.deviceId, markSyncSuccess, recordSyncDiagnostic, storeCode]);
 
   const overlayPendingOnRemote = useCallback(baseDb => {
     let merged = clone(baseDb);
@@ -510,6 +570,7 @@ export function PosProvider({ children }) {
         setDb(localView);
         setLocalReady(true);
         setCloudReady(true);
+        markSyncSuccess();
         activeSubscriptionKeyRef.current = subscriptionKey;
         await saveCachedDb(storeCode, localView, profile);
         if (profile.role === 'owner') {
@@ -531,12 +592,14 @@ export function PosProvider({ children }) {
             setLocalReady(true);
             setCloudReady(true);
             setCloudLoading(false);
+            if (getOfflineQueueStats(storeCode).count === 0) markSyncSuccess();
             setPendingSyncCount(getOfflineQueueStats(storeCode).count);
             void saveCachedDb(storeCode, merged, profile).catch(error => console.warn('Snapshot realtime gagal disimpan lokal.', error));
           },
           error => {
             console.error('Realtime Firestore gagal.', error);
-            setCloudError(friendlyCloudError(error, 'Realtime cloud terputus; data lokal tetap aktif.'));
+            const diagnostic = recordSyncDiagnostic(error, { mutationAction: 'REALTIME_LISTENER', branchId: profile.branchId || '' });
+            if (diagnostic.permanent) setCloudError(friendlyCloudError(error, 'Realtime cloud terputus; data lokal tetap aktif.'));
             setCloudReady(false);
             setCloudLoading(false);
           },
@@ -545,7 +608,8 @@ export function PosProvider({ children }) {
         return true;
       } catch (error) {
         console.error('Cloud load/sync failed.', error);
-        setCloudError(friendlyCloudError(error, 'Cloud belum dapat dijangkau; aplikasi memakai data lokal.'));
+        const diagnostic = recordSyncDiagnostic(error, { mutationAction: 'CLOUD_BOOTSTRAP', branchId: profile.branchId || '' });
+        if (diagnostic.permanent) setCloudError(friendlyCloudError(error, 'Cloud belum dapat dijangkau; aplikasi memakai data lokal.'));
         setCloudReady(false);
         return false;
       } finally {
@@ -557,7 +621,7 @@ export function PosProvider({ children }) {
 
     cloudStartRef.current = run().finally(() => { cloudStartRef.current = null; });
     return cloudStartRef.current;
-  }, [flushPendingMutations, hydrateLocal, overlayPendingOnRemote, storeCode]);
+  }, [flushPendingMutations, hydrateLocal, markSyncSuccess, overlayPendingOnRemote, recordSyncDiagnostic, storeCode]);
 
   useEffect(() => {
     if (!currentUser) return undefined;
@@ -1157,6 +1221,77 @@ export function PosProvider({ children }) {
     return { name: target, replacement: replacementName, affected: affected.length };
   });
 
+  const importInventoryRows = (rows, options = {}) => commit('INVENTORY_IMPORT', `${rows?.length || 0} baris`, next => {
+    const validRows = (rows || []).filter(row => row?.valid !== false);
+    if (!validRows.length) throw new Error('Tidak ada baris valid untuk diimpor.');
+    const targetBranchId = options.branchId || branchId;
+    const stockMode = options.stockMode === 'add' ? 'add' : 'replace';
+    const createdCategories = [];
+    for (const row of validRows) {
+      const category = String(row.category || 'Lainnya').trim();
+      if (!(next.categories || []).some(item => String(item).trim().toLowerCase() === category.toLowerCase())) {
+        next.categories.push(category);
+        createdCategories.push(category);
+      }
+    }
+    next.categories = sortCategories(next.categories || []);
+
+    const results = [];
+    for (const row of validRows) {
+      const existing = next.products.find(item => item.branchId === targetBranchId && (
+        (row.id && item.id === row.id) ||
+        (row.sku && String(item.sku || '').trim().toLowerCase() === String(row.sku).trim().toLowerCase()) ||
+        (row.barcode && String(item.barcode || '').trim().toLowerCase() === String(row.barcode).trim().toLowerCase())
+      ));
+      const profile = { name: row.name, baseUnit: row.baseUnit || 'pcs', allowFractional: row.allowFractional === true, quantityStep: row.quantityStep };
+      const importedStock = validateBaseQuantity(profile, row.stock || 0, 'Stok impor');
+      const previousStock = Number(existing?.stock || 0);
+      const nextStock = stockMode === 'add' && existing ? quantity(previousStock + importedStock) : quantity(importedStock);
+      const minimumStock = validateBaseQuantity(profile, row.minStock || 0, 'Stok minimum');
+      const parentName = String(row.parentName || '').trim();
+      const variantName = String(row.variantName || '').trim();
+      let variantGroupId = existing?.variantGroupId || '';
+      if (parentName && variantName && !variantGroupId) {
+        const sibling = next.products.find(item => item.branchId === targetBranchId && item.productType === 'variant' && String(item.parentName || '').trim().toLowerCase() === parentName.toLowerCase());
+        variantGroupId = sibling?.variantGroupId || generateId('VGRP');
+      }
+      const item = {
+        ...(existing || {}),
+        id: existing?.id || row.id || generateId('PRD'), branchId: targetBranchId,
+        name: String(row.name || '').trim(), category: String(row.category || 'Lainnya').trim(),
+        sku: String(row.sku || '').trim().toUpperCase(), barcode: String(row.barcode || '').trim(),
+        baseUnit: row.baseUnit || 'pcs', stock: nextStock, minStock: quantity(minimumStock), rack: row.rack || '-',
+        modalPrice: money(row.modalPrice), initialModalPrice: existing?.initialModalPrice ?? money(row.modalPrice),
+        prices: { retail: money(row.prices?.retail), wholesale: money(row.prices?.wholesale ?? row.prices?.retail), project: money(row.prices?.project ?? row.prices?.retail) },
+        markups: existing?.markups || { retail: 0, wholesale: 0, project: 0 },
+        conversions: normalizeConversionRows(row.conversions || [], row.baseUnit || 'pcs'),
+        allowFractional: row.allowFractional === true,
+        quantityStep: normalizeQuantityStep(row.quantityStep, row.allowFractional === true, recommendedQuantityStep(row.baseUnit, row.category)),
+        variants: [], bundleItems: existing?.bundleItems || [], favorite: Boolean(existing?.favorite),
+        available: row.available !== false, active: row.active !== false, trackStock: row.trackStock !== false,
+        parentName: parentName || undefined, variantName: variantName || undefined,
+        variantGroupId: variantGroupId || undefined, productType: parentName && variantName ? 'variant' : (existing?.productType || undefined),
+        sharedBarcode: String(row.sharedBarcode || existing?.sharedBarcode || '').trim(),
+        updatedAt: nowISO(), importedAt: nowISO(), importedBy: currentUserRef.current.id
+      };
+      appendProductPriceHistory(next, existing, item, existing ? 'Impor pembaruan produk' : 'Impor produk baru', currentUserRef.current?.id);
+      if (existing) next.products = next.products.map(product => product.id === existing.id ? item : product);
+      else next.products.unshift(item);
+      const stockDelta = quantity(nextStock - previousStock);
+      if (item.trackStock !== false && Math.abs(stockDelta) > 0.000001) {
+        next.stockMovements.unshift({
+          id: generateId('MOV'), branchId: targetBranchId, productId: item.id, productName: item.name,
+          type: existing ? 'IMPORT_STOCK' : 'INITIAL_STOCK', qtyChange: stockDelta, refId: `IMPORT-${item.id}`,
+          note: stockMode === 'add' ? 'Impor stok — ditambahkan ke stok sebelumnya' : 'Impor stok — mengganti jumlah stok sistem',
+          createdAt: nowISO(), userId: currentUserRef.current.id
+        });
+      }
+      results.push({ id: item.id, name: item.name, action: existing ? 'update' : 'create', stockDelta });
+    }
+    next.products = sortProductsByName(next.products);
+    return { rows: results, created: results.filter(item => item.action === 'create').length, updated: results.filter(item => item.action === 'update').length, categories: createdCategories };
+  });
+
   const saveProduct = data => commit(data.id ? 'PRODUCT_UPDATE' : 'PRODUCT_CREATE', data.name, next => {
     if (data.variantMode === true) {
       const parentName = String(data.parentName || data.name || '').trim();
@@ -1231,6 +1366,7 @@ export function PosProvider({ children }) {
           favorite: Boolean(row.favorite), available: row.available !== false, active: row.active !== false,
           trackStock: data.trackStock !== false, updatedAt: nowISO()
         };
+        appendProductPriceHistory(next, existing, item, existing ? 'Edit produk varian' : 'Produk varian baru', currentUserRef.current?.id);
         if (existing) next.products = next.products.map(product => product.id === item.id ? item : product);
         else {
           next.products.unshift(item);
@@ -1286,6 +1422,7 @@ export function PosProvider({ children }) {
       favorite: Boolean(data.favorite), available: data.available !== false, active: data.active !== false,
       trackStock: data.trackStock !== false, updatedAt: nowISO()
     };
+    appendProductPriceHistory(next, existing, item, existing ? 'Edit produk' : 'Produk baru', currentUserRef.current?.id);
     if (existing) next.products = next.products.map(product => product.id === item.id ? item : product);
     else {
       next.products.unshift(item);
@@ -1558,8 +1695,10 @@ export function PosProvider({ children }) {
         }))
       .filter(candidate => candidate.remaining > 0)
       .sort((first, second) => second.date - first.date);
+    const beforePrice = clone(product);
     product.modalPrice = candidates[0]?.price ?? money(product.initialModalPrice);
     product.updatedAt = nowISO();
+    appendProductPriceHistory(next, beforePrice, product, 'Perhitungan HPP dari pembelian/retur', currentUserRef.current?.id);
   };
 
   const holdSale = payload => commit('BILL_HOLD', payload.name || 'Open Bill', next => {
@@ -1607,6 +1746,15 @@ export function PosProvider({ children }) {
       Math.max(0, recalculatedSubtotal - safeGlobalDiscount - safePromoDiscount),
       safePointsRedeemed * money(next.configs.pointValue)
     );
+    const totalItemDiscount = normalizedItems.reduce((sum, item) => sum + money(item.itemDiscount), 0);
+    const approvalDiscount = totalItemDiscount + safeGlobalDiscount;
+    const approvalDiscountPercent = recalculatedSubtotal > 0 ? (approvalDiscount / recalculatedSubtotal) * 100 : 0;
+    const approvalLimit = currentUser.role === 'kasir'
+      ? Number(next.configs.cashierMaxDiscountPercent ?? 5)
+      : Number(next.configs.managerMaxDiscountPercent ?? 20);
+    if (currentUser.role !== 'owner' && approvalDiscountPercent > approvalLimit && (!payload.approvedBy || !payload.approvalToken)) {
+      throw new Error(`Diskon ${approvalDiscountPercent.toFixed(1)}% melebihi batas ${approvalLimit}%. Minta persetujuan Owner atau Store Manager.`);
+    }
     const afterDiscount = Math.max(0, recalculatedSubtotal - safeGlobalDiscount - safePromoDiscount - safeLoyaltyDiscount);
     const safeTax = next.configs.taxEnabled ? Math.round(afterDiscount * Math.max(0, Number(next.configs.taxRate || 0)) / 100) : 0;
     const safeService = next.configs.serviceEnabled ? Math.round(afterDiscount * Math.max(0, Number(next.configs.serviceRate || 0)) / 100) : 0;
@@ -1653,6 +1801,17 @@ export function PosProvider({ children }) {
       refundedTotal: 0, syncStatus: navigator.onLine ? 'QUEUED' : 'OFFLINE_QUEUED', createdBy: currentUser.id
     };
     next.sales.unshift(sale);
+    if (payload.approvedBy && payload.approvalToken) {
+      next.approvalRequests.unshift({
+        id: generateId('APR'), branchId: sale.branchId, type: 'SALE_DISCOUNT', status: 'APPROVED',
+        referenceId: sale.id, amount: approvalDiscount, percent: Math.round(approvalDiscountPercent * 100) / 100,
+        requestedBy: currentUser.id, requestedByName: currentUser.name,
+        approvedBy: payload.approvedBy, approvedByName: payload.approvedByName || '',
+        approvalToken: payload.approvalToken, createdAt: sale.createdAt, resolvedAt: sale.createdAt
+      });
+      sale.approvedBy = payload.approvedBy;
+      sale.approvedByName = payload.approvedByName || '';
+    }
     if (payload.heldSaleId) next.heldSales = next.heldSales.filter(row => row.id !== payload.heldSaleId);
 
     const cashApplied = Math.max(0, cashTotal - overpayment);
@@ -2060,12 +2219,20 @@ export function PosProvider({ children }) {
   });
 
   const exportBackup = () => {
-    const snapshot = { ...db, meta: { ...db.meta, exportedAt: nowISO(), version: APP_VERSION } };
+    const snapshot = { ...db, meta: { ...db.meta, exportedAt: nowISO(), version: APP_VERSION, exportedBy: currentUserRef.current?.id || '', deviceId: deviceSettings.deviceId || '' } };
     downloadFile(`Bumi-Makmur-POS-backup-${localDateKey()}.json`, JSON.stringify(snapshot, null, 2));
     const next = { ...dbRef.current, meta: { ...dbRef.current.meta, lastBackupAt: nowISO() } };
     dbRef.current = next;
     setDb(next);
     void saveLocalSnapshot(next, currentUserRef.current);
+  };
+
+  const inspectBackup = async file => {
+    if (!file) throw new Error('Pilih file backup terlebih dahulu.');
+    let parsed;
+    try { parsed = JSON.parse(await file.text()); }
+    catch { throw new Error('File backup bukan JSON yang valid.'); }
+    return { parsed, report: validateBackupPayload(parsed) };
   };
 
   const importBackup = async file => {
@@ -2074,7 +2241,8 @@ export function PosProvider({ children }) {
     if (getOfflineQueueStats(storeCode).count > 0) throw new Error('Sinkronkan seluruh pembaruan offline sebelum melakukan restore.');
     const text = await file.text();
     const parsed = JSON.parse(text);
-    if (!parsed?.meta || !Array.isArray(parsed.products) || !Array.isArray(parsed.sales)) throw new Error('File backup tidak valid.');
+    const validation = validateBackupPayload(parsed);
+    if (!validation.valid) throw new Error(`File backup tidak valid: ${validation.errors.join(' ')}`);
     const restored = normalizeDbShape({
       ...parsed,
       meta: { ...parsed.meta, version: APP_VERSION, restoredAt: nowISO(), updatedAt: nowISO() }
@@ -2127,6 +2295,7 @@ export function PosProvider({ children }) {
     sales: db.sales.filter(item => item.branchId === branchId),
     heldSales: db.heldSales.filter(item => item.branchId === branchId),
     purchases: db.purchases.filter(item => item.branchId === branchId),
+    purchaseOrders: (db.purchaseOrders || []).filter(item => item.branchId === branchId),
     movements: db.stockMovements.filter(item => item.branchId === branchId),
     adjustments: db.stockAdjustments.filter(item => item.branchId === branchId),
     opnames: db.stockOpnames.filter(item => item.branchId === branchId),
@@ -2139,22 +2308,43 @@ export function PosProvider({ children }) {
     cashMovements: db.cashMovements.filter(item => item.branchId === branchId),
     orders: db.onlineOrders.filter(item => item.branchId === branchId),
     feedback: db.feedback.filter(item => item.branchId === branchId),
-    paymentProfile: (db.branchPaymentProfiles || []).find(item => item.branchId === branchId) || null
+    paymentProfile: (db.branchPaymentProfiles || []).find(item => item.branchId === branchId) || null,
+    priceHistory: (db.productPriceHistory || []).filter(item => item.branchId === branchId),
+    approvalRequests: (db.approvalRequests || []).filter(item => item.branchId === branchId)
   }), [db, branchId]);
+
+  const queueSummary = useMemo(() => summarizePendingMutations(readPendingMutations(storeCode)), [pendingSyncCount, storeCode]);
+  const authMatched = !currentUser || !firebaseConfigured || !auth?.currentUser || auth.currentUser.uid === currentUser.id;
+  const syncStatus = useMemo(() => buildSyncStatus({
+    online, cloudReady, cloudSaving, pendingCount: pendingSyncCount, cloudError,
+    authMatched, lastSuccessAt: lastSyncSuccessAt, lastAttemptAt: lastSyncAttemptAt
+  }), [online, cloudReady, cloudSaving, pendingSyncCount, cloudError, authMatched, lastSyncSuccessAt, lastSyncAttemptAt]);
+  const clearSyncDiagnostics = () => {
+    setSyncDiagnostics([]);
+    localStorage.removeItem(SYNC_DIAGNOSTICS_KEY);
+  };
+  const exportSyncDiagnostics = () => {
+    const payload = buildSyncDiagnosticsExport({
+      status: syncStatus, queue: queueSummary, diagnostics: syncDiagnostics,
+      profile: currentUserRef.current, deviceId: deviceSettings.deviceId, appVersion: APP_VERSION
+    });
+    downloadFile(`Bumi-Makmur-POS-diagnostik-${localDateKey()}.json`, JSON.stringify(payload, null, 2));
+    return payload;
+  };
 
   const value = {
     db, scoped, currentUser, online, cloudConfigured, localReady, dataReady: localReady || cloudReady,
-    cloudReady, cloudLoading, initializingApp, cloudSaving, cloudError, clearCloudError, pendingSyncCount, syncConflictCount, lastSyncAttemptAt,
+    cloudReady, cloudLoading, initializingApp, cloudSaving, cloudError, clearCloudError, pendingSyncCount, syncConflictCount, lastSyncAttemptAt, lastSyncSuccessAt, syncStatus, syncDiagnostics, queueSummary, clearSyncDiagnostics, exportSyncDiagnostics,
     branchId, branch, customerDisplay, setCustomerDisplay,
     deviceSettings, updateDeviceSettings, login, loginEmployee, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     loginDirectory, loginDirectoryLoading, refreshLoginDirectory,
     loginEmployeesByBranch, loginEmployeesLoading, refreshLoginEmployees,
-    hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, deleteBranch, restoreBranch, saveCategory, deleteCategory, saveProduct, archiveProduct, restoreProduct, deleteProduct, zeroProductStock, toggleProduct,
+    hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, deleteBranch, restoreBranch, saveCategory, deleteCategory, importInventoryRows, saveProduct, archiveProduct, restoreProduct, deleteProduct, zeroProductStock, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,
     saveOnlineOrder, convertOrderToBill, saveBranchPaymentProfile, savePrinterProfile, saveCampaign, saveFeedback, redeemPoints,
-    exportBackup, importBackup, syncNow, resetDemo
+    exportBackup, inspectBackup, importBackup, syncNow, resetDemo
   };
 
   return <PosContext.Provider value={value}>{children}</PosContext.Provider>;

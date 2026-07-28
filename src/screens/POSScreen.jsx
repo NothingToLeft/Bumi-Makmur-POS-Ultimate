@@ -16,7 +16,7 @@ const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.pri
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
 
 export default function POSScreen() {
-  const { db, scoped, completeSale, holdSale, findOpenShift, setCustomerDisplay, currentUser, branch } = usePos();
+  const { db, scoped, completeSale, holdSale, findOpenShift, setCustomerDisplay, currentUser, branch, authorizeManagerPin } = usePos();
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Semua');
@@ -36,6 +36,7 @@ export default function POSScreen() {
   const [choosingProduct, setChoosingProduct] = useState(null);
   const [barcodeChoices, setBarcodeChoices] = useState(null);
   const [receipt, setReceipt] = useState(null);
+  const [discountApproval, setDiscountApproval] = useState(null);
   const [heldSaleId, setHeldSaleId] = useState(null);
   const [scanNotice, setScanNotice] = useState('');
   const scannerBufferRef = useRef('');
@@ -232,7 +233,7 @@ export default function POSScreen() {
     setCart(remaining); setSplitOpen(false);
   };
 
-  const processPayment = async payments => {
+  const finalizePayment = async (payments, approval = null) => {
     const paid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const credit = payments.find(item => item.type === 'credit');
     if (paid < totals.total) throw new Error('Jumlah pembayaran belum mencukupi.');
@@ -242,9 +243,22 @@ export default function POSScreen() {
       customerId: customer?.id, customerName: customer?.name || 'Umum', customerPhone: customer?.phone || '', cashierName: currentUser?.name || 'Kasir', saleType, notes, globalDiscount: Number(globalDiscount || 0),
       promoDiscount: 0, appliedPromos: [],
       loyaltyDiscount: totals.loyaltyDiscount, subtotal: Math.round(totals.subtotal), tax: totals.tax, service: totals.service, rounding: totals.rounding, total: totals.total,
-      payments, change: Math.max(0, paid - totals.total), heldSaleId, pointsRedeemed: Number(pointsRedeemed || 0)
+      payments, change: Math.max(0, paid - totals.total), heldSaleId, pointsRedeemed: Number(pointsRedeemed || 0),
+      approvedBy: approval?.user?.id || '', approvedByName: approval?.user?.name || '', approvalToken: approval?.approvalToken || ''
     });
-    setReceipt(sale); setPaymentOpen(false); setMobileCart(false); clear();
+    setReceipt(sale); setPaymentOpen(false); setDiscountApproval(null); setMobileCart(false); clear();
+  };
+
+  const processPayment = async payments => {
+    const totalDiscount = cart.reduce((sum, line) => sum + Number(line.itemDiscount || 0), 0) + Number(globalDiscount || 0);
+    const discountPercent = totals.subtotal > 0 ? (totalDiscount / totals.subtotal) * 100 : 0;
+    const limit = currentUser?.role === 'kasir' ? Number(db.configs.cashierMaxDiscountPercent ?? 5) : Number(db.configs.managerMaxDiscountPercent ?? 20);
+    if (currentUser?.role !== 'owner' && discountPercent > limit) {
+      setPaymentOpen(false);
+      setDiscountApproval({ payments, discountPercent, limit, amount: totalDiscount });
+      return;
+    }
+    await finalizePayment(payments);
   };
 
   const cartPanel = (
@@ -304,6 +318,7 @@ export default function POSScreen() {
       {choosingProduct && <ProductChoiceModal product={choosingProduct} saleType={saleType} onClose={() => setChoosingProduct(null)} onAdd={options => { addProduct(choosingProduct, options); setChoosingProduct(null); }}/>}      
       {editingLine && <LineEditModal line={editingLine} product={scoped.products.find(item => item.id === editingLine.productId)} saleType={saleType} onClose={() => setEditingLine(null)} onSave={line => { updateLine(line); setEditingLine(null); }}/>}      
       {paymentOpen && <PaymentModal total={totals.total} methods={activePaymentMethods} configs={paymentDisplayConfig} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
+      {discountApproval && <DiscountApprovalModal approval={discountApproval} onClose={() => setDiscountApproval(null)} onApprove={async pin => { const approval = await authorizeManagerPin(pin, 'SALE_DISCOUNT'); await finalizePayment(discountApproval.payments, approval); }}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
       {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={result => {
@@ -316,6 +331,22 @@ export default function POSScreen() {
       {receipt && <ReceiptModal sale={receipt} configs={receiptDisplayConfig} onClose={() => setReceipt(null)}/>}      
     </div>
   );
+}
+
+
+function DiscountApprovalModal({ approval, onClose, onApprove }) {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true); setError('');
+    try { await onApprove(pin); }
+    catch (approvalError) { setError(approvalError.message || 'Approval gagal.'); }
+    finally { setBusy(false); }
+  };
+  return <Modal title="Persetujuan Diskon" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit} disabled={busy || pin.length !== 4}>{busy ? 'Memeriksa...' : 'Setujui Diskon'}</Button></>}>
+    <div className="space-y-4"><Card className="p-4 bg-orange-50 border-orange-200"><p className="font-black text-orange-900">Diskon {approval.discountPercent.toFixed(1)}%</p><p className="text-sm text-orange-800 mt-1">Batas akun ini {approval.limit}%. Nilai diskon {formatRp(approval.amount)} memerlukan PIN Owner atau Store Manager.</p></Card><Field label="PIN Owner / Store Manager"><Input type="password" inputMode="numeric" maxLength="4" value={pin} onChange={event => setPin(event.target.value.replace(/\D/g,'').slice(0,4))} placeholder="••••" autoFocus/></Field>{error&&<p className="text-sm font-bold text-red-600">{error}</p>}</div>
+  </Modal>;
 }
 
 

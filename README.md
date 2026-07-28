@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.5.0
+# Bumi Makmur POS FreeSync v5.6.0
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.5.0 mematangkan katalog profesional: daftar barang otomatis rapi berdasarkan nama, pemilih barang dapat dicari, kategori dapat dikelola dari aplikasi, satu produk dapat dijual sebagai pcs/pack/dus/box/roll dengan harga khusus, login Owner tidak lagi meminta cabang, dan cabang kosong dapat dihapus sementara cabang bersejarah diarsipkan secara aman. Produk Induk + Varian, shared barcode, SKU otomatis, barcode internal, penjualan pecahan, dan seluruh fitur v5.3 tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.6.0 berfokus pada stabilisasi sinkronisasi lintas perangkat, Pusat Diagnostik Cloud, impor produk/stok dari Excel atau CSV, riwayat harga, label barcode massal, Purchase Order, persetujuan diskon, validasi backup, dan closing shift profesional. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,7 +11,33 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rili
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Fitur utama v5.5.0
+## Fitur utama v5.6.0
+
+### Stability Center dan Diagnostik Cloud
+
+- Status sinkronisasi membedakan tersinkron, lokal, antrean, offline, sesi salah, dan izin ditolak.
+- Konflik lintas perangkat direbase; perubahan stok tetap digabung sebagai delta.
+- Diagnostik mencatat koleksi, operasi, kode masalah, waktu, dan saran perbaikan.
+- Antrean offline dapat dilihat per jenis operasi dan tetap tahan restart.
+
+### Impor Excel/CSV dan migrasi stok awal
+
+- Template Excel/CSV dapat diunduh dari aplikasi.
+- Preview menampilkan data baru, update, kategori baru, peringatan, dan baris gagal.
+- Mendukung produk standar, varian, shared barcode, SKU otomatis, stok awal, harga, dan konversi kemasan.
+- Harga pack/dus/roll khusus dapat ditulis, misalnya `pack=100@45000|42000|40000`.
+
+### Riwayat harga dan label barcode massal
+
+- Setiap perubahan harga modal/eceran/grosir/proyek dicatat dengan pengguna dan waktu.
+- Label barcode internal dapat dicetak massal untuk kertas 58 mm, 80 mm, atau A4.
+
+### Purchase Order, approval, backup, dan closing
+
+- PO dapat dibuat tanpa langsung menambah stok; penerimaan barang tetap memperbarui HPP dan utang.
+- Diskon di atas batas role meminta PIN Owner/Manager dan tercatat sebagai approval.
+- Restore backup menampilkan preview dan memvalidasi struktur sebelum mengganti data.
+- Closing shift dapat dicetak dalam format nota 80 mm.
 
 ### Katalog otomatis dan pemilih barang profesional
 
@@ -124,7 +150,7 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v5.5.0.
+2. Ekstrak ZIP v5.6.0.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
@@ -141,7 +167,7 @@ Bumi Makmur POS v5.2 Smart Inventory, Fractional Sales, and Employee Picker
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.5.0
+→ Build Bumi Makmur POS v5.6.0
 → test-only
 ```
 
@@ -149,7 +175,7 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Deploy Firestore Rules — wajib
 
-v5.5.0 menambahkan dokumen `publicEmployees` untuk dropdown nama karyawan. Jalankan:
+v5.6.0 menambahkan dokumen `publicEmployees` untuk dropdown nama karyawan. Jalankan:
 
 ```text
 Actions
@@ -163,7 +189,7 @@ Tetap memakai Firebase Spark gratis.
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.5.0
+→ Build Bumi Makmur POS v5.6.0
 → android-release
 ```
 
@@ -173,11 +199,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v5.5.0
+→ Build Bumi Makmur POS Desktop v5.6.0
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.5.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.6.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
