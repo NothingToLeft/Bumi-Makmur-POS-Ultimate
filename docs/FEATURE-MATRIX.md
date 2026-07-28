@@ -1,7 +1,8 @@
-# Feature Matrix — Bumi Makmur POS FreeSync v5.2.3
+# Feature Matrix — Bumi Makmur POS FreeSync v5.3.0
 
 | Area | Implementasi | Status |
 |---|---|---|
+| Produk Varian | Produk induk, SKU per varian, shared barcode, barcode internal, harga/stok/HPP/rak terpisah | Baru v5.3 |
 | Login Karyawan | Pilih cabang, pilih nama dari daftar aman, PIN 4 digit, cache offline, biometrik eksplisit | Baru v5.2 |
 | Produk & Stok | Satu menu untuk barang, stok awal, harga, barcode, rak, minimum, pergerakan, opname, transfer | Baru v5.2 |
 | Penjualan Pecahan | Meter/kg/liter/potongan, langkah desimal, base quantity, konversi roll/box | Baru v5.2 |

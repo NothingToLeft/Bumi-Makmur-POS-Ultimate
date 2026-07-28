@@ -327,7 +327,7 @@ body.is-electron .sidebar-premium {
 }
 
 
-/* v5.2.3 purchase/restock responsive layout fix */
+/* v5.3.0 purchase/restock responsive layout fix */
 .purchase-form-layout > * { min-width: 0; }
 .purchase-entry-grid > * { min-width: 0; max-width: 100%; }
 .purchase-entry-grid .field-input { min-width: 0; max-width: 100%; }

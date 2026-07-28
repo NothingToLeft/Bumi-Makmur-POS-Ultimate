@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Package, Plus, Star, Archive, Eye, EyeOff, Pencil, Printer, Percent, TrendingUp,
   ScanLine, Camera, Keyboard, Boxes, AlertTriangle, ArrowLeftRight, ClipboardCheck,
-  SlidersHorizontal, History, Download, PackagePlus, CircleDollarSign, Ruler
+  SlidersHorizontal, History, Download, PackagePlus, CircleDollarSign, Ruler, Layers3, Trash2, WandSparkles, Copy
 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import {
@@ -14,6 +14,11 @@ import {
   quantityStepLabel, recommendedQuantityStep
 } from '../utils/fractionalUnits.js';
 import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
+import { barcodeSvgMarkup } from '../utils/barcodeLabel.js';
+import {
+  buildVariantGroupDraft, codeCollision, generateVariantGroupId, generateVariantSku,
+  groupVariantProducts, isVariantChild, variantParentName
+} from '../utils/variantProducts.js';
 import {
   Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput,
   PageHeader, SearchBox, Select, SummaryCard, Textarea
@@ -41,6 +46,26 @@ const blank = {
   available: true, active: true, trackStock: true, allowFractional: false, quantityStep: 1
 };
 
+const createVariantRow = (parentName = '', variantName = '', products = [], source = {}) => {
+  const usedCodes = products.flatMap(item => [item.sku, item.barcode]).filter(Boolean);
+  const sku = source.sku || generateVariantSku(parentName, variantName || 'Varian', usedCodes);
+  return {
+    id: source.id || '',
+    variantName: source.variantName || variantName,
+    sku,
+    internalBarcode: source.internalBarcode || source.barcode || sku,
+    stock: Number(source.stock || 0),
+    minStock: Number(source.minStock || 0),
+    rack: source.rack || '-',
+    modalPrice: Number(source.modalPrice || 0),
+    prices: { retail: Number(source.prices?.retail || 0), wholesale: Number(source.prices?.wholesale || 0), project: Number(source.prices?.project || 0) },
+    active: source.active !== false,
+    available: source.available !== false,
+    favorite: Boolean(source.favorite),
+    existing: Boolean(source.id)
+  };
+};
+
 const deriveMarkups = product => Object.fromEntries(PRICE_TIERS.map(tier => [
   tier.id,
   Number(product?.markups?.[tier.id] ?? calculateMarkupPercent(product?.modalPrice, product?.prices?.[tier.id]))
@@ -65,22 +90,34 @@ export default function ProductsScreen() {
   const canManageProducts = hasPermission('products.manage');
   const canManageStock = hasPermission('inventory.manage');
 
-  const products = useMemo(() => scoped.products.filter(product => {
+  const catalogProducts = useMemo(() => groupVariantProducts(scoped.products), [scoped.products]);
+  const products = useMemo(() => catalogProducts.filter(product => {
     const term = search.trim().toLowerCase();
-    const matchesSearch = !term || product.name.toLowerCase().includes(term) ||
+    const childText = product.isVariantGroup
+      ? product.children.map(child => `${child.variantName} ${child.sku} ${child.barcode} ${child.rack}`).join(' ').toLowerCase()
+      : '';
+    const matchesSearch = !term || String(product.name || '').toLowerCase().includes(term) ||
       String(product.sku || '').toLowerCase().includes(term) ||
-      String(product.barcode || '').toLowerCase().includes(term) ||
-      String(product.rack || '').toLowerCase().includes(term);
+      String(product.barcode || product.sharedBarcode || '').toLowerCase().includes(term) ||
+      String(product.rack || '').toLowerCase().includes(term) || childText.includes(term);
     const matchesArchive = showArchived || product.active !== false;
-    const low = Number(product.stock || 0) <= Number(product.minStock || 0);
+    const low = product.isVariantGroup
+      ? product.children.some(child => child.active !== false && Number(child.stock || 0) <= Number(child.minStock || 0))
+      : Number(product.stock || 0) <= Number(product.minStock || 0);
+    const empty = product.isVariantGroup
+      ? product.children.every(child => child.active === false || Number(child.stock || 0) <= 0)
+      : Number(product.stock || 0) <= 0;
+    const fractional = product.isVariantGroup
+      ? product.children.some(child => child.allowFractional === true)
+      : product.allowFractional === true;
     const matchesStock = stockFilter === 'all' ||
       (stockFilter === 'low' && low) ||
-      (stockFilter === 'empty' && Number(product.stock || 0) <= 0) ||
-      (stockFilter === 'fractional' && product.allowFractional === true);
+      (stockFilter === 'empty' && empty) ||
+      (stockFilter === 'fractional' && fractional);
     return matchesSearch && matchesArchive && matchesStock;
-  }), [scoped.products, search, showArchived, stockFilter]);
+  }), [catalogProducts, search, showArchived, stockFilter]);
 
-  const activeProducts = useMemo(() => scoped.products.filter(product => product.active !== false), [scoped.products]);
+  const activeProducts = useMemo(() => scoped.products.filter(product => product.active !== false && product.productType !== 'parent'), [scoped.products]);
   const summary = useMemo(() => {
     const low = activeProducts.filter(product => Number(product.stock || 0) <= Number(product.minStock || 0));
     const modalValue = activeProducts.reduce((sum, product) => sum + Number(product.stock || 0) * Number(product.modalPrice || 0), 0);
@@ -92,7 +129,7 @@ export default function ProductsScreen() {
     const code = product.barcode || product.sku;
     printHtmlDocument(
       `Label ${product.name}`,
-      `<div class="center"><p class="bold">${escapeHtml(product.name)}</p><p>${escapeHtml(product.sku)}</p><h2>${escapeHtml(formatRp(product.prices?.retail))}</h2><div class="line"></div><p style="font-family:monospace;font-size:14px;letter-spacing:2px">${escapeHtml(code)}</p><p class="small">${escapeHtml(product.baseUnit)} · Rak ${escapeHtml(product.rack || '-')}</p></div>`,
+      `<div class="center"><p class="bold">${escapeHtml(product.name)}</p>${product.variantName ? `<p class="small">Varian ${escapeHtml(product.variantName)} · Barcode internal</p>` : ''}<h2>${escapeHtml(formatRp(product.prices?.retail))}</h2><div class="line"></div><div style="display:flex;justify-content:center;max-width:100%;overflow:hidden">${barcodeSvgMarkup(code, { width: 1.45, height: 48, fontSize: 10 })}</div><p class="small">SKU ${escapeHtml(product.sku)} · ${escapeHtml(product.baseUnit)} · Rak ${escapeHtml(product.rack || '-')}</p>${product.sharedBarcode ? `<p class="small">Barcode kemasan: ${escapeHtml(product.sharedBarcode)}</p>` : ''}</div>`,
       '58mm'
     );
   };
@@ -129,7 +166,7 @@ export default function ProductsScreen() {
     }
   };
 
-  const newProduct = () => setEditing({ ...blank, prices: { ...blank.prices }, markups: { ...DEFAULT_MARKUPS }, conversions: [], variants: [], bundleItems: [] });
+  const newProduct = () => setEditing({ ...blank, prices: { ...blank.prices }, markups: { ...DEFAULT_MARKUPS }, conversions: [], variants: [], bundleItems: [], variantMode: false, variantRows: [] });
 
   return (
     <div className="h-full flex flex-col bg-gray-50 generic-bg">
@@ -174,45 +211,22 @@ export default function ProductsScreen() {
 
           {products.length === 0 ? <EmptyState icon={Package} title="Barang tidak ditemukan" subtitle="Gunakan tombol Tambah Barang & Stok untuk memasukkan barang lama beserta stok awalnya." action={canManageProducts && <Button onClick={newProduct}><Plus size={18}/> Tambah Barang</Button>}/> : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-              {products.map(product => {
-                const retailMarkup = Number(product.markups?.retail ?? calculateMarkupPercent(product.modalPrice, product.prices?.retail));
-                const lowStock = Number(product.stock || 0) <= Number(product.minStock || 0);
-                return (
-                  <Card key={product.id} className={`p-4 relative ${product.active === false ? 'opacity-60' : ''}`}>
-                    <div className="flex gap-3">
-                      <div className="w-14 h-14 rounded-2xl bg-gray-100 img-placeholder flex items-center justify-center shrink-0"><Package className="text-gray-400"/></div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex gap-1 flex-wrap mb-1">
-                          {product.favorite && <Badge tone="yellow">Favorit</Badge>}
-                          {product.allowFractional && <Badge tone="blue"><Ruler size={11} className="mr-1"/>Eceran</Badge>}
-                          {product.bundleItems?.length > 0 && <Badge tone="purple">Paket</Badge>}
-                          {lowStock && product.active !== false && <Badge tone="red">{Number(product.stock || 0) <= 0 ? 'Habis' : 'Menipis'}</Badge>}
-                          {product.available === false && <Badge tone="red">Tidak Tersedia</Badge>}
-                          {product.active === false && <Badge>Diarsipkan</Badge>}
-                        </div>
-                        <p className="font-bold text-sm text-gray-800 line-clamp-2">{product.name}</p>
-                        <p className="text-[11px] text-gray-500">{product.category} · {product.sku} · Rak {product.rack || '-'}</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mt-4 text-xs">
-                      <div className="p-2 bg-emerald-50 rounded-xl"><p className="text-gray-500">Harga/{product.baseUnit}</p><p className="font-bold text-emerald-700">{formatRp(product.prices?.retail)}</p></div>
-                      <div className="p-2 bg-orange-50 rounded-xl"><p className="text-gray-500">Modal/{product.baseUnit}</p><p className="font-bold text-orange-700">{formatRp(product.modalPrice)}</p></div>
-                      <div className={`p-2 rounded-xl ${lowStock ? 'bg-red-50' : 'bg-blue-50'}`}><p className="text-gray-500">Stok</p><p className={`font-bold ${lowStock ? 'text-red-700' : 'text-blue-700'}`}>{formatQuantity(product.stock)} {product.baseUnit}</p></div>
-                      <div className="p-2 bg-purple-50 rounded-xl"><p className="text-gray-500">Markup Eceran</p><p className="font-bold text-purple-700">{retailMarkup}%</p></div>
-                    </div>
-                    {product.allowFractional && <p className="mt-3 text-[11px] rounded-xl bg-blue-50 text-blue-700 p-2 font-bold">{fractionalSaleLabel(product)}</p>}
-                    {(product.conversions || []).length > 0 && <p className="mt-2 text-[11px] text-gray-500">{product.conversions.map(item => `1 ${item.unit} = ${formatQuantity(item.factor)} ${product.baseUnit}`).join(' · ')}</p>}
-                    {(canManageProducts || canManageStock) && <div className="grid grid-cols-6 gap-2 mt-4">
-                      {canManageProducts && <button title="Edit barang" onClick={() => setEditing(product)} className="h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><Pencil size={17}/></button>}
-                      {canManageStock && <button title="Penyesuaian stok" onClick={() => setAdjusting(product)} className="h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><SlidersHorizontal size={17}/></button>}
-                      {canManageProducts && <button title="Favorit" onClick={() => toggleProduct(product.id, 'favorite')} className="h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center"><Star size={17} fill={product.favorite ? 'currentColor' : 'none'}/></button>}
-                      {canManageProducts && <button title="Ketersediaan" onClick={() => toggleProduct(product.id, 'available')} className="h-10 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center">{product.available !== false ? <Eye size={17}/> : <EyeOff size={17}/>}</button>}
-                      <button title="Cetak label harga/barcode" onClick={() => printLabel(product)} className="h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Printer size={17}/></button>
-                      {canManageProducts && <button title="Arsipkan" onClick={() => window.confirm('Arsipkan barang ini? Riwayat transaksi tetap aman.') && archiveProduct(product.id)} className="h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><Archive size={17}/></button>}
-                    </div>}
-                  </Card>
-                );
-              })}
+              {products.map(product => <ProductCatalogCard
+                key={product.id}
+                product={product}
+                canManageProducts={canManageProducts}
+                canManageStock={canManageStock}
+                onEdit={() => setEditing(product.isVariantGroup ? buildVariantGroupDraft(product.children) : product)}
+                onAdjust={child => setAdjusting(child || product)}
+                onToggle={(id, field) => toggleProduct(id, field)}
+                onPrint={printLabel}
+                onArchive={() => {
+                  const label = product.isVariantGroup ? `Arsipkan seluruh ${product.children.length} varian ${product.name}?` : 'Arsipkan barang ini? Riwayat transaksi tetap aman.';
+                  if (!window.confirm(label)) return;
+                  if (product.isVariantGroup) product.children.filter(child => child.active !== false).forEach(child => archiveProduct(child.id));
+                  else archiveProduct(product.id);
+                }}
+              />)}
             </div>
           )}
         </>}
@@ -231,6 +245,48 @@ export default function ProductsScreen() {
   );
 }
 
+
+function ProductCatalogCard({ product, canManageProducts, canManageStock, onEdit, onAdjust, onToggle, onPrint, onArchive }) {
+  if (product.isVariantGroup) {
+    const activeChildren = product.children.filter(child => child.active !== false);
+    const lowChildren = activeChildren.filter(child => Number(child.stock || 0) <= Number(child.minStock || 0));
+    const prices = activeChildren.map(child => Number(child.prices?.retail || 0));
+    const priceMin = prices.length ? Math.min(...prices) : 0;
+    const priceMax = prices.length ? Math.max(...prices) : 0;
+    return <Card className="p-4 border-emerald-200 bg-gradient-to-br from-white to-emerald-50/40">
+      <div className="flex gap-3">
+        <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0"><Layers3 className="text-emerald-700"/></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex gap-1 flex-wrap mb-1"><Badge tone="green">Produk Induk</Badge><Badge tone="blue">{activeChildren.length} varian</Badge>{lowChildren.length > 0 && <Badge tone="red">{lowChildren.length} stok menipis</Badge>}</div>
+          <p className="font-black text-sm text-gray-900 line-clamp-2">{product.name}</p>
+          <p className="text-[11px] text-gray-500">Barcode bersama: {product.sharedBarcode || 'belum diisi'}</p>
+        </div>
+      </div>
+      <div className="mt-3 space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+        {activeChildren.map(child => <div key={child.id} className="rounded-xl border bg-white p-2.5 flex items-center justify-between gap-2">
+          <div className="min-w-0"><p className="font-bold text-xs text-gray-800 truncate">{child.variantName}</p><p className="text-[10px] text-gray-500 truncate">{child.sku} · Rak {child.rack || '-'}</p></div>
+          <div className="flex items-center gap-2 shrink-0"><div className="text-right"><p className="font-black text-xs text-emerald-700">{formatRp(child.prices?.retail)}</p><p className={`text-[10px] font-bold ${Number(child.stock || 0) <= Number(child.minStock || 0) ? 'text-red-600' : 'text-blue-600'}`}>{formatQuantity(child.stock)} {child.baseUnit}</p></div><button type="button" title="Cetak label barcode internal" onClick={() => onPrint(child)} className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><Printer size={14}/></button></div>
+        </div>)}
+      </div>
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        {canManageProducts && <button title="Edit produk induk dan varian" onClick={onEdit} className="h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><Pencil size={17}/></button>}
+        {canManageStock && <button title="Pilih varian untuk penyesuaian stok" onClick={() => onAdjust(activeChildren[0])} className="h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><SlidersHorizontal size={17}/></button>}
+        {canManageProducts && <button title="Arsipkan semua varian" onClick={onArchive} className="h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><Archive size={17}/></button>}
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-3 text-xs"><div className="p-2 bg-emerald-50 rounded-xl"><p className="text-gray-500">Rentang Harga</p><p className="font-bold text-emerald-700">{priceMin === priceMax ? formatRp(priceMin) : `${formatRp(priceMin)} – ${formatRp(priceMax)}`}</p></div><div className="p-2 bg-blue-50 rounded-xl"><p className="text-gray-500">Total Stok</p><p className="font-bold text-blue-700">{formatQuantity(product.stock)} {product.baseUnit}</p></div></div>
+    </Card>;
+  }
+  const retailMarkup = Number(product.markups?.retail ?? calculateMarkupPercent(product.modalPrice, product.prices?.retail));
+  const lowStock = Number(product.stock || 0) <= Number(product.minStock || 0);
+  return <Card className={`p-4 relative ${product.active === false ? 'opacity-60' : ''}`}>
+    <div className="flex gap-3"><div className="w-14 h-14 rounded-2xl bg-gray-100 img-placeholder flex items-center justify-center shrink-0"><Package className="text-gray-400"/></div><div className="min-w-0 flex-1"><div className="flex gap-1 flex-wrap mb-1">{product.favorite && <Badge tone="yellow">Favorit</Badge>}{product.allowFractional && <Badge tone="blue"><Ruler size={11} className="mr-1"/>Eceran</Badge>}{product.bundleItems?.length > 0 && <Badge tone="purple">Paket</Badge>}{lowStock && product.active !== false && <Badge tone="red">{Number(product.stock || 0) <= 0 ? 'Habis' : 'Menipis'}</Badge>}{product.available === false && <Badge tone="red">Tidak Tersedia</Badge>}{product.active === false && <Badge>Diarsipkan</Badge>}</div><p className="font-bold text-sm text-gray-800 line-clamp-2">{product.name}</p><p className="text-[11px] text-gray-500">{product.category} · {product.sku} · Rak {product.rack || '-'}</p></div></div>
+    <div className="grid grid-cols-2 gap-2 mt-4 text-xs"><div className="p-2 bg-emerald-50 rounded-xl"><p className="text-gray-500">Harga/{product.baseUnit}</p><p className="font-bold text-emerald-700">{formatRp(product.prices?.retail)}</p></div><div className="p-2 bg-orange-50 rounded-xl"><p className="text-gray-500">Modal/{product.baseUnit}</p><p className="font-bold text-orange-700">{formatRp(product.modalPrice)}</p></div><div className={`p-2 rounded-xl ${lowStock ? 'bg-red-50' : 'bg-blue-50'}`}><p className="text-gray-500">Stok</p><p className={`font-bold ${lowStock ? 'text-red-700' : 'text-blue-700'}`}>{formatQuantity(product.stock)} {product.baseUnit}</p></div><div className="p-2 bg-purple-50 rounded-xl"><p className="text-gray-500">Markup Eceran</p><p className="font-bold text-purple-700">{retailMarkup}%</p></div></div>
+    {product.allowFractional && <p className="mt-3 text-[11px] rounded-xl bg-blue-50 text-blue-700 p-2 font-bold">{fractionalSaleLabel(product)}</p>}
+    {(product.conversions || []).length > 0 && <p className="mt-2 text-[11px] text-gray-500">{product.conversions.map(item => `1 ${item.unit} = ${formatQuantity(item.factor)} ${product.baseUnit}`).join(' · ')}</p>}
+    {(canManageProducts || canManageStock) && <div className="grid grid-cols-6 gap-2 mt-4">{canManageProducts && <button title="Edit barang" onClick={onEdit} className="h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><Pencil size={17}/></button>}{canManageStock && <button title="Penyesuaian stok" onClick={() => onAdjust(product)} className="h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><SlidersHorizontal size={17}/></button>}{canManageProducts && <button title="Favorit" onClick={() => onToggle(product.id, 'favorite')} className="h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center"><Star size={17} fill={product.favorite ? 'currentColor' : 'none'}/></button>}{canManageProducts && <button title="Ketersediaan" onClick={() => onToggle(product.id, 'available')} className="h-10 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center">{product.available !== false ? <Eye size={17}/> : <EyeOff size={17}/>}</button>}<button title="Cetak label harga/barcode" onClick={() => onPrint(product)} className="h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Printer size={17}/></button>{canManageProducts && <button title="Arsipkan" onClick={onArchive} className="h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><Archive size={17}/></button>}</div>}
+  </Card>;
+}
+
 function ProductForm({ product, categories, units, products, onClose, onSave }) {
   const initialMarkups = deriveMarkups(product.id ? product : { ...product, markups: product.markups || DEFAULT_MARKUPS });
   const [form, setForm] = useState(() => ({
@@ -242,11 +298,18 @@ function ProductForm({ product, categories, units, products, onClose, onSave }) 
     quantityStep: normalizeQuantityStep(product.quantityStep, product.allowFractional === true, recommendedQuantityStep(product.baseUnit, product.category))
   }));
   const [markups, setMarkups] = useState(initialMarkups);
+  const [variantMode, setVariantMode] = useState(product.variantMode === true || product.isVariantGroupDraft === true);
+  const [variantRows, setVariantRows] = useState(() => {
+    if (Array.isArray(product.variantRows) && product.variantRows.length) return product.variantRows.map(row => createVariantRow(product.name, row.variantName, products, row));
+    return [];
+  });
+  const [deletedVariantIds, setDeletedVariantIds] = useState([]);
   const [variantText, setVariantText] = useState((form.variants || []).map(variant => variant.name).join(', '));
   const [conversionText, setConversionText] = useState((form.conversions || []).map(value => `${value.unit}=${value.factor}`).join('\n'));
   const [bundleId, setBundleId] = useState('');
   const [bundleQty, setBundleQty] = useState(1);
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
+  const [variantScannerIndex, setVariantScannerIndex] = useState(null);
 
 
   const changeBaseUnit = nextUnit => setForm(previous => ({
@@ -297,7 +360,163 @@ function ProductForm({ product, categories, units, products, onClose, onSave }) 
     }));
   };
 
+  const enableVariantMode = () => {
+    setVariantMode(true);
+    setForm(previous => ({
+      ...previous,
+      variantGroupId: previous.variantGroupId || generateVariantGroupId(previous.name || 'Produk'),
+      sharedBarcode: previous.sharedBarcode || previous.barcode || ''
+    }));
+    setVariantRows(previous => {
+      if (previous.length) return previous;
+      if (product.id && !product.isVariantGroupDraft) {
+        const generatedSku = generateVariantSku(form.name, 'Standar', products.filter(item => item.id !== product.id).flatMap(item => [item.sku, item.barcode]).filter(Boolean));
+        return [createVariantRow(form.name, 'Standar', products, {
+          ...product,
+          sku: generatedSku,
+          barcode: '',
+          internalBarcode: generatedSku,
+          variantName: 'Standar'
+        })];
+      }
+      return [
+        createVariantRow(form.name, '6W', products),
+        createVariantRow(form.name, '10W', products)
+      ];
+    });
+  };
+
+  const updateVariantRow = (index, patch) => setVariantRows(previous => previous.map((row, rowIndex) => {
+    if (rowIndex !== index) return row;
+    const next = { ...row, ...patch };
+    if (Object.prototype.hasOwnProperty.call(patch, 'variantName') && !row.existing) {
+      const used = [
+        ...products.filter(item => item.id !== row.id).flatMap(item => [item.sku, item.barcode]),
+        ...previous.filter((_, otherIndex) => otherIndex !== index).flatMap(item => [item.sku, item.internalBarcode])
+      ].filter(Boolean);
+      const wasAuto = !row.sku || row.internalBarcode === row.sku || /^BM-/.test(row.sku);
+      if (wasAuto) {
+        const sku = generateVariantSku(form.name, patch.variantName, used);
+        next.sku = sku;
+        if (!row.internalBarcode || row.internalBarcode === row.sku || /^BM-/.test(row.internalBarcode)) next.internalBarcode = sku;
+      }
+    }
+    return next;
+  }));
+
+  const addVariantRow = () => setVariantRows(previous => {
+    const row = createVariantRow(form.name, `Varian ${previous.length + 1}`, [
+      ...products,
+      ...previous.map(item => ({ sku: item.sku, barcode: item.internalBarcode }))
+    ]);
+    return [...previous, row];
+  });
+
+  const removeVariantRow = index => setVariantRows(previous => {
+    const row = previous[index];
+    if (row?.id) setDeletedVariantIds(ids => [...new Set([...ids, row.id])]);
+    return previous.filter((_, rowIndex) => rowIndex !== index);
+  });
+
+  const applyLedWattPreset = () => setVariantRows(previous => {
+    const desired = ['6W', '10W', '12W', '15W'];
+    const used = products.filter(item => !previous.some(row => row.id === item.id)).flatMap(item => [item.sku, item.barcode]).filter(Boolean);
+    return desired.map(name => {
+      const existing = previous.find(row => String(row.variantName || '').trim().toLowerCase() === name.toLowerCase());
+      if (existing) return existing;
+      const row = createVariantRow(form.name || 'Philips LED', name, [...products, ...used.map(code => ({ sku: code }))]);
+      used.push(row.sku, row.internalBarcode);
+      return row;
+    });
+  });
+
+  const regenerateVariantCodes = () => setVariantRows(previous => {
+    const used = products.filter(item => !previous.some(row => row.id === item.id)).flatMap(item => [item.sku, item.barcode]).filter(Boolean);
+    return previous.map(row => {
+      const sku = generateVariantSku(form.name, row.variantName || 'Varian', used);
+      used.push(sku);
+      return { ...row, sku, internalBarcode: sku };
+    });
+  });
+
+  const parsedConversions = () => conversionText.split('\n').map(line => line.trim()).filter(Boolean)
+    .map(line => {
+      const [rawUnit, rawFactor] = line.split('=');
+      const unit = rawUnit?.trim();
+      const factor = Number(String(rawFactor || '').replace(',', '.')) || 1;
+      return { unit, factor };
+    })
+    .filter(item => item.unit && item.unit !== form.baseUnit && item.factor > 0);
+
+  const submitVariantGroup = () => {
+    const parentName = form.name.trim();
+    if (!parentName) return alert('Nama produk induk wajib diisi.');
+    if (variantRows.length < 2) return alert('Produk varian minimal memiliki dua varian.');
+    const names = new Set();
+    const skus = new Set();
+    const internalCodes = new Set();
+    const codeOwners = new Map();
+    for (const row of variantRows) {
+      const variantName = String(row.variantName || '').trim();
+      const sku = String(row.sku || '').trim().toUpperCase();
+      const internalBarcode = String(row.internalBarcode || sku).trim().toUpperCase();
+      if (!variantName) return alert('Semua nama varian wajib diisi.');
+      if (names.has(variantName.toLowerCase())) return alert(`Nama varian ${variantName} digunakan lebih dari sekali.`);
+      if (!sku) return alert(`SKU varian ${variantName} wajib diisi.`);
+      if (skus.has(sku)) return alert(`SKU ${sku} digunakan lebih dari sekali.`);
+      if (!internalBarcode) return alert(`Barcode internal varian ${variantName} wajib diisi.`);
+      if (internalCodes.has(internalBarcode)) return alert(`Barcode internal ${internalBarcode} digunakan lebih dari sekali.`);
+      for (const code of new Set([sku, internalBarcode])) {
+        const owner = codeOwners.get(code);
+        if (owner && owner !== variantName) return alert(`Kode ${code} sudah dipakai oleh varian ${owner}. SKU dan barcode internal antarvarian harus unik.`);
+        codeOwners.set(code, variantName);
+      }
+      if (Number(row.modalPrice) < 0 || PRICE_TIERS.some(tier => Number(row.prices?.[tier.id] || 0) < 0)) return alert(`Harga varian ${variantName} tidak valid.`);
+      if (!row.id && Number(row.stock || 0) < 0) return alert(`Stok awal varian ${variantName} tidak boleh negatif.`);
+      names.add(variantName.toLowerCase()); skus.add(sku); internalCodes.add(internalBarcode);
+    }
+    const ignoreIds = variantRows.map(row => row.id).filter(Boolean);
+    const sharedBarcode = String(form.sharedBarcode || '').trim();
+    if (sharedBarcode) {
+      const collision = codeCollision(products, {
+        code: sharedBarcode,
+        branchId: form.branchId,
+        ignoreIds,
+        variantGroupId: form.variantGroupId,
+        shared: true
+      });
+      if (collision) return alert(`Barcode kemasan ${sharedBarcode} sudah dipakai oleh ${collision.name}.`);
+    }
+    for (const row of variantRows) {
+      for (const [label, code] of [['SKU', row.sku], ['Barcode internal', row.internalBarcode]]) {
+        const collision = codeCollision(products, { code, branchId: form.branchId, ignoreIds, variantGroupId: form.variantGroupId });
+        if (collision) return alert(`${label} ${code} sudah dipakai oleh ${collision.name}.`);
+      }
+    }
+    onSave({
+      ...form,
+      variantMode: true,
+      variantGroupId: form.variantGroupId || generateVariantGroupId(parentName),
+      parentName,
+      sharedBarcode,
+      conversions: parsedConversions(),
+      quantityStep: normalizeQuantityStep(form.quantityStep, form.allowFractional, recommendedQuantityStep(form.baseUnit, form.category)),
+      variantRows: variantRows.map(row => ({
+        ...row,
+        variantName: String(row.variantName).trim(),
+        sku: String(row.sku).trim().toUpperCase(),
+        internalBarcode: String(row.internalBarcode || row.sku).trim().toUpperCase(),
+        stock: Number(row.stock || 0),
+        minStock: Number(row.minStock || 0),
+        modalPrice: Number(row.modalPrice || 0),
+        prices: Object.fromEntries(PRICE_TIERS.map(tier => [tier.id, Number(row.prices?.[tier.id] || 0)]))
+      })),
+      deletedVariantIds
+    });
+  };
+
   const submit = () => {
+    if (variantMode) return submitVariantGroup();
     if (!form.name.trim()) return alert('Nama barang wajib diisi.');
     if (Number(form.modalPrice) < 0) return alert('Harga modal tidak valid.');
     if (!form.id && Number(form.stock || 0) < 0) return alert('Stok awal tidak boleh negatif.');
@@ -332,6 +551,32 @@ function ProductForm({ product, categories, units, products, onClose, onSave }) 
   };
 
   const stockStep = normalizeQuantityStep(form.quantityStep, form.allowFractional, recommendedQuantityStep(form.baseUnit, form.category));
+  if (variantMode) return <VariantGroupFormModal
+    form={form}
+    setForm={setForm}
+    categories={categories}
+    units={units}
+    products={products}
+    variantRows={variantRows}
+    updateVariantRow={updateVariantRow}
+    addVariantRow={addVariantRow}
+    removeVariantRow={removeVariantRow}
+    regenerateVariantCodes={regenerateVariantCodes}
+    applyLedWattPreset={applyLedWattPreset}
+    conversionText={conversionText}
+    setConversionText={setConversionText}
+    applyConversionPreset={applyConversionPreset}
+    changeBaseUnit={changeBaseUnit}
+    toggleFractional={toggleFractional}
+    onClose={onClose}
+    onSubmit={submitVariantGroup}
+    barcodeScannerOpen={barcodeScannerOpen}
+    setBarcodeScannerOpen={setBarcodeScannerOpen}
+    variantScannerIndex={variantScannerIndex}
+    setVariantScannerIndex={setVariantScannerIndex}
+    canReturnToStandard={!product.isVariantGroupDraft && !(product.variantRows || []).length}
+    onReturnToStandard={() => setVariantMode(false)}
+  />;
   return (
     <Modal
       title={form.id ? 'Edit Barang & Pengaturan Stok' : 'Tambah Barang & Stok Awal'}
@@ -342,6 +587,9 @@ function ProductForm({ product, categories, units, products, onClose, onSave }) 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {!form.id && <Card className="md:col-span-2 p-4 bg-blue-50 border-blue-100"><p className="font-black text-blue-900">Mudah untuk pengguna baru</p><p className="text-sm text-blue-700 mt-1">Isi identitas barang dan stok yang sudah ada sekarang. Barang langsung tersimpan sekaligus muncul di kasir dan laporan stok.</p></Card>}
         <Field label="Nama Barang" className="md:col-span-2"><Input value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} autoFocus/></Field>
+        <Card className="md:col-span-2 p-4 border-emerald-200 bg-emerald-50/60">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div className="flex gap-3"><Layers3 className="text-emerald-700 shrink-0"/><div><p className="font-black text-gray-900">Produk memiliki beberapa varian?</p><p className="text-xs text-gray-600 mt-1">Gunakan untuk Philips LED 6W, 10W, 12W, 15W. Setiap varian memiliki SKU, harga, stok, dan barcode internal sendiri; barcode kemasan boleh sama.</p></div></div><Button type="button" onClick={enableVariantMode} variant="secondary" className="shrink-0"><Layers3 size={17}/> Aktifkan Varian</Button></div>
+        </Card>
         <Field label="Kategori"><Select value={form.category} onChange={event => setForm({ ...form, category: event.target.value })}>{categories.map(category => <option key={category}>{category}</option>)}</Select></Field>
         <Field label="Satuan Dasar" hint="Pilih satuan terkecil yang mengurangi stok. Kabel umumnya memakai meter."><Select value={form.baseUnit} onChange={event => changeBaseUnit(event.target.value)}>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</Select></Field>
         <Field label="SKU"><Input value={form.sku} onChange={event => setForm({ ...form, sku: event.target.value })} placeholder="Otomatis jika kosong"/></Field>
@@ -423,6 +671,97 @@ function ProductForm({ product, categories, units, products, onClose, onSave }) 
       }}/>} 
     </Modal>
   );
+}
+
+
+function VariantGroupFormModal({
+  form, setForm, categories, units, products, variantRows, updateVariantRow, addVariantRow,
+  removeVariantRow, regenerateVariantCodes, applyLedWattPreset, conversionText, setConversionText, applyConversionPreset,
+  changeBaseUnit, toggleFractional, onClose, onSubmit, barcodeScannerOpen, setBarcodeScannerOpen,
+  variantScannerIndex, setVariantScannerIndex, canReturnToStandard, onReturnToStandard
+}) {
+  const stockStep = normalizeQuantityStep(form.quantityStep, form.allowFractional, recommendedQuantityStep(form.baseUnit, form.category));
+  const scanSharedBarcode = () => { setVariantScannerIndex(null); setBarcodeScannerOpen(true); };
+  const scanVariantBarcode = index => { setVariantScannerIndex(index); setBarcodeScannerOpen(true); };
+  const usedCodesOutsideGroup = products.filter(item => item.variantGroupId !== form.variantGroupId).flatMap(item => [item.sku, item.barcode, item.sharedBarcode]).filter(Boolean);
+  return <Modal
+    title={form.variantGroupId ? 'Produk Induk & Manajemen Varian' : 'Tambah Produk Induk & Varian'}
+    onClose={onClose}
+    size="full"
+    footer={<>{canReturnToStandard && <Button variant="ghost" onClick={onReturnToStandard}>Kembali ke Barang Biasa</Button>}<Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={onSubmit}><Layers3 size={17}/> Simpan Produk & Varian</Button></>}
+  >
+    <div className="space-y-5">
+      <Card className="p-4 border-emerald-200 bg-gradient-to-r from-emerald-50 to-blue-50">
+        <div className="flex gap-3"><Layers3 className="text-emerald-700 shrink-0"/><div><p className="font-black text-gray-900">Produk Induk + Varian Profesional</p><p className="text-sm text-gray-600 mt-1">Barcode kemasan pabrik boleh sama. Saat barcode bersama dipindai, kasir memilih 6W, 10W, 12W, atau 15W. SKU dan barcode internal tetap unik agar scan stiker internal langsung memilih varian yang benar.</p></div></div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <Field label="Nama Produk Induk" className="md:col-span-2"><Input value={form.name} onChange={event => setForm(previous => ({ ...previous, name: event.target.value }))} placeholder="Contoh: Philips LED" autoFocus/></Field>
+          <Field label="Kategori"><Select value={form.category} onChange={event => setForm(previous => ({ ...previous, category: event.target.value }))}>{categories.map(category => <option key={category}>{category}</option>)}</Select></Field>
+          <Field label="Satuan Dasar"><Select value={form.baseUnit} onChange={event => changeBaseUnit(event.target.value)}>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</Select></Field>
+          <Field label="Barcode Kemasan Bersama" hint="Barcode pabrik yang sama pada semua watt/ukuran. Boleh kosong bila setiap varian memiliki barcode berbeda." className="md:col-span-2">
+            <div className="flex gap-2"><Input value={form.sharedBarcode || ''} onChange={event => setForm(previous => ({ ...previous, sharedBarcode: event.target.value.trim() }))} placeholder="Scan barcode kemasan Philips"/><Button type="button" variant="secondary" onClick={scanSharedBarcode}><ScanLine size={17}/> Scan</Button></div>
+          </Field>
+          <Field label="Kelompok Varian" hint="ID internal otomatis; tidak perlu diubah." className="md:col-span-2"><Input value={form.variantGroupId || ''} disabled placeholder="Dibuat otomatis saat disimpan"/></Field>
+        </div>
+      </Card>
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div><h3 className="font-black text-lg text-gray-900">Daftar Varian</h3><p className="text-sm text-gray-500">Setiap baris adalah SKU nyata dengan stok, HPP, harga jual, dan rak masing-masing.</p></div>
+        <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" onClick={applyLedWattPreset}><Layers3 size={17}/> Preset LED 6W–15W</Button><Button type="button" variant="secondary" onClick={regenerateVariantCodes}><WandSparkles size={17}/> Buat Ulang SKU Otomatis</Button><Button type="button" onClick={addVariantRow}><Plus size={17}/> Tambah Varian</Button></div>
+      </div>
+
+      <div className="space-y-4">
+        {variantRows.map((row, index) => {
+          const rowStep = stockStep;
+          const skuConflict = row.sku && usedCodesOutsideGroup.some(code => String(code).toUpperCase() === String(row.sku).toUpperCase());
+          const barcodeConflict = row.internalBarcode && usedCodesOutsideGroup.some(code => String(code).toUpperCase() === String(row.internalBarcode).toUpperCase());
+          return <Card key={row.id || `new-${index}`} className="p-4 border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between gap-3 mb-4"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">{index + 1}</div><div><p className="font-black text-gray-900">{row.variantName || `Varian ${index + 1}`}</p><p className="text-xs text-gray-500">{row.existing ? 'Stok lama tetap aman; ubah lewat Pembelian/Penyesuaian.' : 'Varian baru dapat langsung diberi stok awal.'}</p></div></div><button type="button" onClick={() => removeVariantRow(index)} disabled={variantRows.length <= 2} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center disabled:opacity-30" title="Hapus varian"><Trash2 size={17}/></button></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <Field label="Nama Varian"><Input value={row.variantName} onChange={event => updateVariantRow(index, { variantName: event.target.value })} placeholder="6W / 10W / 12W / Warm White"/></Field>
+              <Field label="SKU Otomatis" hint="Boleh diedit, tetapi harus unik."><div className="flex gap-2"><Input value={row.sku} onChange={event => updateVariantRow(index, { sku: event.target.value.toUpperCase() })} className={skuConflict ? 'border-red-400' : ''}/><Button type="button" variant="secondary" onClick={() => navigator.clipboard?.writeText(row.sku)} title="Salin SKU"><Copy size={16}/></Button></div>{skuConflict && <p className="text-xs text-red-600 font-bold mt-1">SKU sudah digunakan produk lain.</p>}</Field>
+              <Field label="Barcode Internal / Stiker" hint="Default sama dengan SKU dan dapat dicetak sebagai Code 128."><div className="flex gap-2"><Input value={row.internalBarcode} onChange={event => updateVariantRow(index, { internalBarcode: event.target.value.toUpperCase() })} className={barcodeConflict ? 'border-red-400' : ''}/><Button type="button" variant="secondary" onClick={() => scanVariantBarcode(index)}><ScanLine size={16}/></Button></div>{barcodeConflict && <p className="text-xs text-red-600 font-bold mt-1">Barcode internal sudah digunakan.</p>}</Field>
+              <Field label="Rak / Lokasi"><Input value={row.rack} onChange={event => updateVariantRow(index, { rack: event.target.value })}/></Field>
+              <Field label={row.existing ? 'Stok Saat Ini' : 'Stok Awal'}><Input type="number" min="0" step={rowStep} disabled={row.existing} value={row.stock || ''} onChange={event => updateVariantRow(index, { stock: event.target.value })} onBlur={() => updateVariantRow(index, { stock: normalizeQuantity(row.stock, { allowFractional: rowStep < 1, step: rowStep, min: 0 }) })}/></Field>
+              <Field label="Stok Minimum"><Input type="number" min="0" step={rowStep} value={row.minStock || ''} onChange={event => updateVariantRow(index, { minStock: event.target.value })} onBlur={() => updateVariantRow(index, { minStock: normalizeQuantity(row.minStock, { allowFractional: rowStep < 1, step: rowStep, min: 0 }) })}/></Field>
+              <Field label={`Harga Modal / ${form.baseUnit}`}><MoneyInput value={row.modalPrice} onValueChange={value => {
+                const currentMarkup = calculateMarkupPercent(row.modalPrice, row.prices.retail);
+                updateVariantRow(index, { modalPrice: value, prices: { ...row.prices, retail: calculateMarkupPrice(value, currentMarkup) } });
+              }}/></Field>
+              <Field label="Markup Eceran (%)"><Input type="number" min="0" max="1000" step="0.1" value={calculateMarkupPercent(row.modalPrice, row.prices.retail) || ''} onChange={event => updateVariantRow(index, { prices: { ...row.prices, retail: calculateMarkupPrice(row.modalPrice, event.target.value) } })}/></Field>
+              <Field label={`Harga Eceran / ${form.baseUnit}`}><MoneyInput value={row.prices.retail} onValueChange={value => updateVariantRow(index, { prices: { ...row.prices, retail: value } })}/></Field>
+              <Field label={`Harga Grosir / ${form.baseUnit}`}><MoneyInput value={row.prices.wholesale} onValueChange={value => updateVariantRow(index, { prices: { ...row.prices, wholesale: value } })}/></Field>
+              <Field label={`Harga Proyek / ${form.baseUnit}`}><MoneyInput value={row.prices.project} onValueChange={value => updateVariantRow(index, { prices: { ...row.prices, project: value } })}/></Field>
+              <div className="md:col-span-2 flex flex-wrap gap-4 items-center rounded-xl border bg-gray-50 px-3 py-2"><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.available} onChange={event => updateVariantRow(index, { available: event.target.checked })}/> Tersedia di Kasir</label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.favorite} onChange={event => updateVariantRow(index, { favorite: event.target.checked })}/> Favorit</label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.active} onChange={event => updateVariantRow(index, { active: event.target.checked })}/> Aktif</label></div>
+            </div>
+          </Card>;
+        })}
+      </div>
+
+      <Card className="p-4 border-blue-200 bg-blue-50/50">
+        <div className="flex items-start gap-3"><Ruler className="text-blue-700 shrink-0"/><div><p className="font-black text-gray-800">Satuan, Eceran, dan Kemasan Berlaku untuk Semua Varian</p><p className="text-xs text-gray-500 mt-1">Contoh varian kabel ukuran berbeda dapat tetap memakai meter dan kelipatan 0,5 meter. Untuk lampu, gunakan pcs.</p></div></div>
+        <label className="mt-4 flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={form.allowFractional} onChange={event => toggleFractional(event.target.checked)}/><div><p className="font-bold text-sm">Boleh dijual eceran / pecahan</p><p className="text-xs text-gray-500">Aktifkan hanya bila seluruh varian memang dapat dijual pecahan.</p></div></label>
+        {form.allowFractional && <Field label={`Kelipatan Penjualan (${form.baseUnit})`} className="mt-3"><Select value={String(form.quantityStep)} onChange={event => setForm(previous => ({ ...previous, quantityStep: Number(event.target.value) }))}>{QUANTITY_STEP_PRESETS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</Select></Field>}
+        <Field label="Konversi Kemasan / Satuan Beli" hint={`Contoh box=12 berarti satu box menambah stok 12 ${form.baseUnit}.`} className="mt-3"><div className="space-y-2"><Textarea value={conversionText} onChange={event => setConversionText(event.target.value)} placeholder={'box=12\nroll=50'}/><div className="flex flex-wrap gap-2">{form.baseUnit === 'meter' && <Button type="button" size="sm" variant="secondary" onClick={() => applyConversionPreset('roll', 50)}>1 roll = 50 meter</Button>}{form.baseUnit === 'pcs' && <Button type="button" size="sm" variant="secondary" onClick={() => applyConversionPreset('box', 12)}>1 box = 12 pcs</Button>}</div></div></Field>
+      </Card>
+    </div>
+    {barcodeScannerOpen && <ProductBarcodeScannerModal onClose={() => { setBarcodeScannerOpen(false); setVariantScannerIndex(null); }} onDetected={rawCode => {
+      const code = String(rawCode || '').trim();
+      if (!code) return 'Barcode belum terbaca.';
+      if (variantScannerIndex == null) {
+        const collision = codeCollision(products, { code, branchId: form.branchId, ignoreIds: variantRows.map(row => row.id).filter(Boolean), variantGroupId: form.variantGroupId, shared: true });
+        if (collision) return `Barcode ${code} sudah dipakai oleh ${collision.name}.`;
+        setForm(previous => ({ ...previous, sharedBarcode: code }));
+      } else {
+        const collision = codeCollision(products, { code, branchId: form.branchId, ignoreIds: variantRows.map(row => row.id).filter(Boolean), variantGroupId: form.variantGroupId });
+        if (collision) return `Barcode ${code} sudah dipakai oleh ${collision.name}.`;
+        updateVariantRow(variantScannerIndex, { internalBarcode: code });
+      }
+      setBarcodeScannerOpen(false); setVariantScannerIndex(null); return true;
+    }}/>} 
+  </Modal>;
 }
 
 function MovementTab({ rows }) {

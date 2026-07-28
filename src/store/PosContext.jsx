@@ -1028,16 +1028,104 @@ export function PosProvider({ children }) {
   };
 
   const saveProduct = data => commit(data.id ? 'PRODUCT_UPDATE' : 'PRODUCT_CREATE', data.name, next => {
+    if (data.variantMode === true) {
+      const parentName = String(data.parentName || data.name || '').trim();
+      if (!parentName) throw new Error('Nama produk induk wajib diisi.');
+      const targetBranchId = data.branchId || branchId;
+      const variantGroupId = String(data.variantGroupId || generateId('VGRP')).trim();
+      const sharedBarcode = String(data.sharedBarcode || '').trim();
+      const rows = Array.isArray(data.variantRows) ? data.variantRows : [];
+      if (rows.length < 2) throw new Error('Produk varian minimal memiliki dua varian.');
+      const deletedIds = new Set(data.deletedVariantIds || []);
+      const groupExistingIds = new Set(next.products.filter(product => product.variantGroupId === variantGroupId).map(product => product.id));
+      const ignoreIds = new Set([...groupExistingIds, ...rows.map(row => row.id).filter(Boolean)]);
+      const normalized = value => String(value || '').trim().toLowerCase();
+      const externalCollision = code => next.products.find(product => {
+        if (!product || product.active === false || product.branchId !== targetBranchId || ignoreIds.has(product.id)) return false;
+        const target = normalized(code);
+        return target && [product.sku, product.barcode, product.sharedBarcode].some(value => normalized(value) === target);
+      });
+      if (sharedBarcode) {
+        const collision = externalCollision(sharedBarcode);
+        if (collision) throw new Error(`Barcode kemasan ${sharedBarcode} sudah dipakai oleh ${collision.name}.`);
+      }
+      const seenNames = new Set();
+      const seenSkus = new Set();
+      const seenInternalBarcodes = new Set();
+      const seenCodes = new Map();
+      const allowFractional = data.allowFractional === true;
+      const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional, recommendedQuantityStep(data.baseUnit, data.category));
+      const conversions = (data.conversions || []).filter(row => row?.unit && Number(row.factor) > 0).map(row => ({ ...row, factor: quantity(row.factor) }));
+      const saved = [];
+      for (const row of rows) {
+        const variantName = String(row.variantName || '').trim();
+        const sku = String(row.sku || '').trim().toUpperCase();
+        const internalBarcode = String(row.internalBarcode || row.barcode || sku).trim().toUpperCase();
+        if (!variantName) throw new Error('Semua nama varian wajib diisi.');
+        if (!sku) throw new Error(`SKU varian ${variantName} wajib diisi.`);
+        if (!internalBarcode) throw new Error(`Barcode internal varian ${variantName} wajib diisi.`);
+        if (sharedBarcode && normalized(sharedBarcode) === normalized(internalBarcode)) throw new Error(`Barcode internal ${variantName} harus berbeda dari barcode kemasan bersama agar pemindaian tidak ambigu.`);
+        if (seenNames.has(normalized(variantName))) throw new Error(`Nama varian ${variantName} digunakan lebih dari sekali.`);
+        if (seenSkus.has(normalized(sku))) throw new Error(`SKU ${sku} digunakan lebih dari sekali.`);
+        if (seenInternalBarcodes.has(normalized(internalBarcode))) throw new Error(`Barcode internal ${internalBarcode} digunakan lebih dari sekali.`);
+        for (const code of new Set([normalized(sku), normalized(internalBarcode)])) {
+          const owner = seenCodes.get(code);
+          if (owner && owner !== variantName) throw new Error(`Kode ${code.toUpperCase()} sudah dipakai oleh varian ${owner}.`);
+          seenCodes.set(code, variantName);
+        }
+        const skuCollision = externalCollision(sku);
+        if (skuCollision) throw new Error(`SKU ${sku} sudah dipakai oleh ${skuCollision.name}.`);
+        const barcodeCollision = externalCollision(internalBarcode);
+        if (barcodeCollision) throw new Error(`Barcode internal ${internalBarcode} sudah dipakai oleh ${barcodeCollision.name}.`);
+        seenNames.add(normalized(variantName)); seenSkus.add(normalized(sku)); seenInternalBarcodes.add(normalized(internalBarcode));
+
+        const existing = next.products.find(product => product.id === row.id);
+        const productName = `${parentName} ${variantName}`.trim();
+        const quantityProfile = { name: productName, baseUnit: data.baseUnit || 'pcs', allowFractional, quantityStep };
+        const initialStock = existing?.stock ?? validateBaseQuantity(quantityProfile, row.stock || 0, 'Stok awal');
+        const minimumStock = validateBaseQuantity(quantityProfile, row.minStock || 0, 'Stok minimum');
+        if (initialStock < 0 || minimumStock < 0) throw new Error(`Stok ${variantName} tidak boleh negatif.`);
+        const item = {
+          id: row.id || generateId('PRD'), branchId: targetBranchId,
+          name: productName, parentName, variantName, variantGroupId, productType: 'variant', sharedBarcode,
+          category: data.category || 'Lainnya', sku, barcode: internalBarcode,
+          baseUnit: data.baseUnit || 'pcs', stock: quantity(initialStock), minStock: quantity(minimumStock),
+          rack: row.rack || '-', modalPrice: money(row.modalPrice), initialModalPrice: existing?.initialModalPrice ?? money(row.modalPrice),
+          prices: {
+            retail: money(row.prices?.retail), wholesale: money(row.prices?.wholesale ?? row.prices?.retail), project: money(row.prices?.project ?? row.prices?.retail)
+          },
+          markups: {
+            retail: Math.max(0, Number(row.markups?.retail || 0)), wholesale: Math.max(0, Number(row.markups?.wholesale || 0)), project: Math.max(0, Number(row.markups?.project || 0))
+          },
+          variants: [], conversions, allowFractional, quantityStep, bundleItems: [],
+          favorite: Boolean(row.favorite), available: row.available !== false, active: row.active !== false,
+          trackStock: data.trackStock !== false, updatedAt: nowISO()
+        };
+        if (existing) next.products = next.products.map(product => product.id === item.id ? item : product);
+        else {
+          next.products.unshift(item);
+          if (item.trackStock !== false && item.stock > 0) next.stockMovements.unshift({
+            id: generateId('MOV'), branchId: item.branchId, productId: item.id, productName: item.name,
+            type: 'INITIAL_STOCK', qtyChange: item.stock, refId: item.id,
+            note: `Stok awal varian ${variantName}`, createdAt: nowISO(), userId: currentUser.id
+          });
+        }
+        saved.push(item);
+      }
+      if (deletedIds.size) next.products = next.products.map(product => deletedIds.has(product.id) ? { ...product, active: false, available: false, updatedAt: nowISO() } : product);
+      return { id: `GROUP-${variantGroupId}`, variantGroupId, name: parentName, sharedBarcode, children: saved };
+    }
     const productName = String(data.name || '').trim();
     if (!productName) throw new Error('Nama produk wajib diisi.');
     const existing = next.products.find(product => product.id === data.id);
     const targetBranchId = data.branchId || branchId;
     const sku = String(data.sku || generateId('SKU')).trim();
     const barcode = String(data.barcode || '').trim();
-    const duplicateSku = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && String(product.sku || '').toLowerCase() === sku.toLowerCase());
-    if (duplicateSku) throw new Error(`SKU ${sku} sudah dipakai oleh produk ${duplicateSku.name}.`);
+    const normalizedCode = value => String(value || '').trim().toLowerCase();
+    const duplicateSku = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && [product.sku, product.barcode, product.sharedBarcode].some(value => normalizedCode(value) === normalizedCode(sku)));
+    if (duplicateSku) throw new Error(`SKU ${sku} sudah dipakai sebagai kode produk ${duplicateSku.name}.`);
     if (barcode) {
-      const duplicateBarcode = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && String(product.barcode || '') === barcode);
+      const duplicateBarcode = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && [product.barcode, product.sku, product.sharedBarcode].some(value => normalizedCode(value) === normalizedCode(barcode)));
       if (duplicateBarcode) throw new Error(`Barcode ${barcode} sudah dipakai oleh produk ${duplicateBarcode.name}.`);
     }
     const allowFractional = data.allowFractional === true;

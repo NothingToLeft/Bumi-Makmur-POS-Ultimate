@@ -1,31 +1,24 @@
-# Build & QA Report — Bumi Makmur POS v5.2.3
+# Build & QA Report — Bumi Makmur POS v5.3.0
 
-## Ruang lingkup
+## Hasil pemeriksaan lokal
 
-Hotfix responsif untuk identitas cabang pada sidebar Web dan Desktop Windows.
+- Core/regression tests: **106/106 lulus**
+- Static audit: **lulus**
+- Parser JS/JSX/MJS: **0 error sintaks**
+- JSON: **4 file valid**
+- Secret/private-key scan: **lulus**
+- Pemeriksaan layanan berbayar terlarang: **lulus**
 
-## Perubahan source
+## Cakupan baru yang diuji
 
-- `src/App.jsx`: struktur identitas sidebar diubah dari teks `truncate` satu baris menjadi blok nama adaptif dua baris.
-- `src/index.css`: menambahkan aturan wrapping, line clamp dua baris, ukuran font adaptif, tinggi header fleksibel, dan lebar sidebar desktop 288 px.
-- `tests/v522-sidebar-branding.test.mjs`: regression test khusus nama cabang panjang.
-- Versi aplikasi, cache service worker, workflow Android/Windows, dokumentasi, dan catatan rilis dinaikkan ke 5.2.3.
+- SKU otomatis watt: `BM-PHI-LED-006`, `BM-PHI-LED-010`, dan suffix anti-duplikasi.
+- Barcode kemasan bersama menghasilkan daftar pilihan varian.
+- SKU/barcode internal langsung memilih satu varian.
+- Produk varian dikelompokkan di katalog tetapi tetap menyimpan stok sebagai productId/SKU terpisah.
+- Editor Produk Induk + Varian, validasi kode, stok awal, harga, dan pengarsipan aman.
+- Pembelian/restok, kasir, transfer, opname, refund, HPP, dan laporan tetap memakai record varian biasa sehingga alur lama tidak diputus.
+- Label barcode internal memakai SVG Code 39 tanpa layanan eksternal.
 
-## Hasil pemeriksaan
+## Catatan build produksi
 
-```text
-Core tests             : 101/101 lulus
-Static audit           : lulus
-JS/JSX/MJS diperiksa   : 67 file
-JSON valid             : 4 file
-Secret/private key scan: lulus
-Firestore paid service : tidak ditemukan
-```
-
-## Batas pemeriksaan lokal
-
-`npm install` tidak selesai dalam batas waktu lingkungan penyusunan, sehingga kompilasi Vite produksi tidak diklaim sebagai hasil lokal. Workflow GitHub Actions `test-only` tetap menjadi gerbang kompilasi final sebelum membuat installer.
-
-## Firebase
-
-Tidak ada perubahan Firestore Rules, indexes, Storage, Functions, Blaze, atau billing.
+`npm install` pada lingkungan penyusunan tidak selesai karena akses registry mengalami timeout. Karena itu, kompilasi Vite/Electron/Capacitor final harus dikonfirmasi oleh workflow GitHub Actions `test-only`, `windows-release`, dan `android-release`. Tidak ada kegagalan source yang ditemukan oleh test, audit, atau parser lokal.

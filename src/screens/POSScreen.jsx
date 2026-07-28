@@ -32,6 +32,7 @@ export default function POSScreen() {
   const [customOpen, setCustomOpen] = useState(false);
   const [editingLine, setEditingLine] = useState(null);
   const [choosingProduct, setChoosingProduct] = useState(null);
+  const [barcodeChoices, setBarcodeChoices] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [heldSaleId, setHeldSaleId] = useState(null);
   const [scanNotice, setScanNotice] = useState('');
@@ -56,7 +57,7 @@ export default function POSScreen() {
     const term = search.toLowerCase();
     return product.active !== false && product.available !== false &&
       (category === 'Semua' || product.category === category) && (!favoritesOnly || product.favorite) &&
-      (!term || product.name.toLowerCase().includes(term) || String(product.sku || '').toLowerCase().includes(term) || String(product.barcode || '').includes(term));
+      (!term || product.name.toLowerCase().includes(term) || String(product.parentName || '').toLowerCase().includes(term) || String(product.variantName || '').toLowerCase().includes(term) || String(product.sku || '').toLowerCase().includes(term) || String(product.barcode || '').toLowerCase().includes(term) || String(product.sharedBarcode || '').toLowerCase().includes(term));
   }), [scoped.products, search, category, favoritesOnly]);
 
   const customer = scoped.customers.find(item => item.id === customerId) || scoped.customers[0];
@@ -103,7 +104,9 @@ export default function POSScreen() {
       lineId: generateId('LINE'), productId: product.id, name: product.name, category: product.category, sku: product.sku, barcode: product.barcode,
       qty, baseQty: qty * factor, unit, factor, quantityStep, allowFractional: product.allowFractional === true && unit === product.baseUnit,
       basePrice: Math.round(price), modifierAmount: 0, price: Math.round(price), modalPrice: Number(product.modalPrice || 0) * factor,
-      itemDiscount: 0, note: '', variant: options.variant || product.variants?.[0]?.name || '', modifiers: [], bundleItems: product.bundleItems || []
+      itemDiscount: 0, note: '', variant: options.variant || product.variants?.[0]?.name || '', variantName: product.variantName || '',
+      variantGroupId: product.variantGroupId || '', sharedBarcode: product.sharedBarcode || '', parentName: product.parentName || '',
+      modifiers: [], bundleItems: product.bundleItems || []
     };
     setCart(previous => {
       const existing = previous.find(item => item.productId === line.productId && item.unit === line.unit && item.variant === line.variant && !item.note && !item.itemDiscount);
@@ -117,6 +120,11 @@ export default function POSScreen() {
     if (!result) {
       setScanNotice(`Barcode/SKU "${String(rawCode || '').trim()}" tidak ditemukan.`);
       return false;
+    }
+    if (result.ambiguous) {
+      setBarcodeChoices({ code: String(rawCode || '').trim(), matches: result.matches || [] });
+      setScanNotice(`Barcode ditemukan pada ${result.matches?.length || 0} varian. Pilih watt/ukuran yang benar.`);
+      return true;
     }
     const tierPrice = priceFor(result.product, saleType);
     const options = { ...result.options };
@@ -149,13 +157,14 @@ export default function POSScreen() {
         else if (scannerOpen) setScannerOpen(false);
         else if (customOpen) setCustomOpen(false);
         else if (editingLine) setEditingLine(null);
+        else if (barcodeChoices) setBarcodeChoices(null);
         else if (choosingProduct) setChoosingProduct(null);
         else if (mobileCart) setMobileCart(false);
       }
     };
     window.addEventListener('keydown', handleDesktopShortcuts);
     return () => window.removeEventListener('keydown', handleDesktopShortcuts);
-  }, [cart.length, paymentOpen, holdOpen, splitOpen, scannerOpen, customOpen, editingLine, choosingProduct, mobileCart]);
+  }, [cart.length, paymentOpen, holdOpen, splitOpen, scannerOpen, customOpen, editingLine, choosingProduct, barcodeChoices, mobileCart]);
 
   useEffect(() => {
     const resetBufferSoon = () => {
@@ -164,7 +173,7 @@ export default function POSScreen() {
     };
     const handleScannerKeyboard = event => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || isEditableTarget(event.target)) return;
-      if (paymentOpen || holdOpen || splitOpen || scannerOpen || customOpen || editingLine || choosingProduct || receipt) return;
+      if (paymentOpen || holdOpen || splitOpen || scannerOpen || customOpen || editingLine || choosingProduct || barcodeChoices || receipt) return;
       const now = performance.now();
       if (now - scannerLastKeyAtRef.current > 120) scannerBufferRef.current = '';
       scannerLastKeyAtRef.current = now;
@@ -189,7 +198,7 @@ export default function POSScreen() {
       window.clearTimeout(scannerBufferTimerRef.current);
       window.clearTimeout(scanNoticeTimerRef.current);
     };
-  }, [scoped.products, saleType, paymentOpen, holdOpen, splitOpen, scannerOpen, customOpen, editingLine, choosingProduct, receipt]);
+  }, [scoped.products, saleType, paymentOpen, holdOpen, splitOpen, scannerOpen, customOpen, editingLine, choosingProduct, barcodeChoices, receipt]);
 
   const updateLine = updated => setCart(previous => previous.map(line => line.lineId === updated.lineId ? updated : line));
   const changeQty = (lineId, direction) => setCart(previous => previous.map(line => {
@@ -296,11 +305,35 @@ export default function POSScreen() {
       {paymentOpen && <PaymentModal total={totals.total} methods={activePaymentMethods} configs={paymentDisplayConfig} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
-      {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={(product, options = {}) => { addProduct(product, options); setScannerOpen(false); }}/>}      
+      {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={result => {
+        setScannerOpen(false);
+        if (result?.ambiguous) setBarcodeChoices({ code: result.code, matches: result.matches || [] });
+        else if (result?.product) addProduct(result.product, result.options || {});
+      }}/>}      
+      {barcodeChoices && <VariantBarcodeChoiceModal code={barcodeChoices.code} matches={barcodeChoices.matches} saleType={saleType} onClose={() => setBarcodeChoices(null)} onSelect={match => { addProduct(match.product, match.options || {}); setBarcodeChoices(null); setScanNotice(`${match.product.name} ditambahkan ke keranjang.`); }}/>}      
       {customOpen && <CustomItemModal onClose={() => setCustomOpen(false)} onAdd={line => { setCart(previous => [...previous, line]); setCustomOpen(false); }}/>}      
       {receipt && <ReceiptModal sale={receipt} configs={receiptDisplayConfig} onClose={() => setReceipt(null)}/>}      
     </div>
   );
+}
+
+
+function VariantBarcodeChoiceModal({ code, matches, saleType, onClose, onSelect }) {
+  return <Modal title="Pilih Varian Produk" onClose={onClose} size="md">
+    <div className="space-y-3">
+      <Card className="p-3 bg-blue-50 border-blue-100"><p className="text-xs text-blue-700">Barcode kemasan bersama</p><p className="font-black text-blue-900 font-mono">{code}</p><p className="text-xs text-blue-700 mt-1">Pilih watt, ukuran, atau warna yang sedang dijual. Scan barcode internal/SKU untuk masuk langsung tanpa pilihan.</p></Card>
+      <div className="space-y-2 max-h-[55vh] overflow-y-auto custom-scrollbar">
+        {matches.map(match => {
+          const product = match.product;
+          const price = priceFor(product, saleType);
+          const low = Number(product.stock || 0) <= Number(product.minStock || 0);
+          return <button key={product.id} type="button" onClick={() => onSelect(match)} disabled={product.trackStock !== false && Number(product.stock || 0) <= 0} className="w-full rounded-2xl border bg-white p-4 text-left hover:border-emerald-400 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed">
+            <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-black text-gray-900">{product.variantName || product.name}</p><p className="text-xs text-gray-500 mt-1">{product.parentName || product.name} · SKU {product.sku}</p><p className="text-[11px] text-gray-400 mt-1">Barcode internal {product.barcode}</p></div><div className="text-right shrink-0"><p className="font-black text-emerald-700">{formatRp(price)}</p><p className={`text-xs font-bold mt-1 ${low ? 'text-red-600' : 'text-blue-600'}`}>Stok {formatQuantity(product.stock)} {product.baseUnit}</p></div></div>
+          </button>;
+        })}
+      </div>
+    </div>
+  </Modal>;
 }
 
 function ProductChoiceModal({ product, saleType, onClose, onAdd }) {
@@ -485,7 +518,7 @@ function ScannerModal({ products, onClose, onDetected }) {
     }
     detectedRef.current = true;
     stopCamera();
-    onDetected(result.product, result.options);
+    onDetected(result);
     return true;
   };
 

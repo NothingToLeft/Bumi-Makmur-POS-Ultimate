@@ -1,4 +1,4 @@
-# Bumi Makmur POS v5.2.3 — Purchase & Restock Responsive Layout Fix
+# Bumi Makmur POS v5.3.0 — Purchase & Restock Responsive Layout Fix
 
 ## Perbaikan utama
 

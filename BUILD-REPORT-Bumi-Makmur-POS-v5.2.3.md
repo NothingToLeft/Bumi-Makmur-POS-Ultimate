@@ -1,4 +1,4 @@
-# Build & QA Report — Bumi Makmur POS v5.2.3
+# Build & QA Report — Bumi Makmur POS v5.3.0
 
 ## Fokus audit
 

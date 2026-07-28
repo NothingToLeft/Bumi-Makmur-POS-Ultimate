@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.3.0 — Product Variants & Shared Barcode
+
+- Menambahkan Produk Induk + Varian dengan SKU, harga, HPP, stok, minimum, rak, dan status terpisah.
+- Barcode kemasan yang sama menampilkan pemilih varian; SKU/barcode internal langsung memilih varian.
+- Menambahkan SKU otomatis seperti `BM-PHI-LED-006`, `BM-PHI-LED-010`, `BM-PHI-LED-012`, dan `BM-PHI-LED-015`.
+- Menambahkan label barcode CODE39 internal yang dapat dipindai.
+- Menjaga pembelian, transfer, opname, checkout, refund, HPP, dan laporan tetap terpisah per varian.
+
 ## v5.2.3 — Purchase & Restock Responsive Layout Fix
 
 - Memperbaiki tombol **Tambah ke Daftar** yang meluber dan menimpa panel Ringkasan.
