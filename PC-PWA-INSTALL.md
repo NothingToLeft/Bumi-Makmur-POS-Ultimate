@@ -3,8 +3,8 @@
 ## Pilihan utama: Desktop EXE/MSI
 
 1. Buka GitHub Actions.
-2. Jalankan **Build Bumi Makmur POS Desktop v5.3.0 → windows-release**.
-3. Unduh artifact `Bumi-Makmur-POS-Desktop-v5.3.0-Windows`.
+2. Jalankan **Build Bumi Makmur POS Desktop v5.4.0 → windows-release**.
+3. Unduh artifact `Bumi-Makmur-POS-Desktop-v5.4.0-Windows`.
 4. Instal file `.exe` untuk penggunaan biasa, atau `.msi` untuk administrasi Windows.
 5. Login cloud sekali lalu gunakan PIN perangkat.
 

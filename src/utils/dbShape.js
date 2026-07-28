@@ -1,4 +1,5 @@
 import { normalizeQuantityStep, recommendedQuantityStep } from './fractionalUnits.js';
+import { normalizeConversionRows, sortCategories, sortProductsByName } from './productCatalog.js';
 
 const clone = value => value == null
   ? value
@@ -31,11 +32,7 @@ export function normalizeDbShape(input, seed, version = '') {
   }
 
   next.products = (next.products || []).map(product => {
-    const conversions = Array.isArray(product.conversions)
-      ? product.conversions
-        .filter(item => item?.unit && Number(item.factor) > 0)
-        .map(item => ({ ...item, factor: roundQuantity(item.factor) }))
-      : [];
+    const conversions = normalizeConversionRows(product.conversions || [], product.baseUnit || 'pcs');
     const fractionalConversionSteps = conversions
       .map(item => Number(item.factor))
       .filter(factor => factor > 0 && factor < 1);
@@ -60,5 +57,7 @@ export function normalizeDbShape(input, seed, version = '') {
       conversions
     };
   });
+  next.products = sortProductsByName(next.products);
+  next.categories = sortCategories(next.categories || []);
   return next;
 }

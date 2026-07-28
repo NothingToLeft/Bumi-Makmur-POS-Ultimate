@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.3.0
+# Bumi Makmur POS FreeSync v5.4.0
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.3.0 menambahkan Produk Induk + Varian, shared barcode, SKU otomatis, dan barcode internal. Barang seperti Philips LED 6W, 10W, 12W, dan 15W dapat memakai barcode kemasan yang sama tetapi tetap memiliki harga, HPP, stok, rak, dan laporan terpisah.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.4.0 mematangkan katalog profesional: daftar barang otomatis rapi berdasarkan nama, pemilih barang dapat dicari, kategori dapat dikelola dari aplikasi, satu produk dapat dijual sebagai pcs/pack/dus/box/roll dengan harga khusus, login Owner tidak lagi meminta cabang, dan cabang kosong dapat dihapus sementara cabang bersejarah diarsipkan secara aman. Produk Induk + Varian, shared barcode, SKU otomatis, barcode internal, penjualan pecahan, dan seluruh fitur v5.3 tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,7 +11,39 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rili
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Fitur utama v5.3.0
+## Fitur utama v5.4.0
+
+### Katalog otomatis dan pemilih barang profesional
+
+- Produk selalu diurutkan berdasarkan nama dengan urutan angka natural.
+- Pencarian mendukung nama, SKU, barcode, kategori, dan lokasi rak.
+- Pemilih barang yang sama dipakai pada stok, transfer, pembelian, dan pesanan online.
+
+### Harga khusus per satuan jual
+
+Satu stok dasar dapat dijual dalam beberapa kemasan dengan harga berbeda. Contoh:
+
+```text
+Kabel Ties
+Satuan dasar : pcs
+Harga 1 pcs  : Rp500
+1 pack       : 100 pcs
+Harga 1 pack : Rp45.000
+```
+
+Menjual satu pack mengurangi stok 100 pcs, tetapi harga checkout memakai Rp45.000. Harga eceran, grosir, dan proyek dapat diatur untuk setiap satuan jual.
+
+### Kategori dinamis
+
+- Kategori baru dapat dibuat saat menambah barang.
+- Owner dapat mengganti nama, menggabungkan, dan menghapus kategori secara aman.
+- Produk yang memakai kategori lama dipindahkan ke kategori pengganti.
+
+### Owner lintas cabang dan penghapusan aman
+
+- Owner login tanpa memilih cabang; cabang aktif dipilih setelah masuk.
+- Cabang kosong dapat dihapus permanen.
+- Cabang dengan riwayat diarsipkan dan dapat dipulihkan agar audit tidak hilang.
 
 ### Produk Induk + Varian dan Shared Barcode
 
@@ -92,7 +124,7 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v5.3.0.
+2. Ekstrak ZIP v5.4.0.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
@@ -109,7 +141,7 @@ Bumi Makmur POS v5.2 Smart Inventory, Fractional Sales, and Employee Picker
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.3.0
+→ Build Bumi Makmur POS v5.4.0
 → test-only
 ```
 
@@ -117,7 +149,7 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Deploy Firestore Rules — wajib
 
-v5.3.0 menambahkan dokumen `publicEmployees` untuk dropdown nama karyawan. Jalankan:
+v5.4.0 menambahkan dokumen `publicEmployees` untuk dropdown nama karyawan. Jalankan:
 
 ```text
 Actions
@@ -131,7 +163,7 @@ Tetap memakai Firebase Spark gratis.
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.3.0
+→ Build Bumi Makmur POS v5.4.0
 → android-release
 ```
 
@@ -141,11 +173,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v5.3.0
+→ Build Bumi Makmur POS Desktop v5.4.0
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.3.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.4.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 

@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "5.3.0",
+  "version": "5.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -45,7 +45,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v5.3.0: Produk Induk + Varian, shared barcode, SKU otomatis, label barcode internal, penjualan pecahan, Windows EXE/MSI, Android, Web, dan Firebase Spark FreeSync.",
+  "description": "Bumi Makmur POS v5.4.0: Katalog alfabetis natural, pencarian barang profesional, kategori dinamis, harga khusus pack/dus/box/roll, Produk Induk + Varian, shared barcode, SKU otomatis, dan penjualan pecahan, Windows EXE/MSI, Android, Web, dan Firebase Spark FreeSync.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

@@ -7,6 +7,7 @@ import {
   priceForUnit, quantityStepLabel, toBaseQuantity
 } from '../utils/fractionalUnits.js';
 import { Button, Card, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, SearchBox, Select, StatusBadge, Textarea } from '../components/ui.jsx';
+import ProductPicker from '../components/ProductPicker.jsx';
 
 export default function PurchasesScreen() {
   const { db, scoped, hasPermission, savePurchase, returnPurchase } = usePos();
@@ -175,7 +176,7 @@ function PurchaseForm({ products, suppliers, onClose, onSave }) {
 
         <Card className="p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-12 gap-3 mb-4 items-end purchase-entry-grid">
-            <Field label="Barang" className="sm:col-span-2 xl:col-span-6"><Select value={productId} onChange={event => chooseProduct(event.target.value)}>{activeProducts.map(product => <option key={product.id} value={product.id}>{product.name} · stok {formatQuantity(product.stock)} {product.baseUnit}</option>)}</Select></Field>
+            <ProductPicker products={activeProducts} value={productId} onChange={id => chooseProduct(id)} label="Barang" className="sm:col-span-2 xl:col-span-6"/>
             <Field label="Satuan Beli" className="xl:col-span-3"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && availableUnits(selectedProduct).map(item => <option key={item.unit} value={item.unit}>{item.unit}{item.factor !== 1 ? ` = ${formatQuantity(item.factor)} ${selectedProduct.baseUnit}` : ''}</option>)}</Select></Field>
             <Field label="Jumlah" hint={selectedStep < 1 ? quantityStepLabel(selectedStep, unit) : ''} className="xl:col-span-3"><Input type="number" min={selectedStep} step={selectedStep} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: selectedStep < 1, step: selectedStep, min: selectedStep }))}/></Field>
             <Field label={`Harga beli per ${unit}`} className="xl:col-span-6"><MoneyInput value={unitPrice} onValueChange={setUnitPrice}/></Field>

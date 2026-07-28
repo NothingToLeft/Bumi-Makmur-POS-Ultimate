@@ -22,7 +22,7 @@ test('kabel memakai kelipatan setengah meter dan nilai 0,499 dinormalisasi menja
 test('migrasi memperbaiki kelipatan kabel lama yang hampir setengah meter', () => {
   const migrated = normalizeDbShape({
     products: [{ id: 'KABEL-LAMA', name: 'Kabel NYM', category: 'Listrik', baseUnit: 'meter', allowFractional: true, quantityStep: 0.499, stock: 20, minStock: 5, conversions: [{ unit: 'roll', factor: 50 }] }]
-  }, { meta: {}, configs: {}, categories: [], units: [], products: [] }, '5.3.0');
+  }, { meta: {}, configs: {}, categories: [], units: [], products: [] }, '5.4.0');
   assert.equal(migrated.products[0].quantityStep, 0.5);
 });
 
@@ -31,7 +31,7 @@ test('form barang tidak lagi menerima angka kelipatan bebas yang membingungkan',
   assert.match(products, /Kelipatan penjualan/);
   assert.match(products, /QUANTITY_STEP_PRESETS/);
   assert.match(products, /0,5 meter/);
-  assert.match(products, /Preset Kabel: 1 roll = 50 meter/);
+  assert.match(products, /Preset roll 50 meter/);
   assert.doesNotMatch(products, /Langkah jumlah terkecil/);
   assert.doesNotMatch(products, /min="0\.001" max="1" step="0\.001" value=\{form\.quantityStep\}/);
 });

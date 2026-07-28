@@ -1,5 +1,52 @@
 # Changelog
 
+## v5.4.0 — Smart Catalog, Multi-Unit Pricing & Owner Flow
+
+### Katalog dan pencarian barang
+
+- Semua daftar barang kini diurutkan otomatis berdasarkan nama dengan urutan natural: `Philips 6W`, `Philips 10W`, `Philips 12W`, lalu `Philips 15W`.
+- Mengganti pemilih barang Android yang panjang dengan pemilih profesional berisi pencarian nama, SKU, barcode, kategori, dan lokasi rak.
+- Pemilih baru digunakan pada penyesuaian stok, transfer cabang, pembelian/restok, dan pesanan online.
+
+### Satuan jual dengan harga khusus
+
+- Satu produk tetap memakai satu stok dasar, tetapi setiap satuan jual dapat memiliki harga sendiri.
+- Contoh Kabel Ties: `1 pcs = Rp500`, `1 pack = 100 pcs`, dan harga pack dapat ditetapkan `Rp45.000`, bukan wajib `100 × Rp500`.
+- Mendukung harga eceran, grosir, dan proyek untuk satuan `pcs`, `pack`, `dus`, `box`, `roll`, dan satuan khusus lain.
+- Penjualan kemasan mengurangi stok dasar secara tepat tanpa membuat produk ganda.
+
+### Kategori produk dinamis
+
+- Menambahkan kategori langsung dari form Tambah Barang.
+- Menambahkan Pengelola Kategori untuk membuat, mengganti nama, menggabungkan, dan menghapus kategori secara aman.
+- Kategori yang sudah dipakai harus dipindahkan ke kategori pengganti agar produk tidak kehilangan klasifikasi.
+
+### Login Owner dan cabang
+
+- Owner tidak lagi memilih cabang pada halaman login karena hanya ada satu akun Owner utama.
+- Setelah masuk, Owner dapat mengganti cabang aktif dari pemilih cabang di bagian atas aplikasi.
+- Login karyawan tetap memilih cabang, memilih nama dari daftar, lalu memasukkan PIN.
+
+### Hapus dan arsip cabang
+
+- Owner dapat menghapus permanen cabang baru yang masih kosong.
+- Cabang yang sudah memiliki transaksi, stok, pembelian, shift, atau riwayat lain akan diarsipkan, bukan dihapus, agar audit dan laporan tetap aman.
+- Cabang yang diarsipkan hilang dari login dan operasional harian, tetapi dapat dipulihkan kembali.
+- Sistem mencegah penghapusan cabang aktif terakhir.
+
+### Kompatibilitas
+
+- Produk Induk + Varian, shared barcode, SKU otomatis, barcode internal, penjualan pecahan, QRIS cabang, Windows, Android, Web/PWA, dan Firebase Spark tetap dipertahankan.
+- Tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
+- Tidak memerlukan perubahan Firestore Rules untuk pembaruan ini.
+
+### QA
+
+- Core/regression tests: **111/111 lulus**.
+- Static audit: **lulus**.
+- JS/JSX source parser: **42 file, 0 error sintaks**.
+- JSON: **4 file valid**.
+
 ## v5.3.0 — Product Variants & Shared Barcode
 
 - Menambahkan Produk Induk + Varian dengan SKU, harga, HPP, stok, minimum, rak, dan status terpisah.

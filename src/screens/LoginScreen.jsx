@@ -46,7 +46,7 @@ export default function LoginScreen() {
   const selectedBranchName = branches.find(branch => branch.id === selectedBranchId)?.name || 'Pilih cabang';
   const loginHeader = loginAppearance.headerText || loginDirectory?.businessName || 'BUMI MAKMUR';
   const loginSubheader = renderLoginTemplate(loginAppearance.subheaderTemplate, {
-    branch: selectedBranchName,
+    branch: mode === 'employee' ? selectedBranchName : 'Akses seluruh cabang',
     version: APP_VERSION,
     business: loginDirectory?.businessName || 'BUMI MAKMUR'
   });
@@ -117,7 +117,11 @@ export default function LoginScreen() {
         if (!result?.cancelled) setError(result?.error || 'Biometrik tidak berhasil. Gunakan PIN.');
         return;
       }
-      const loginResult = await loginWithBiometric(deviceSettings.biometricUserId, activeRole.expectedRole, { branchId: selectedBranchId });
+      const loginResult = await loginWithBiometric(
+        deviceSettings.biometricUserId,
+        activeRole.expectedRole,
+        mode === 'employee' ? { branchId: selectedBranchId } : {}
+      );
       if (!loginResult.success) setError(loginResult.message || 'Akun biometrik tidak tersedia untuk halaman ini.');
     } catch (biometricError) {
       setError(biometricError?.message || 'Biometrik gagal. Gunakan PIN.');
@@ -138,7 +142,7 @@ export default function LoginScreen() {
       try {
         const result = mode === 'employee'
           ? await loginEmployee({ loginName: employeeLoginName, pin, branchId: selectedBranchId })
-          : await login(pin, 'owner', { branchId: selectedBranchId });
+          : await login(pin, 'owner');
         if (!cancelled && !result.success) {
           setError(result.message || 'Data login tidak dikenali.');
           setPin('');
@@ -234,7 +238,6 @@ export default function LoginScreen() {
         <ConnectOwnerModal
           onClose={() => setShowOwnerConnect(false)}
           onConnect={connectAccount}
-          branchId={selectedBranchId}
         />
       )}
       {showSetup && (
@@ -300,11 +303,16 @@ function RoleLogin({
         <div><h2 className="font-black text-lg">{role.title}</h2><p className="text-xs leading-relaxed mt-0.5">{role.subtitle}</p></div>
       </div>
 
-      <Field label="Toko / Cabang" hint={directoryLoading ? 'Memuat daftar cabang...' : 'Cabang menentukan data dan stok yang dibuka.'}>
+      {!isOwner && <Field label="Toko / Cabang" hint={directoryLoading ? 'Memuat daftar cabang...' : 'Cabang menentukan data, stok, dan daftar karyawan yang dibuka.'}>
         <Select value={selectedBranchId} onChange={event => onBranchChange(event.target.value)} disabled={busy || directoryLoading}>
           {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
         </Select>
-      </Field>
+      </Field>}
+
+      {isOwner && <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-900">
+        <p className="font-black">Satu akun Owner untuk seluruh cabang</p>
+        <p className="text-xs mt-1 leading-relaxed">Owner tidak perlu memilih cabang saat login. Setelah masuk, cabang aktif dapat diganti dari pemilih cabang di bagian atas aplikasi.</p>
+      </div>}
 
       {!isOwner && (
         <Field label="Nama Karyawan" hint={employeesLoading ? 'Memuat daftar karyawan aktif...' : 'Daftar mengikuti cabang yang dipilih dan diperbarui otomatis oleh Owner/Manager.'}>
@@ -353,7 +361,7 @@ function BusyOverlay({ label }) {
   return <div className="absolute inset-0 bg-white/95 z-20 flex flex-col items-center justify-center p-6 text-center"><Loader2 className="animate-spin text-emerald-600" size={42}/><p className="font-bold mt-3 text-gray-700">{label}</p></div>;
 }
 
-function ConnectOwnerModal({ onClose, onConnect, branchId }) {
+function ConnectOwnerModal({ onClose, onConnect }) {
   const [form, setForm] = useState({ email: '', password: '', pin: '', confirmPin: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -362,7 +370,7 @@ function ConnectOwnerModal({ onClose, onConnect, branchId }) {
     if (!/^\d{4}$/.test(form.pin)) return setError('Buat PIN Owner 4 digit pada perangkat ini.');
     if (form.pin !== form.confirmPin) return setError('Konfirmasi PIN tidak sama.');
     setBusy(true); setError('');
-    try { await onConnect({ ...form, branchId }); onClose(); }
+    try { await onConnect(form); onClose(); }
     catch (connectError) { setError(friendlyCloudError(connectError, 'Akun Owner gagal dihubungkan.')); }
     finally { setBusy(false); }
   };

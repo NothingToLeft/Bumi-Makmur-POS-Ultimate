@@ -3,12 +3,14 @@ import { ScanLine, ShoppingCart, Plus, Minus, Trash2, Package, Save, ReceiptText
 import { usePos } from '../store/PosContext.jsx';
 import { formatRp, generateId } from '../utils/helpers.js';
 import {
-  formatQuantity, normalizeQuantity, normalizeQuantityStep, quickQuantityOptions, quantityStepLabel
+  formatQuantity, normalizeQuantity, normalizeQuantityStep, quickQuantityOptions, quantityStepLabel,
+  priceForSaleUnit, saleUnitOptions
 } from '../utils/fractionalUnits.js';
 import { Badge, Button, Card, Field, Input, Modal, MoneyInput, SearchBox, Select, Textarea } from '../components/ui.jsx';
 import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
 import { copyReceiptText, getReceiptLogo, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
 import { findProductByCode, isEditableTarget } from '../utils/barcode.js';
+import { sortProductsByName } from '../utils/productCatalog.js';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
@@ -53,12 +55,12 @@ export default function POSScreen() {
     return () => window.removeEventListener('bm-load-bill', handleLoad);
   }, [scoped.customers]);
 
-  const filtered = useMemo(() => scoped.products.filter(product => {
+  const filtered = useMemo(() => sortProductsByName(scoped.products.filter(product => {
     const term = search.toLowerCase();
     return product.active !== false && product.available !== false &&
       (category === 'Semua' || product.category === category) && (!favoritesOnly || product.favorite) &&
       (!term || product.name.toLowerCase().includes(term) || String(product.parentName || '').toLowerCase().includes(term) || String(product.variantName || '').toLowerCase().includes(term) || String(product.sku || '').toLowerCase().includes(term) || String(product.barcode || '').toLowerCase().includes(term) || String(product.sharedBarcode || '').toLowerCase().includes(term));
-  }), [scoped.products, search, category, favoritesOnly]);
+  })), [scoped.products, search, category, favoritesOnly]);
 
   const customer = scoped.customers.find(item => item.id === customerId) || scoped.customers[0];
   const branchPaymentProfile = scoped.paymentProfile || null;
@@ -99,7 +101,7 @@ export default function POSScreen() {
     const unit = options.unit || product.baseUnit;
     const quantityStep = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true) : 1;
     const qty = normalizeQuantity(options.qty || quantityStep, { allowFractional: quantityStep < 1, step: quantityStep, min: quantityStep });
-    const price = options.price ?? priceFor(product, saleType) * factor;
+    const price = options.price ?? priceForSaleUnit(product, unit, saleType);
     const line = {
       lineId: generateId('LINE'), productId: product.id, name: product.name, category: product.category, sku: product.sku, barcode: product.barcode,
       qty, baseQty: qty * factor, unit, factor, quantityStep, allowFractional: product.allowFractional === true && unit === product.baseUnit,
@@ -129,8 +131,7 @@ export default function POSScreen() {
     const tierPrice = priceFor(result.product, saleType);
     const options = { ...result.options };
     if (options.unit) {
-      const conversion = result.product.conversions?.find(item => item.unit === options.unit);
-      options.price = tierPrice * Number(conversion?.factor || 1);
+      options.price = priceForSaleUnit(result.product, options.unit, saleType);
     } else if (options.variant) {
       const variant = result.product.variants?.find(item => item.name === options.variant);
       options.price = tierPrice + Number(variant?.priceDelta || 0);
@@ -301,7 +302,7 @@ export default function POSScreen() {
       {mobileCart && <div className="md:hidden absolute inset-0 z-40 bg-white flex flex-col"><div className="p-3 border-b flex items-center justify-between"><Button variant="ghost" onClick={() => setMobileCart(false)}>← Produk</Button><b>Keranjang</b><span/></div><div className="flex-1 min-h-0">{cartPanel}</div></div>}
 
       {choosingProduct && <ProductChoiceModal product={choosingProduct} saleType={saleType} onClose={() => setChoosingProduct(null)} onAdd={options => { addProduct(choosingProduct, options); setChoosingProduct(null); }}/>}      
-      {editingLine && <LineEditModal line={editingLine} product={scoped.products.find(item => item.id === editingLine.productId)} onClose={() => setEditingLine(null)} onSave={line => { updateLine(line); setEditingLine(null); }}/>}      
+      {editingLine && <LineEditModal line={editingLine} product={scoped.products.find(item => item.id === editingLine.productId)} saleType={saleType} onClose={() => setEditingLine(null)} onSave={line => { updateLine(line); setEditingLine(null); }}/>}      
       {paymentOpen && <PaymentModal total={totals.total} methods={activePaymentMethods} configs={paymentDisplayConfig} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
@@ -340,31 +341,33 @@ function ProductChoiceModal({ product, saleType, onClose, onAdd }) {
   const [variant, setVariant] = useState(product.variants?.[0]?.name || '');
   const [unit, setUnit] = useState(product.baseUnit);
   const [qty, setQty] = useState(product.allowFractional ? normalizeQuantityStep(product.quantityStep, true) : 1);
-  const conversion = product.conversions?.find(item => item.unit === unit);
-  const factor = conversion ? Number(conversion.factor) : 1;
+  const units = saleUnitOptions(product, saleType);
+  const selectedUnit = units.find(item => item.unit === unit) || units[0];
+  const factor = Number(selectedUnit?.factor || 1);
   const step = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true) : 1;
-  const price = priceFor(product, saleType) * factor;
+  const price = Number(selectedUnit?.price || priceForSaleUnit(product, unit, saleType));
   const safeQty = normalizeQuantity(qty, { allowFractional: step < 1, step, min: step });
   const baseQty = safeQty * factor;
   const quickOptions = quickQuantityOptions(step);
   const submit = () => onAdd({ variant, unit, price, qty: safeQty });
-  return <Modal title="Pilih Jumlah & Satuan" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit} disabled={safeQty <= 0}>Tambah</Button></>}><div className="space-y-3"><div><p className="font-bold text-gray-800">{product.name}</p><p className="text-xs text-gray-500">Stok {formatQuantity(product.stock)} {product.baseUnit}</p></div>{product.variants?.length > 0 && <Field label="Varian"><Select value={variant} onChange={event => setVariant(event.target.value)}>{product.variants.map(item => <option key={item.id || item.name} value={item.name}>{item.name}</option>)}</Select></Field>}<Field label="Satuan"><Select value={unit} onChange={event => { const nextUnit = event.target.value; const nextStep = nextUnit === product.baseUnit && product.allowFractional ? normalizeQuantityStep(product.quantityStep, true) : 1; setUnit(nextUnit); setQty(nextStep); }}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions?.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {formatQuantity(item.factor)} {product.baseUnit}</option>)}</Select></Field><Field label={`Jumlah (${unit})`} hint={step < 1 ? `${quantityStepLabel(step, unit)}. Jumlah yang diketik otomatis disesuaikan ke kelipatan ini.` : 'Gunakan jumlah satuan utuh.'}><Input type="number" inputMode="decimal" min={step} step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(safeQty)}/></Field>{step < 1 && <div><p className="text-[11px] font-bold text-gray-500 mb-2">Pilihan cepat</p><div className="grid grid-cols-3 gap-2">{quickOptions.map(value => <button key={value} type="button" onClick={() => setQty(value)} className={`min-h-[42px] rounded-xl border text-sm font-black ${Number(safeQty) === Number(value) ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-gray-200 text-gray-700'}`}>{formatQuantity(value)} {unit}</button>)}</div></div>}<Card className="p-3 bg-emerald-50 text-center"><p className="text-xs text-emerald-700">{formatQuantity(safeQty)} {unit} = {formatQuantity(baseQty)} {product.baseUnit}</p><p className="text-xl font-black text-emerald-800">{formatRp(price * safeQty)}</p><p className="text-[11px] text-emerald-700">Harga per {unit}: {formatRp(price)}</p></Card></div></Modal>;
+  return <Modal title="Pilih Jumlah & Satuan" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit} disabled={safeQty <= 0}>Tambah</Button></>}><div className="space-y-3"><div><p className="font-bold text-gray-800">{product.name}</p><p className="text-xs text-gray-500">Stok {formatQuantity(product.stock)} {product.baseUnit}</p></div>{product.variants?.length > 0 && <Field label="Varian"><Select value={variant} onChange={event => setVariant(event.target.value)}>{product.variants.map(item => <option key={item.id || item.name} value={item.name}>{item.name}</option>)}</Select></Field>}<Field label="Satuan Jual"><Select value={unit} onChange={event => { const nextUnit = event.target.value; const nextStep = nextUnit === product.baseUnit && product.allowFractional ? normalizeQuantityStep(product.quantityStep, true) : 1; setUnit(nextUnit); setQty(nextStep); }}>{units.map(item => <option key={item.unit} value={item.unit}>{item.unit} · {item.factor === 1 ? `1 ${product.baseUnit}` : `${formatQuantity(item.factor)} ${product.baseUnit}`} · {formatRp(item.price)}</option>)}</Select></Field><Field label={`Jumlah (${unit})`} hint={step < 1 ? `${quantityStepLabel(step, unit)}. Jumlah yang diketik otomatis disesuaikan ke kelipatan ini.` : 'Gunakan jumlah satuan utuh.'}><Input type="number" inputMode="decimal" min={step} step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(safeQty)}/></Field>{step < 1 && <div><p className="text-[11px] font-bold text-gray-500 mb-2">Pilihan cepat</p><div className="grid grid-cols-3 gap-2">{quickOptions.map(value => <button key={value} type="button" onClick={() => setQty(value)} className={`min-h-[42px] rounded-xl border text-sm font-black ${Number(safeQty) === Number(value) ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-gray-200 text-gray-700'}`}>{formatQuantity(value)} {unit}</button>)}</div></div>}<Card className="p-3 bg-emerald-50 text-center"><p className="text-xs text-emerald-700">{formatQuantity(safeQty)} {unit} = {formatQuantity(baseQty)} {product.baseUnit}</p><p className="text-xl font-black text-emerald-800">{formatRp(price * safeQty)}</p><p className="text-[11px] text-emerald-700">Harga per {unit}: {formatRp(price)}</p></Card></div></Modal>;
 }
 
-function LineEditModal({ line, product, onClose, onSave }) {
+function LineEditModal({ line, product, saleType, onClose, onSave }) {
   const [form, setForm] = useState({ ...line, basePrice: line.basePrice ?? (line.price - Number(line.modifierAmount || 0)), modifierAmount: Number(line.modifierAmount || 0), modifierName: line.modifiers?.[0]?.name || '' });
   const changeUnit = unit => {
-    const conversion = product?.conversions?.find(item => item.unit === unit);
-    const factor = conversion ? Number(conversion.factor) : 1;
+    const units = saleUnitOptions(product, saleType);
+    const selectedUnit = units.find(item => item.unit === unit) || units[0];
+    const factor = Number(selectedUnit?.factor || 1);
     const oldFactor = Number(form.factor || 1);
-    setForm(previous => { const basePrice = Math.round(previous.basePrice / oldFactor * factor); const quantityStep = unit === product?.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true) : 1; const qty = normalizeQuantity(previous.qty, { allowFractional: quantityStep < 1, step: quantityStep, min: quantityStep }); return { ...previous, unit, factor, qty, quantityStep, allowFractional: unit === product?.baseUnit && product?.allowFractional === true, baseQty: qty * factor, basePrice, price: basePrice + Number(previous.modifierAmount || 0), modalPrice: Math.round(previous.modalPrice / oldFactor * factor) }; });
+    setForm(previous => { const basePrice = Number(selectedUnit?.price || priceForSaleUnit(product, unit, saleType)); const quantityStep = unit === product?.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true) : 1; const qty = normalizeQuantity(previous.qty, { allowFractional: quantityStep < 1, step: quantityStep, min: quantityStep }); return { ...previous, unit, factor, qty, quantityStep, allowFractional: unit === product?.baseUnit && product?.allowFractional === true, baseQty: qty * factor, basePrice, price: basePrice + Number(previous.modifierAmount || 0), modalPrice: Math.round(previous.modalPrice / oldFactor * factor) }; });
   };
   const save = () => {
     const step = Number(form.quantityStep || 1);
     const qty = normalizeQuantity(form.qty, { allowFractional: step < 1, step, min: step });
     onSave({ ...form, qty, baseQty: qty * Number(form.factor || 1) });
   };
-  return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={save}>Simpan</Button></>}><div className="space-y-4"><div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>{(product?.conversions?.length || 0) > 0 && <Field label="Satuan"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}><option value={product.baseUnit}>{product.baseUnit}</option>{product.conversions.map(item => <option key={item.unit} value={item.unit}>{item.unit} = {formatQuantity(item.factor)} {product.baseUnit}</option>)}</Select></Field>}<div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Jumlah" hint={Number(form.quantityStep || 1) < 1 ? quantityStepLabel(form.quantityStep, form.unit) : ''}><Input type="number" inputMode="decimal" min={form.quantityStep || 1} step={form.quantityStep || 1} value={form.qty} onChange={event => setForm(previous => ({...previous, qty:event.target.value}))} onBlur={() => setForm(previous => { const qty = normalizeQuantity(previous.qty, { allowFractional: Number(previous.quantityStep || 1) < 1, step: previous.quantityStep || 1, min: previous.quantityStep || 1 }); return { ...previous, qty, baseQty: qty * Number(previous.factor || 1) }; })}/></Field><Field label="Harga per Satuan"><MoneyInput value={form.price} onValueChange={value => setForm(previous => ({...previous, price:value}))}/></Field></div><Field label="Diskon Item (Rp)"><MoneyInput max={Math.max(0, form.price * Number(form.qty || 0))} value={form.itemDiscount} onValueChange={value => setForm(previous => ({...previous,itemDiscount:value}))}/></Field><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><MoneyInput value={form.modifierAmount || 0} onValueChange={amount => setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]}))}/></Field></div><Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field></div></Modal>;
+  return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={save}>Simpan</Button></>}><div className="space-y-4"><div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>{(product?.conversions?.length || 0) > 0 && <Field label="Satuan Jual"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}>{saleUnitOptions(product, saleType).map(item => <option key={item.unit} value={item.unit}>{item.unit} · {formatQuantity(item.factor)} {product.baseUnit} · {formatRp(item.price)}</option>)}</Select></Field>}<div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Jumlah" hint={Number(form.quantityStep || 1) < 1 ? quantityStepLabel(form.quantityStep, form.unit) : ''}><Input type="number" inputMode="decimal" min={form.quantityStep || 1} step={form.quantityStep || 1} value={form.qty} onChange={event => setForm(previous => ({...previous, qty:event.target.value}))} onBlur={() => setForm(previous => { const qty = normalizeQuantity(previous.qty, { allowFractional: Number(previous.quantityStep || 1) < 1, step: previous.quantityStep || 1, min: previous.quantityStep || 1 }); return { ...previous, qty, baseQty: qty * Number(previous.factor || 1) }; })}/></Field><Field label="Harga per Satuan"><MoneyInput value={form.price} onValueChange={value => setForm(previous => ({...previous, price:value}))}/></Field></div><Field label="Diskon Item (Rp)"><MoneyInput max={Math.max(0, form.price * Number(form.qty || 0))} value={form.itemDiscount} onValueChange={value => setForm(previous => ({...previous,itemDiscount:value}))}/></Field><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><MoneyInput value={form.modifierAmount || 0} onValueChange={amount => setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]}))}/></Field></div><Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field></div></Modal>;
 }
 
 function PaymentModal({ total, methods, configs, onClose, onConfirm }) {

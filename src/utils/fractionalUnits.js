@@ -88,6 +88,29 @@ export function priceForUnit(baseUnitPrice, factor = 1) {
   return Math.max(0, Math.round((Number(baseUnitPrice) || 0) * (Number(factor) || 1)));
 }
 
+
+export function priceForSaleUnit(product, unit = product?.baseUnit, tier = 'retail') {
+  const basePrice = Math.max(0, Math.round(Number(product?.prices?.[tier] ?? product?.prices?.retail ?? 0)));
+  if (!product || !unit || unit === product.baseUnit) return basePrice;
+  const conversion = findConversion(product, unit);
+  const explicit = Number(conversion?.prices?.[tier] ?? conversion?.prices?.retail ?? 0);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
+  return priceForUnit(basePrice, conversionFactor(product, unit));
+}
+
+export function saleUnitOptions(product, tier = 'retail') {
+  if (!product) return [];
+  return [
+    { unit: product.baseUnit, factor: 1, price: priceForSaleUnit(product, product.baseUnit, tier), explicitPrice: true },
+    ...(product.conversions || []).filter(item => item?.unit && Number(item.factor) > 0).map(item => ({
+      ...item,
+      factor: conversionFactor(product, item.unit),
+      price: priceForSaleUnit(product, item.unit, tier),
+      explicitPrice: Number(item?.prices?.[tier] ?? item?.prices?.retail ?? 0) > 0
+    }))
+  ];
+}
+
 export function baseUnitCost(unitPrice, factor = 1) {
   const safeFactor = Number(factor);
   if (!Number.isFinite(safeFactor) || safeFactor <= 0) return Math.max(0, Math.round(Number(unitPrice) || 0));

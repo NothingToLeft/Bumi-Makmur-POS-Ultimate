@@ -40,6 +40,7 @@ import {
 import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
 import { dataUrlByteLength } from '../utils/assetProcessing.js';
 import { normalizeDbShape } from '../utils/dbShape.js';
+import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
 import {
   baseUnitCost as calculateBaseUnitCost, conversionFactor, formatQuantity,
   normalizeQuantityStep, recommendedQuantityStep
@@ -83,8 +84,9 @@ const verifySeedUserPin = async (user, pin) => {
 };
 
 const ACTION_PERMISSIONS = {
-  SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage', BRANCH_UPDATE: 'branches.manage', BRANCH_PAYMENT_UPDATE: 'payments.manage',
+  SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage', BRANCH_UPDATE: 'branches.manage', BRANCH_DELETE: 'branches.manage', BRANCH_RESTORE: 'branches.manage', BRANCH_PAYMENT_UPDATE: 'payments.manage',
   PRODUCT_CREATE: 'products.manage', PRODUCT_UPDATE: 'products.manage', PRODUCT_ARCHIVE: 'products.manage', PRODUCT_TOGGLE: 'products.manage',
+  CATEGORY_CREATE: 'settings.manage', CATEGORY_UPDATE: 'settings.manage', CATEGORY_DELETE: 'settings.manage',
   PROMOTION_CREATE: 'promotions.manage', PROMOTION_UPDATE: 'promotions.manage',
   SUPPLIER_CREATE: 'suppliers.manage', SUPPLIER_UPDATE: 'suppliers.manage',
   CUSTOMER_CREATE: 'customers.manage', CUSTOMER_UPDATE: 'customers.manage', LOYALTY_REDEEM: 'customers.manage',
@@ -606,22 +608,25 @@ export function PosProvider({ children }) {
     };
   }, [currentUser?.id, online, flushPendingMutations, startCloudSubscription]);
 
-  const branchId = (
+  const requestedBranchId = (
     currentUser?.role === 'owner'
       ? deviceSettings.activeBranchId
       : currentUser?.branchId
   ) || db.configs.activeBranchId || MAIN_BRANCH_ID;
-  const branch = db.branches.find(item => item.id === branchId) || db.branches[0];
+  const activeBranches = db.branches.filter(item => item.active !== false);
+  const branch = activeBranches.find(item => item.id === requestedBranchId) || activeBranches[0] || db.branches[0];
+  const branchId = branch?.id || requestedBranchId;
 
   useEffect(() => {
     if (!currentUser || !db.branches.length) return;
+    const fallbackBranch = db.branches.find(item => item.active !== false) || db.branches[0];
     const allowedBranchId = currentUser.role === 'owner'
-      ? (db.branches.some(item => item.id === branchId) ? branchId : db.branches[0].id)
+      ? (db.branches.some(item => item.id === requestedBranchId && item.active !== false) ? requestedBranchId : fallbackBranch?.id)
       : currentUser.branchId;
     if (allowedBranchId && deviceSettings.activeBranchId !== allowedBranchId) {
       setDeviceSettingsState(previous => ({ ...previous, activeBranchId: allowedBranchId }));
     }
-  }, [currentUser, db.branches, branchId, deviceSettings.activeBranchId]);
+  }, [currentUser, db.branches, requestedBranchId, deviceSettings.activeBranchId]);
 
   const commit = useCallback((action, details, mutator, options = {}) => {
     if (!currentUserRef.current) throw new Error('Sesi pengguna belum aktif.');
@@ -962,7 +967,7 @@ export function PosProvider({ children }) {
 
   const setActiveBranch = id => {
     if (currentUser?.role !== 'owner') return;
-    if (!db.branches.some(item => item.id === id)) return;
+    if (!db.branches.some(item => item.id === id && item.active !== false)) return;
     setDeviceSettingsState(previous => ({ ...previous, activeBranchId: id }));
   };
 
@@ -1027,6 +1032,130 @@ export function PosProvider({ children }) {
     return item;
   };
 
+  const deleteBranch = branchIdToDelete => {
+    const activeUser = currentUserRef.current;
+    if (activeUser?.role !== 'owner') throw new Error('Hanya Owner yang dapat menghapus atau mengarsipkan cabang.');
+    const id = String(branchIdToDelete || '').trim();
+    const target = dbRef.current.branches.find(item => item.id === id);
+    if (!target) throw new Error('Cabang tidak ditemukan.');
+    const otherActive = dbRef.current.branches.filter(item => item.id !== id && item.active !== false);
+    if (!otherActive.length) throw new Error('Minimal satu cabang aktif harus tetap tersedia.');
+
+    const result = commit('BRANCH_DELETE', target.name, next => {
+      const branch = next.branches.find(item => item.id === id);
+      if (!branch) throw new Error('Cabang tidak ditemukan.');
+      const references = [
+        ...(next.products || []).filter(item => item.branchId === id),
+        ...(next.suppliers || []).filter(item => item.branchId === id),
+        ...(next.customers || []).filter(item => item.branchId === id && !/^Umum \(Non-Member\)$/i.test(String(item.name || ''))),
+        ...(next.sales || []).filter(item => item.branchId === id),
+        ...(next.heldSales || []).filter(item => item.branchId === id),
+        ...(next.purchases || []).filter(item => item.branchId === id),
+        ...(next.stockMovements || []).filter(item => item.branchId === id),
+        ...(next.stockAdjustments || []).filter(item => item.branchId === id),
+        ...(next.stockOpnames || []).filter(item => item.branchId === id),
+        ...(next.stockTransfers || []).filter(item => item.sourceBranchId === id || item.destinationBranchId === id),
+        ...(next.expenses || []).filter(item => item.branchId === id),
+        ...(next.receivables || []).filter(item => item.branchId === id),
+        ...(next.payables || []).filter(item => item.branchId === id),
+        ...(next.refunds || []).filter(item => item.branchId === id),
+        ...(next.shifts || []).filter(item => item.branchId === id),
+        ...(next.cashMovements || []).filter(item => item.branchId === id),
+        ...(next.onlineOrders || []).filter(item => item.branchId === id),
+        ...(next.feedback || []).filter(item => item.branchId === id),
+        ...(next.users || []).filter(item => item.role !== 'owner' && item.branchId === id)
+      ];
+      const hasHistory = references.length > 0;
+      if (hasHistory) {
+        if (branch.active === false) throw new Error('Cabang yang memiliki riwayat transaksi tidak dapat dihapus permanen. Riwayatnya tetap disimpan untuk laporan dan audit.');
+        branch.active = false;
+        branch.status = 'Archived';
+        branch.archivedAt = nowISO();
+        branch.archivedBy = activeUser.id;
+        for (const user of next.users || []) {
+          if (user.role !== 'owner' && user.branchId === id) user.active = false;
+        }
+        return { mode: 'archived', branch: { ...branch }, references: references.length };
+      }
+
+      next.branches = next.branches.filter(item => item.id !== id);
+      next.customers = (next.customers || []).filter(item => item.branchId !== id);
+      next.branchPaymentProfiles = (next.branchPaymentProfiles || []).filter(item => item.branchId !== id);
+      next.users = (next.users || []).filter(item => item.role === 'owner' || item.branchId !== id);
+      return { mode: 'deleted', branch: { ...branch }, references: 0 };
+    });
+
+    if (deviceSettings.activeBranchId === id) {
+      setDeviceSettingsState(previous => ({ ...previous, activeBranchId: otherActive[0].id }));
+    }
+    if (navigator.onLine && auth?.currentUser?.uid === activeUser.id) {
+      void publishPublicLoginDirectory(dbRef.current, activeUser.storeId || STORE_ID)
+        .then(directory => {
+          const nextDirectory = { ...directory, storeCode: activeUser.storeCode || storeCode };
+          setLoginDirectory(nextDirectory);
+          localStorage.setItem(LOGIN_DIRECTORY_KEY, JSON.stringify(nextDirectory));
+        })
+        .catch(error => console.warn('Perubahan cabang tersimpan, tetapi daftar login menunggu sinkronisasi.', error));
+    }
+    return result;
+  };
+
+  const restoreBranch = branchIdToRestore => {
+    const activeUser = currentUserRef.current;
+    if (activeUser?.role !== 'owner') throw new Error('Hanya Owner yang dapat memulihkan cabang.');
+    const id = String(branchIdToRestore || '').trim();
+    const result = commit('BRANCH_RESTORE', id, next => {
+      const branch = next.branches.find(item => item.id === id);
+      if (!branch) throw new Error('Cabang tidak ditemukan.');
+      branch.active = true;
+      branch.status = 'Online';
+      branch.restoredAt = nowISO();
+      branch.restoredBy = activeUser.id;
+      return { ...branch };
+    });
+    if (navigator.onLine && auth?.currentUser?.uid === activeUser.id) {
+      void publishPublicLoginDirectory(dbRef.current, activeUser.storeId || STORE_ID)
+        .then(directory => {
+          const nextDirectory = { ...directory, storeCode: activeUser.storeCode || storeCode };
+          setLoginDirectory(nextDirectory);
+          localStorage.setItem(LOGIN_DIRECTORY_KEY, JSON.stringify(nextDirectory));
+        })
+        .catch(error => console.warn('Cabang dipulihkan, tetapi daftar login menunggu sinkronisasi.', error));
+    }
+    return result;
+  };
+
+  const saveCategory = payload => commit(payload?.originalName ? 'CATEGORY_UPDATE' : 'CATEGORY_CREATE', payload?.name, next => {
+    const name = String(payload?.name || '').trim();
+    const originalName = String(payload?.originalName || '').trim();
+    if (name.length < 2) throw new Error('Nama kategori minimal 2 karakter.');
+    if (name.length > 60) throw new Error('Nama kategori maksimal 60 karakter.');
+    const duplicate = (next.categories || []).find(category => String(category).trim().toLowerCase() === name.toLowerCase() && String(category).trim().toLowerCase() !== originalName.toLowerCase());
+    if (duplicate) throw new Error(`Kategori ${name} sudah tersedia.`);
+    if (originalName) {
+      if (!(next.categories || []).some(category => String(category).trim().toLowerCase() === originalName.toLowerCase())) throw new Error('Kategori lama tidak ditemukan.');
+      next.categories = (next.categories || []).map(category => String(category).trim().toLowerCase() === originalName.toLowerCase() ? name : category);
+      next.products = (next.products || []).map(product => String(product.category || '').trim().toLowerCase() === originalName.toLowerCase() ? { ...product, category: name, updatedAt: nowISO() } : product);
+    } else {
+      next.categories = [...(next.categories || []), name];
+    }
+    next.categories = sortCategories(next.categories);
+    return name;
+  });
+
+  const deleteCategory = (name, replacement = '') => commit('CATEGORY_DELETE', name, next => {
+    const target = String(name || '').trim();
+    const replacementName = String(replacement || '').trim();
+    if (!target) throw new Error('Kategori tidak valid.');
+    const affected = (next.products || []).filter(product => product.active !== false && String(product.category || '').trim().toLowerCase() === target.toLowerCase());
+    if (affected.length && !replacementName) throw new Error(`Kategori ${target} masih dipakai ${affected.length} barang. Pilih kategori pengganti terlebih dahulu.`);
+    if (replacementName && replacementName.toLowerCase() === target.toLowerCase()) throw new Error('Kategori pengganti harus berbeda dari kategori yang dihapus.');
+    if (replacementName && !(next.categories || []).some(category => String(category).trim().toLowerCase() === replacementName.toLowerCase())) throw new Error('Kategori pengganti tidak ditemukan.');
+    if (replacementName) next.products = (next.products || []).map(product => String(product.category || '').trim().toLowerCase() === target.toLowerCase() ? { ...product, category: replacementName, updatedAt: nowISO() } : product);
+    next.categories = sortCategories((next.categories || []).filter(category => String(category).trim().toLowerCase() !== target.toLowerCase()));
+    return { name: target, replacement: replacementName, affected: affected.length };
+  });
+
   const saveProduct = data => commit(data.id ? 'PRODUCT_UPDATE' : 'PRODUCT_CREATE', data.name, next => {
     if (data.variantMode === true) {
       const parentName = String(data.parentName || data.name || '').trim();
@@ -1055,7 +1184,7 @@ export function PosProvider({ children }) {
       const seenCodes = new Map();
       const allowFractional = data.allowFractional === true;
       const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional, recommendedQuantityStep(data.baseUnit, data.category));
-      const conversions = (data.conversions || []).filter(row => row?.unit && Number(row.factor) > 0).map(row => ({ ...row, factor: quantity(row.factor) }));
+      const conversions = normalizeConversionRows(data.conversions || [], data.baseUnit || 'pcs');
       const saved = [];
       for (const row of rows) {
         const variantName = String(row.variantName || '').trim();
@@ -1151,7 +1280,7 @@ export function PosProvider({ children }) {
         project: Math.max(0, Number(data.markups?.project || 0))
       },
       variants: data.variants || [],
-      conversions: (data.conversions || []).filter(row => row?.unit && Number(row.factor) > 0).map(row => ({ ...row, factor: quantity(row.factor) })),
+      conversions: normalizeConversionRows(data.conversions || [], data.baseUnit || 'pcs'),
       allowFractional, quantityStep, bundleItems: data.bundleItems || [],
       favorite: Boolean(data.favorite), available: data.available !== false, active: data.active !== false,
       trackStock: data.trackStock !== false, updatedAt: nowISO()
@@ -1934,7 +2063,7 @@ export function PosProvider({ children }) {
   };
 
   const scoped = useMemo(() => ({
-    products: db.products.filter(item => item.branchId === branchId),
+    products: sortProductsByName(db.products.filter(item => item.branchId === branchId)),
     promotions: (db.promotions || []).filter(item => item.branchId === branchId),
     suppliers: db.suppliers.filter(item => item.branchId === branchId),
     customers: db.customers.filter(item => item.branchId === branchId),
@@ -1963,7 +2092,7 @@ export function PosProvider({ children }) {
     deviceSettings, updateDeviceSettings, login, loginEmployee, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     loginDirectory, loginDirectoryLoading, refreshLoginDirectory,
     loginEmployeesByBranch, loginEmployeesLoading, refreshLoginEmployees,
-    hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, saveProduct, archiveProduct, toggleProduct,
+    hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, deleteBranch, restoreBranch, saveCategory, deleteCategory, saveProduct, archiveProduct, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,

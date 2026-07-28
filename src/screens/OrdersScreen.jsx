@@ -2,11 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { ShoppingBag, Plus, ArrowRight, Trash2 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { formatRp, generateId } from '../utils/helpers.js';
-import { conversionFactor, formatQuantity, normalizeQuantity, normalizeQuantityStep, priceForUnit, toBaseQuantity } from '../utils/fractionalUnits.js';
+import { conversionFactor, formatQuantity, normalizeQuantity, normalizeQuantityStep, priceForSaleUnit, saleUnitOptions, toBaseQuantity } from '../utils/fractionalUnits.js';
 import { Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, StatusBadge, Textarea } from '../components/ui.jsx';
+import ProductPicker from '../components/ProductPicker.jsx';
 
 const activeProducts = products => products.filter(product => product.active !== false && product.available !== false);
-const productUnits = product => [{ unit: product.baseUnit, factor: 1 }, ...(product.conversions || []).filter(item => item.unit && Number(item.factor) > 0)];
+const productUnits = product => saleUnitOptions(product, 'retail');
 const quantityStepFor = (product, unit) => unit === product?.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional) : 1;
 
 export default function OrdersScreen({ onNavigate }) {
@@ -66,7 +67,7 @@ function OrderForm({ products, customers, onClose, onSave }) {
     const factor = conversionFactor(selectedProduct, unit);
     const baseQty = toBaseQuantity(selectedProduct, amount, unit);
     if (baseQty <= 0) return alert('Jumlah pesanan harus lebih dari 0.');
-    const price = priceForUnit(selectedProduct.prices?.retail || 0, factor);
+    const price = priceForSaleUnit(selectedProduct, unit, 'retail');
     const line = {
       lineId: generateId('ORDLINE'), productId: selectedProduct.id, name: selectedProduct.name,
       qty: amount, unit, factor, baseQty, baseUnit: selectedProduct.baseUnit,
@@ -99,12 +100,12 @@ function OrderForm({ products, customers, onClose, onSave }) {
       </Card>
       <Card className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-[minmax(180px,1fr)_120px_100px_auto] gap-3 items-end">
-          <Field label="Barang" className="sm:col-span-2 2xl:col-span-1"><Select value={productId} onChange={event => chooseProduct(event.target.value)}>{productsAvailable.map(product => <option key={product.id} value={product.id}>{product.name} · stok {formatQuantity(product.stock)} {product.baseUnit}</option>)}</Select></Field>
-          <Field label="Satuan"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && productUnits(selectedProduct).map(option => <option key={option.unit} value={option.unit}>{option.unit}{option.factor !== 1 ? ` = ${formatQuantity(option.factor)} ${selectedProduct.baseUnit}` : ''}</option>)}</Select></Field>
+          <ProductPicker products={productsAvailable} value={productId} onChange={id => chooseProduct(id)} label="Barang" className="sm:col-span-2 2xl:col-span-1"/>
+          <Field label="Satuan"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && productUnits(selectedProduct).map(option => <option key={option.unit} value={option.unit}>{option.unit}{option.factor !== 1 ? ` = ${formatQuantity(option.factor)} ${selectedProduct.baseUnit}` : ''} · {formatRp(option.price)}</option>)}</Select></Field>
           <Field label="Jumlah"><Input type="number" inputMode="decimal" min={step} step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: step < 1, step, min: step }))}/></Field>
           <Button onClick={add} className="sm:col-span-2 2xl:col-span-1 w-full 2xl:w-auto"><Plus size={17}/> Tambah</Button>
         </div>
-        {selectedProduct && <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold text-blue-700">{formatQuantity(qty)} {unit} = {formatQuantity(toBaseQuantity(selectedProduct, qty, unit))} {selectedProduct.baseUnit}. Harga: {formatRp(priceForUnit(selectedProduct.prices?.retail || 0, conversionFactor(selectedProduct, unit)))} per {unit}.</div>}
+        {selectedProduct && <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold text-blue-700">{formatQuantity(qty)} {unit} = {formatQuantity(toBaseQuantity(selectedProduct, qty, unit))} {selectedProduct.baseUnit}. Harga: {formatRp(priceForSaleUnit(selectedProduct, unit, 'retail'))} per {unit}.</div>}
         <div className="space-y-2 mt-4">{items.map((item, index) => <Card key={item.lineId} className="p-3 flex justify-between gap-3"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">{formatQuantity(item.qty)} {item.unit} × {formatRp(item.price)}</p><p className="text-xs text-blue-600">Mengurangi stok {formatQuantity(item.baseQty)} {item.baseUnit}</p></div><div className="text-right"><b>{formatRp(item.qty * item.price)}</b><button type="button" onClick={() => setItems(previous => previous.filter((_, rowIndex) => rowIndex !== index))} className="mt-2 ml-auto flex items-center gap-1 text-xs font-bold text-red-600"><Trash2 size={13}/> Hapus</button></div></Card>)}</div>
         <div className="flex justify-between border-t mt-4 pt-3 text-lg"><b>Total</b><b className="text-emerald-600">{formatRp(total)}</b></div>
       </Card>

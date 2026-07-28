@@ -37,7 +37,7 @@ test('migrasi data lama mengaktifkan pecahan ketika konversi memakai bagian dari
   const seed = { meta: {}, configs: {}, categories: [], units: [], products: [] };
   const migrated = normalizeDbShape({
     products: [{ id: 'OLD', baseUnit: 'box', stock: 40, minStock: 2, allowFractional: false, conversions: [{ unit: 'pcs', factor: 0.01 }] }]
-  }, seed, '5.3.0');
+  }, seed, '5.4.0');
   assert.equal(migrated.products[0].allowFractional, true);
   assert.equal(migrated.products[0].quantityStep, 0.01);
 });

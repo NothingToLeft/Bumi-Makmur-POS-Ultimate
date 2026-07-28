@@ -175,29 +175,67 @@ function EmployeeForm({ data, branches, currentUser, busy, onClose, onSave, onDe
   </Modal>;
 }
 
+function branchUsageSummary(db, branchId) {
+ const sections = [
+  ['barang', (db.products || []).filter(item => item.branchId === branchId).length],
+  ['karyawan', (db.users || []).filter(item => item.role !== 'owner' && item.branchId === branchId).length],
+  ['transaksi', (db.sales || []).filter(item => item.branchId === branchId).length],
+  ['pembelian', (db.purchases || []).filter(item => item.branchId === branchId).length],
+  ['pergerakan stok', (db.stockMovements || []).filter(item => item.branchId === branchId).length],
+  ['transfer stok', (db.stockTransfers || []).filter(item => item.sourceBranchId === branchId || item.destinationBranchId === branchId).length],
+  ['shift', (db.shifts || []).filter(item => item.branchId === branchId).length],
+  ['piutang/utang', [...(db.receivables || []), ...(db.payables || [])].filter(item => item.branchId === branchId).length]
+ ].filter(([, count]) => count > 0);
+ return { count: sections.reduce((sum, [, count]) => sum + count, 0), sections };
+}
+
 export function BranchesScreen(){
- const {db,branchId,setActiveBranch,addBranch,updateBranch,hasPermission}=usePos();
+ const {db,branchId,setActiveBranch,addBranch,updateBranch,deleteBranch,restoreBranch,hasPermission}=usePos();
  const[formOpen,setFormOpen]=useState(false);
  const[editing,setEditing]=useState(null);
+ const[deleting,setDeleting]=useState(null);
  const[message,setMessage]=useState('');
  const canManage=hasPermission('branches.manage');
+ const activeBranches=(db.branches||[]).filter(item=>item.active!==false);
+ const archivedBranches=(db.branches||[]).filter(item=>item.active===false);
  const saveNew=data=>{try{addBranch(data);setFormOpen(false);setMessage('Cabang baru berhasil ditambahkan.')}catch(error){setMessage(error.message||'Cabang gagal ditambahkan.')}};
  const saveEdit=data=>{try{updateBranch(data);setEditing(null);setMessage('Identitas cabang berhasil diperbarui dan akan dipakai pada login serta tampilan cabang aktif.')}catch(error){setMessage(error.message||'Cabang gagal diperbarui.')}};
+ const remove=branch=>{try{const result=deleteBranch(branch.id);setDeleting(null);setMessage(result?.mode==='archived'?'Cabang memiliki riwayat operasional sehingga diarsipkan dengan aman. Cabang tidak lagi muncul pada login karyawan.':'Cabang kosong berhasil dihapus permanen.');}catch(error){setMessage(error.message||'Cabang gagal dihapus.')}};
+ const restore=branch=>{try{restoreBranch(branch.id);setMessage(`Cabang ${branch.name} berhasil diaktifkan kembali.`);}catch(error){setMessage(error.message||'Cabang gagal dipulihkan.')}};
+ const renderCard=branch=>{const usage=branchUsageSummary(db,branch.id);const archived=branch.active===false;return <Card key={branch.id} className={`p-5 ${branch.id===branchId?'border-emerald-500 ring-1 ring-emerald-500':''} ${archived?'opacity-80 border-dashed':''}`}>
+  <div className="flex gap-3"><div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${archived?'bg-gray-100 text-gray-500':'bg-emerald-100 text-emerald-700'}`}><Store size={28}/></div><div className="min-w-0 flex-1"><div className="flex gap-2 items-center flex-wrap"><p className="font-bold text-gray-800 break-words">{branch.name}</p>{branch.id===branchId&&<Badge tone="green">Aktif</Badge>}{archived&&<Badge>Diarsipkan</Badge>}</div><p className="text-xs text-gray-500 flex gap-1 mt-1"><MapPin size={13}/>{branch.address||'Alamat belum diisi'}</p><p className="text-xs text-gray-500 mt-1">Telp: {branch.phone||'-'}</p><p className="text-xs text-gray-400 mt-1">ID: {branch.id}</p>{usage.count>0&&<p className="text-[11px] text-blue-700 font-bold mt-2">Memiliki {usage.count} referensi operasional; penghapusan akan menjadi arsip aman.</p>}</div></div>
+  {canManage&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">{!archived&&<Button variant="secondary" onClick={()=>setEditing(branch)}><Pencil size={16}/> Edit Cabang</Button>}{archived?<Button variant="outline" onClick={()=>restore(branch)}><RefreshCw size={16}/> Aktifkan Kembali</Button>:branch.id!==branchId?<Button variant="outline" onClick={()=>setActiveBranch(branch.id)}><CheckCircle2 size={17}/> Jadikan Aktif</Button>:<Button variant="outline" disabled><CheckCircle2 size={17}/> Cabang Aktif</Button>}<Button variant="danger" onClick={()=>setDeleting(branch)} disabled={!archived&&activeBranches.length<=1}><Trash2 size={16}/> {usage.count>0?'Arsip / Hapus':'Hapus Cabang'}</Button></div>}
+ </Card>};
  return <div className="h-full flex flex-col bg-gray-50 generic-bg">
   <PageHeader title="Cabang Toko" subtitle="Kelola nama, alamat, telepon, stok, transaksi, karyawan, dan laporan per cabang" actions={canManage&&<Button onClick={()=>setFormOpen(true)}><Plus size={17}/> Cabang Baru</Button>}/>
   <div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6">
-   {message&&<div className={`mb-4 p-3 rounded-2xl border text-sm font-bold ${/gagal|tidak/i.test(message)?'bg-red-50 border-red-200 text-red-700':'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{message}</div>}
-   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-    {db.branches.map(branch=><Card key={branch.id} className={`p-5 ${branch.id===branchId?'border-emerald-500 ring-1 ring-emerald-500':''}`}>
-     <div className="flex gap-3"><div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><Store size={28}/></div><div className="min-w-0 flex-1"><div className="flex gap-2 items-center"><p className="font-bold text-gray-800 truncate">{branch.name}</p>{branch.id===branchId&&<Badge tone="green">Aktif</Badge>}</div><p className="text-xs text-gray-500 flex gap-1 mt-1"><MapPin size={13}/>{branch.address||'Alamat belum diisi'}</p><p className="text-xs text-gray-500 mt-1">Telp: {branch.phone||'-'}</p><p className="text-xs text-gray-400 mt-1">ID: {branch.id}</p></div></div>
-     {canManage&&<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4"><Button variant="secondary" onClick={()=>setEditing(branch)}><Pencil size={16}/> Edit Cabang</Button>{branch.id!==branchId?<Button variant="outline" onClick={()=>setActiveBranch(branch.id)}><CheckCircle2 size={17}/> Jadikan Aktif</Button>:<Button variant="outline" disabled><CheckCircle2 size={17}/> Cabang Aktif</Button>}</div>}
-    </Card>)}
-   </div>
+   {message&&<div className={`mb-4 p-3 rounded-2xl border text-sm font-bold ${/gagal|tidak dapat|tidak bisa/i.test(message)?'bg-red-50 border-red-200 text-red-700':'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{message}</div>}
+   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{activeBranches.map(renderCard)}</div>
+   {archivedBranches.length>0&&<div className="mt-8"><div className="mb-3"><p className="font-black text-gray-800">Cabang Diarsipkan</p><p className="text-xs text-gray-500">Tidak muncul pada login karyawan, tetapi riwayat laporan tetap aman dan dapat dipulihkan.</p></div><div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{archivedBranches.map(renderCard)}</div></div>}
   </div>
   {formOpen&&canManage&&<BranchForm onClose={()=>setFormOpen(false)} onSave={saveNew}/>} 
   {editing&&canManage&&<BranchForm data={editing} onClose={()=>setEditing(null)} onSave={saveEdit}/>} 
+  {deleting&&canManage&&<BranchDeleteModal branch={deleting} usage={branchUsageSummary(db,deleting.id)} activeCount={activeBranches.length} onClose={()=>setDeleting(null)} onDelete={()=>remove(deleting)}/>} 
  </div>;
 }
+
+function BranchDeleteModal({branch,usage,activeCount,onClose,onDelete}){
+ const[confirmation,setConfirmation]=useState('');
+ const archived=branch.active===false;
+ const hasHistory=usage.count>0;
+ const action=hasHistory&&!archived?'Arsipkan Cabang':'Hapus Permanen';
+ const blocked=branch.active!==false&&activeCount<=1;
+ const historyLocked=hasHistory&&archived;
+ const footer=<><Button variant="secondary" onClick={onClose}>{historyLocked?'Tutup':'Batal'}</Button>{!historyLocked&&<Button variant="danger" onClick={onDelete} disabled={blocked||confirmation.trim()!==branch.name.trim()}><Trash2 size={16}/>{action}</Button>}</>;
+ return <Modal title="Hapus / Arsipkan Cabang" onClose={onClose} size="md" footer={footer}>
+  <div className="space-y-4"><div className={`p-4 rounded-2xl border ${hasHistory?'bg-amber-50 border-amber-200 text-amber-900':'bg-red-50 border-red-200 text-red-800'}`}><p className="font-black">{branch.name}</p><p className="text-sm mt-1">{hasHistory?archived?'Cabang ini memiliki riwayat operasional dan tidak dapat dihapus permanen. Anda dapat mengaktifkannya kembali.':'Cabang memiliki riwayat operasional. Sistem akan mengarsipkannya, bukan menghapus transaksi dan laporan.':'Cabang belum memiliki data operasional dan dapat dihapus permanen.'}</p></div>
+  {usage.sections.length>0&&<div className="flex flex-wrap gap-2">{usage.sections.map(([label,count])=><Badge key={label} tone="blue">{count} {label}</Badge>)}</div>}
+  {blocked&&<p className="text-sm font-bold text-red-700">Cabang terakhir yang aktif tidak boleh dihapus. Buat atau aktifkan cabang lain terlebih dahulu.</p>}
+  {!blocked&&(!hasHistory||!archived)&&<Field label={`Ketik nama cabang untuk konfirmasi: ${branch.name}`}><Input value={confirmation} onChange={event=>setConfirmation(event.target.value)} placeholder={branch.name}/></Field>}
+  {hasHistory&&archived&&<p className="text-sm text-gray-600">Gunakan tombol <b>Aktifkan Kembali</b> pada kartu cabang bila cabang ini akan dipakai lagi.</p>}</div>
+ </Modal>;
+}
+
 function BranchForm({data,onClose,onSave}){
  const[form,setForm]=useState(data?{...data}:{name:'',address:'',phone:''});
  const isEditing=Boolean(data?.id);

@@ -1,3 +1,4 @@
+import { priceForSaleUnit } from './fractionalUnits.js';
 const normalize = value => String(value ?? '').trim().toLowerCase();
 
 function directMatch(product, code) {
@@ -22,7 +23,7 @@ function directMatch(product, code) {
       product,
       options: {
         unit: conversion.unit,
-        price: Number(product.prices?.retail ?? 0) * Number(conversion.factor || 1)
+        price: priceForSaleUnit(product, conversion.unit, 'retail')
       }
     };
   }
