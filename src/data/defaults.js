@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Gauge
 } from 'lucide-react';
 
-export const APP_VERSION = '5.4.0';
+export const APP_VERSION = '5.5.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -32,7 +32,7 @@ export const ROLE_PERMISSIONS = {
   owner: ['*'],
   manager: [
     'dashboard.view', 'control.view', 'payments.manage', 'pos.use', 'transactions.view', 'transactions.refund', 'transactions.void',
-    'products.view', 'products.manage', 'inventory.view', 'inventory.manage', 'purchases.view',
+    'products.view', 'products.manage', 'products.delete', 'categories.manage', 'inventory.view', 'inventory.manage', 'purchases.view',
     'purchases.manage', 'suppliers.view', 'suppliers.manage', 'customers.view', 'customers.manage',
     'shifts.view', 'shifts.manage', 'finance.view', 'finance.manage', 'reports.view', 'orders.view',
     'orders.manage', 'devices.view', 'devices.manage', 'display.view', 'display.manage',

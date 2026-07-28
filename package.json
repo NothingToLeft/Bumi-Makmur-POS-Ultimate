@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "5.4.0",
+  "version": "5.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -45,7 +45,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v5.4.0: Katalog alfabetis natural, pencarian barang profesional, kategori dinamis, harga khusus pack/dus/box/roll, Produk Induk + Varian, shared barcode, SKU otomatis, dan penjualan pecahan, Windows EXE/MSI, Android, Web, dan Firebase Spark FreeSync.",
+  "description": "Bumi Makmur POS v5.5.0: Store Manager sebagai admin operasional cabang, pengelolaan kategori, produk dan stok aman, hapus permanen hanya untuk produk tanpa riwayat, arsip produk bersejarah, harga multi-satuan, varian, shared barcode, Windows EXE/MSI, Android, Web, dan Firebase Spark FreeSync.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

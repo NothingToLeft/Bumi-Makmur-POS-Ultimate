@@ -150,7 +150,12 @@ service cloud.firestore {
 
     match /stores/{storeId}/system/settings {
       allow read: if activeMember(storeId);
-      allow create, update, delete: if owner(storeId);
+      allow create, delete: if owner(storeId);
+      // Store Manager boleh mengelola kategori produk, tetapi tidak dapat
+      // mengubah identitas usaha, keamanan, backup, atau pengaturan global.
+      allow update: if owner(storeId)
+        || (manager(storeId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['categories']));
     }
 
     // Daftar cabang aktif yang aman untuk layar login. Dokumen hanya memuat

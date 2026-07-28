@@ -40,6 +40,7 @@ import {
 import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
 import { dataUrlByteLength } from '../utils/assetProcessing.js';
 import { normalizeDbShape } from '../utils/dbShape.js';
+import { buildProductLifecycleSummary } from '../utils/productLifecycle.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
 import {
   baseUnitCost as calculateBaseUnitCost, conversionFactor, formatQuantity,
@@ -85,8 +86,8 @@ const verifySeedUserPin = async (user, pin) => {
 
 const ACTION_PERMISSIONS = {
   SETTING_UPDATE: 'settings.manage', BRANCH_CREATE: 'branches.manage', BRANCH_UPDATE: 'branches.manage', BRANCH_DELETE: 'branches.manage', BRANCH_RESTORE: 'branches.manage', BRANCH_PAYMENT_UPDATE: 'payments.manage',
-  PRODUCT_CREATE: 'products.manage', PRODUCT_UPDATE: 'products.manage', PRODUCT_ARCHIVE: 'products.manage', PRODUCT_TOGGLE: 'products.manage',
-  CATEGORY_CREATE: 'settings.manage', CATEGORY_UPDATE: 'settings.manage', CATEGORY_DELETE: 'settings.manage',
+  PRODUCT_CREATE: 'products.manage', PRODUCT_UPDATE: 'products.manage', PRODUCT_ARCHIVE: 'products.manage', PRODUCT_RESTORE: 'products.manage', PRODUCT_TOGGLE: 'products.manage', PRODUCT_DELETE: 'products.delete',
+  CATEGORY_CREATE: 'categories.manage', CATEGORY_UPDATE: 'categories.manage', CATEGORY_DELETE: 'categories.manage',
   PROMOTION_CREATE: 'promotions.manage', PROMOTION_UPDATE: 'promotions.manage',
   SUPPLIER_CREATE: 'suppliers.manage', SUPPLIER_UPDATE: 'suppliers.manage',
   CUSTOMER_CREATE: 'customers.manage', CUSTOMER_UPDATE: 'customers.manage', LOYALTY_REDEEM: 'customers.manage',
@@ -95,7 +96,7 @@ const ACTION_PERMISSIONS = {
   SALE_REFUND: 'transactions.refund', SALE_VOID: 'transactions.void',
   PURCHASE_CREATE: 'purchases.manage', PURCHASE_UPDATE: 'purchases.manage', PURCHASE_RETURN: 'purchases.manage',
   RECEIVABLE_PAYMENT: 'finance.manage', PAYABLE_PAYMENT: 'finance.manage', EXPENSE_CREATE: 'finance.manage',
-  STOCK_ADJUST: 'inventory.manage', STOCK_OPNAME: 'inventory.manage', STOCK_TRANSFER: 'inventory.manage',
+  STOCK_ADJUST: 'inventory.manage', STOCK_RESET: 'inventory.manage', STOCK_OPNAME: 'inventory.manage', STOCK_TRANSFER: 'inventory.manage',
   ORDER_CREATE: 'orders.manage', ORDER_UPDATE: 'orders.manage', ORDER_TO_BILL: 'orders.manage',
   PRINTER_CREATE: 'devices.manage', PRINTER_UPDATE: 'devices.manage',
   CAMPAIGN_CREATE: 'display.manage', CAMPAIGN_UPDATE: 'display.manage', FEEDBACK_CREATE: 'display.view'
@@ -1301,8 +1302,64 @@ export function PosProvider({ children }) {
 
   const archiveProduct = id => commit('PRODUCT_ARCHIVE', id, next => {
     const item = next.products.find(product => product.id === id);
-    if (item) item.active = false;
+    if (item) {
+      item.active = false;
+      item.available = false;
+      item.updatedAt = nowISO();
+    }
     return item;
+  });
+
+  const restoreProduct = id => commit('PRODUCT_RESTORE', id, next => {
+    const item = next.products.find(product => product.id === id);
+    if (item) {
+      item.active = true;
+      item.available = true;
+      item.updatedAt = nowISO();
+    }
+    return item;
+  });
+
+  const deleteProduct = productIds => commit('PRODUCT_DELETE', Array.isArray(productIds) ? productIds.join(',') : productIds, next => {
+    const ids = new Set((Array.isArray(productIds) ? productIds : [productIds]).filter(Boolean).map(String));
+    const summary = buildProductLifecycleSummary(next, [...ids]);
+    if (!summary.products.length) throw new Error('Produk tidak ditemukan.');
+    if (currentUserRef.current?.role === 'manager' && summary.products.some(product => product.branchId !== currentUserRef.current.branchId)) {
+      throw new Error('Store Manager hanya dapat mengelola produk pada cabangnya sendiri.');
+    }
+    if (summary.stock > 0) throw new Error('Produk masih memiliki stok. Kosongkan stok terlebih dahulu atau gunakan Arsipkan.');
+    if (summary.historyCount > 0) throw new Error('Produk sudah memiliki riwayat operasional. Demi keamanan laporan, produk hanya dapat diarsipkan.');
+    next.products = next.products.filter(product => !ids.has(String(product.id)));
+    return { mode: 'deleted', ids: [...ids], count: summary.products.length };
+  });
+
+  const zeroProductStock = (productIds, reason = 'Stok dikosongkan dari pengelolaan produk') => commit('STOCK_RESET', Array.isArray(productIds) ? productIds.join(',') : productIds, next => {
+    const ids = new Set((Array.isArray(productIds) ? productIds : [productIds]).filter(Boolean).map(String));
+    const affected = [];
+    for (const product of next.products) {
+      if (!ids.has(String(product.id))) continue;
+      if (currentUserRef.current?.role === 'manager' && product.branchId !== currentUserRef.current.branchId) {
+        throw new Error('Store Manager hanya dapat mengosongkan stok pada cabangnya sendiri.');
+      }
+      const previousStock = Number(product.stock || 0);
+      if (Math.abs(previousStock) < 0.000001) continue;
+      const change = signedQuantity(-previousStock);
+      product.stock = 0;
+      product.updatedAt = nowISO();
+      const adjustment = {
+        id: generateId('ADJ'), branchId: product.branchId, productId: product.id, productName: product.name,
+        qtyChange: change, reason: String(reason || 'Stok dikosongkan').slice(0, 180), createdAt: nowISO(), userId: currentUserRef.current.id
+      };
+      next.stockAdjustments.unshift(adjustment);
+      next.stockMovements.unshift({
+        id: generateId('MOV'), branchId: product.branchId, productId: product.id, productName: product.name,
+        type: 'STOCK_RESET', qtyChange: change, refId: adjustment.id, note: adjustment.reason,
+        createdAt: adjustment.createdAt, userId: currentUserRef.current.id
+      });
+      affected.push({ id: product.id, name: product.name, previousStock, change });
+    }
+    if (!affected.length) throw new Error('Stok produk sudah 0.');
+    return { mode: 'stock-reset', affected };
   });
 
   const toggleProduct = (id, field) => commit('PRODUCT_TOGGLE', `${id}:${field}`, next => {
@@ -2092,7 +2149,7 @@ export function PosProvider({ children }) {
     deviceSettings, updateDeviceSettings, login, loginEmployee, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     loginDirectory, loginDirectoryLoading, refreshLoginDirectory,
     loginEmployeesByBranch, loginEmployeesLoading, refreshLoginEmployees,
-    hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, deleteBranch, restoreBranch, saveCategory, deleteCategory, saveProduct, archiveProduct, toggleProduct,
+    hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, deleteBranch, restoreBranch, saveCategory, deleteCategory, saveProduct, archiveProduct, restoreProduct, deleteProduct, zeroProductStock, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
     savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,

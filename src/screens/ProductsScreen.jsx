@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Package, Plus, Star, Archive, Eye, EyeOff, Pencil, Printer, Percent, TrendingUp,
+  Package, Plus, Star, Archive, ArchiveRestore, Eye, EyeOff, Pencil, Printer, Percent, TrendingUp,
   ScanLine, Camera, Keyboard, Boxes, AlertTriangle, ArrowLeftRight, ClipboardCheck,
   SlidersHorizontal, History, Download, PackagePlus, CircleDollarSign, Ruler, Layers3, Trash2, WandSparkles, Copy, Tags, FolderPlus
 } from 'lucide-react';
@@ -16,6 +16,7 @@ import {
 import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
 import { barcodeSvgMarkup } from '../utils/barcodeLabel.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
+import { buildProductLifecycleSummary, productLifecycleLabel } from '../utils/productLifecycle.js';
 import {
   buildVariantGroupDraft, codeCollision, generateVariantGroupId, generateVariantSku,
   groupVariantProducts, isVariantChild, variantParentName
@@ -77,7 +78,7 @@ const csvCell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
 
 export default function ProductsScreen() {
   const {
-    db, scoped, branch, hasPermission, saveProduct, archiveProduct, toggleProduct,
+    db, scoped, branch, hasPermission, saveProduct, archiveProduct, restoreProduct, deleteProduct, zeroProductStock, toggleProduct,
     adjustStock, stockOpname, transferStock, saveCategory, deleteCategory
   } = usePos();
   const [tab, setTab] = useState('catalog');
@@ -89,10 +90,12 @@ export default function ProductsScreen() {
   const [opnameOpen, setOpnameOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const [lifecycleProduct, setLifecycleProduct] = useState(null);
 
   const canManageProducts = hasPermission('products.manage');
   const canManageStock = hasPermission('inventory.manage');
-  const canManageCategories = hasPermission('settings.manage');
+  const canManageCategories = hasPermission('categories.manage');
+  const canDeleteProducts = hasPermission('products.delete');
 
   const catalogProducts = useMemo(() => sortProductsByName(groupVariantProducts(scoped.products)), [scoped.products]);
   const products = useMemo(() => catalogProducts.filter(product => {
@@ -225,12 +228,7 @@ export default function ProductsScreen() {
                 onAdjust={child => setAdjusting(child || product)}
                 onToggle={(id, field) => toggleProduct(id, field)}
                 onPrint={printLabel}
-                onArchive={() => {
-                  const label = product.isVariantGroup ? `Arsipkan seluruh ${product.children.length} varian ${product.name}?` : 'Arsipkan barang ini? Riwayat transaksi tetap aman.';
-                  if (!window.confirm(label)) return;
-                  if (product.isVariantGroup) product.children.filter(child => child.active !== false).forEach(child => archiveProduct(child.id));
-                  else archiveProduct(product.id);
-                }}
+                onLifecycle={() => setLifecycleProduct(product)}
               />)}
             </div>
           )}
@@ -246,13 +244,25 @@ export default function ProductsScreen() {
       {adjusting && <AdjustModal product={adjusting} products={activeProducts} onClose={() => setAdjusting(null)} onSelect={setAdjusting} onSave={data => { try { adjustStock(data); setAdjusting(null); } catch (error) { alert(error.message); } }}/>} 
       {opnameOpen && <OpnameModal products={activeProducts} onClose={() => setOpnameOpen(false)} onSave={data => { try { stockOpname(data); setOpnameOpen(false); } catch (error) { alert(error.message); } }}/>} 
       {categoryOpen && canManageCategories && <CategoryManagerModal categories={sortCategories(db.categories)} products={db.products} onClose={() => setCategoryOpen(false)} onSave={saveCategory} onDelete={deleteCategory}/>}
+      {lifecycleProduct && (canManageProducts || canManageStock || canDeleteProducts) && <ProductLifecycleModal
+        product={lifecycleProduct}
+        db={db}
+        canManageProducts={canManageProducts}
+        canManageStock={canManageStock}
+        canDeleteProducts={canDeleteProducts}
+        onClose={() => setLifecycleProduct(null)}
+        onArchive={ids => { ids.forEach(id => archiveProduct(id)); setLifecycleProduct(null); }}
+        onRestore={ids => { ids.forEach(id => restoreProduct(id)); setLifecycleProduct(null); }}
+        onZeroStock={(ids, reason) => { zeroProductStock(ids, reason); setLifecycleProduct(null); }}
+        onDelete={ids => { deleteProduct(ids); setLifecycleProduct(null); }}
+      />}
       {transferOpen && <TransferModal products={activeProducts} branches={db.branches} activeBranchId={branch?.id || db.configs.activeBranchId} onClose={() => setTransferOpen(false)} onSave={data => { try { transferStock(data); setTransferOpen(false); } catch (error) { alert(error.message); } }}/>} 
     </div>
   );
 }
 
 
-function ProductCatalogCard({ product, canManageProducts, canManageStock, onEdit, onAdjust, onToggle, onPrint, onArchive }) {
+function ProductCatalogCard({ product, canManageProducts, canManageStock, onEdit, onAdjust, onToggle, onPrint, onLifecycle }) {
   if (product.isVariantGroup) {
     const activeChildren = product.children.filter(child => child.active !== false);
     const lowChildren = activeChildren.filter(child => Number(child.stock || 0) <= Number(child.minStock || 0));
@@ -277,7 +287,7 @@ function ProductCatalogCard({ product, canManageProducts, canManageStock, onEdit
       <div className="grid grid-cols-3 gap-2 mt-4">
         {canManageProducts && <button title="Edit produk induk dan varian" onClick={onEdit} className="h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><Pencil size={17}/></button>}
         {canManageStock && <button title="Pilih varian untuk penyesuaian stok" onClick={() => onAdjust(activeChildren[0])} className="h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><SlidersHorizontal size={17}/></button>}
-        {canManageProducts && <button title="Arsipkan semua varian" onClick={onArchive} className="h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><Archive size={17}/></button>}
+        {canManageProducts && <button title="Kelola, arsipkan, atau hapus semua varian" onClick={onLifecycle} className="h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><Trash2 size={17}/></button>}
       </div>
       <div className="grid grid-cols-2 gap-2 mt-3 text-xs"><div className="p-2 bg-emerald-50 rounded-xl"><p className="text-gray-500">Rentang Harga</p><p className="font-bold text-emerald-700">{priceMin === priceMax ? formatRp(priceMin) : `${formatRp(priceMin)} – ${formatRp(priceMax)}`}</p></div><div className="p-2 bg-blue-50 rounded-xl"><p className="text-gray-500">Total Stok</p><p className="font-bold text-blue-700">{formatQuantity(product.stock)} {product.baseUnit}</p></div></div>
     </Card>;
@@ -289,8 +299,39 @@ function ProductCatalogCard({ product, canManageProducts, canManageStock, onEdit
     <div className="grid grid-cols-2 gap-2 mt-4 text-xs"><div className="p-2 bg-emerald-50 rounded-xl"><p className="text-gray-500">Harga/{product.baseUnit}</p><p className="font-bold text-emerald-700">{formatRp(product.prices?.retail)}</p></div><div className="p-2 bg-orange-50 rounded-xl"><p className="text-gray-500">Modal/{product.baseUnit}</p><p className="font-bold text-orange-700">{formatRp(product.modalPrice)}</p></div><div className={`p-2 rounded-xl ${lowStock ? 'bg-red-50' : 'bg-blue-50'}`}><p className="text-gray-500">Stok</p><p className={`font-bold ${lowStock ? 'text-red-700' : 'text-blue-700'}`}>{formatQuantity(product.stock)} {product.baseUnit}</p></div><div className="p-2 bg-purple-50 rounded-xl"><p className="text-gray-500">Markup Eceran</p><p className="font-bold text-purple-700">{retailMarkup}%</p></div></div>
     {product.allowFractional && <p className="mt-3 text-[11px] rounded-xl bg-blue-50 text-blue-700 p-2 font-bold">{fractionalSaleLabel(product)}</p>}
     {(product.conversions || []).length > 0 && <div className="mt-2 space-y-1">{product.conversions.map(item => <p key={item.unit} className="text-[11px] text-gray-500">1 {item.unit} = {formatQuantity(item.factor)} {product.baseUnit}{Number(item.prices?.retail || 0) > 0 ? ` · Harga ${formatRp(item.prices.retail)}` : ' · Harga otomatis'}</p>)}</div>}
-    {(canManageProducts || canManageStock) && <div className="grid grid-cols-6 gap-2 mt-4">{canManageProducts && <button title="Edit barang" onClick={onEdit} className="h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><Pencil size={17}/></button>}{canManageStock && <button title="Penyesuaian stok" onClick={() => onAdjust(product)} className="h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><SlidersHorizontal size={17}/></button>}{canManageProducts && <button title="Favorit" onClick={() => onToggle(product.id, 'favorite')} className="h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center"><Star size={17} fill={product.favorite ? 'currentColor' : 'none'}/></button>}{canManageProducts && <button title="Ketersediaan" onClick={() => onToggle(product.id, 'available')} className="h-10 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center">{product.available !== false ? <Eye size={17}/> : <EyeOff size={17}/>}</button>}<button title="Cetak label harga/barcode" onClick={() => onPrint(product)} className="h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Printer size={17}/></button>{canManageProducts && <button title="Arsipkan" onClick={onArchive} className="h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><Archive size={17}/></button>}</div>}
+    {(canManageProducts || canManageStock) && <div className="grid grid-cols-6 gap-2 mt-4">{canManageProducts && <button title="Edit barang" onClick={onEdit} className="h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><Pencil size={17}/></button>}{canManageStock && <button title="Penyesuaian stok" onClick={() => onAdjust(product)} className="h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><SlidersHorizontal size={17}/></button>}{canManageProducts && <button title="Favorit" onClick={() => onToggle(product.id, 'favorite')} className="h-10 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center"><Star size={17} fill={product.favorite ? 'currentColor' : 'none'}/></button>}{canManageProducts && <button title="Ketersediaan" onClick={() => onToggle(product.id, 'available')} className="h-10 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center">{product.available !== false ? <Eye size={17}/> : <EyeOff size={17}/>}</button>}<button title="Cetak label harga/barcode" onClick={() => onPrint(product)} className="h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Printer size={17}/></button>{canManageProducts && <button title="Kelola, arsipkan, atau hapus" onClick={onLifecycle} className="h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><Trash2 size={17}/></button>}</div>}
   </Card>;
+}
+
+
+function ProductLifecycleModal({ product, db, canManageProducts, canManageStock, canDeleteProducts, onClose, onArchive, onRestore, onZeroStock, onDelete }) {
+  const ids = product.isVariantGroup ? product.children.map(child => child.id) : [product.id];
+  const summary = useMemo(() => buildProductLifecycleSummary(db, ids), [db, product]);
+  const [confirmation, setConfirmation] = useState('');
+  const [reason, setReason] = useState('Koreksi stok sebelum produk diarsipkan atau dihapus');
+  const allArchived = summary.products.length > 0 && summary.products.every(item => item.active === false);
+  const displayName = product.name || summary.products[0]?.name || 'Produk';
+  const run = action => {
+    try { action(); }
+    catch (error) { alert(error.message || 'Tindakan produk gagal.'); }
+  };
+  return <Modal title="Kelola Produk & Stok" onClose={onClose} size="lg" footer={<Button variant="secondary" onClick={onClose}>Tutup</Button>}>
+    <div className="space-y-4">
+      <div className="rounded-2xl border bg-gray-50 p-4">
+        <div className="flex items-start justify-between gap-3"><div><p className="font-black text-gray-900">{displayName}</p><p className="text-sm text-gray-600 mt-1">{productLifecycleLabel(summary)}</p></div><Badge tone={summary.canDeletePermanently ? 'green' : 'orange'}>{product.isVariantGroup ? `${summary.products.length} varian` : '1 produk'}</Badge></div>
+        <div className="grid grid-cols-2 gap-3 mt-4 text-sm"><div className="rounded-xl bg-white border p-3"><p className="text-gray-500">Total stok</p><p className="font-black text-blue-700">{formatQuantity(summary.stock)}</p></div><div className="rounded-xl bg-white border p-3"><p className="text-gray-500">Referensi riwayat</p><p className="font-black text-purple-700">{summary.historyCount}</p></div></div>
+        {summary.usage.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{summary.usage.map(([label, count]) => <Badge key={label}>{label}: {count}</Badge>)}</div>}
+      </div>
+
+      {summary.stock > 0 && canManageStock && <Card className="p-4 border-orange-200 bg-orange-50/70"><p className="font-black text-orange-900">Kosongkan stok menjadi 0</p><p className="text-xs text-orange-800 mt-1">Ini membuat penyesuaian stok dan jejak audit. Riwayat lama tidak dihapus.</p><Field label="Alasan" className="mt-3"><Input value={reason} onChange={event => setReason(event.target.value)} maxLength={180}/></Field><Button variant="danger" className="mt-3" onClick={() => run(() => onZeroStock(ids, reason))} disabled={!reason.trim()}><SlidersHorizontal size={17}/> Kosongkan Stok</Button></Card>}
+
+      {canManageProducts && <Card className="p-4 border-amber-200 bg-amber-50/60"><p className="font-black text-amber-900">{allArchived ? 'Pulihkan produk' : 'Arsipkan produk'}</p><p className="text-xs text-amber-800 mt-1">{allArchived ? 'Produk kembali muncul di Kasir dan daftar aktif.' : 'Pilihan paling aman bila produk pernah dipakai. Produk hilang dari Kasir, tetapi laporan tetap utuh.'}</p><Button variant="outline" className="mt-3" onClick={() => run(() => allArchived ? onRestore(ids) : onArchive(ids))}>{allArchived ? <ArchiveRestore size={17}/> : <Archive size={17}/>} {allArchived ? 'Pulihkan Produk' : 'Arsipkan Produk'}</Button></Card>}
+
+      {canDeleteProducts && <Card className="p-4 border-red-200 bg-red-50/70"><p className="font-black text-red-900">Hapus permanen</p><p className="text-xs text-red-800 mt-1">Hanya tersedia bila stok 0 dan produk sama sekali belum memiliki transaksi, pembelian, pergerakan stok, opname, transfer, refund, pesanan, atau referensi paket.</p>{summary.canDeletePermanently ? <><Field label={`Ketik nama produk untuk konfirmasi: ${displayName}`} className="mt-3"><Input value={confirmation} onChange={event => setConfirmation(event.target.value)}/></Field><Button variant="danger" className="mt-3" onClick={() => run(() => onDelete(ids))} disabled={confirmation.trim() !== displayName.trim()}><Trash2 size={17}/> Hapus Permanen</Button></> : <p className="mt-3 text-sm font-bold text-red-700">Tidak dapat dihapus permanen. Gunakan Arsipkan agar data laporan tidak rusak.</p>}</Card>}
+
+      {!canManageProducts && !canManageStock && !canDeleteProducts && <p className="text-sm text-gray-600">Akun ini hanya dapat melihat produk.</p>}
+    </div>
+  </Modal>;
 }
 
 
@@ -768,6 +809,7 @@ function VariantGroupFormModal({
   variantScannerIndex, setVariantScannerIndex, canReturnToStandard, onReturnToStandard
 }) {
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const [lifecycleProduct, setLifecycleProduct] = useState(null);
   const [categoryName, setCategoryName] = useState('');
   const addCategory = () => {
     try {

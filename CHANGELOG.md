@@ -1,6 +1,13 @@
 # Changelog
 
-## v5.4.0 — Smart Catalog, Multi-Unit Pricing & Owner Flow
+## v5.5.0 — Store Manager Operational Admin & Safe Product Lifecycle
+- Store Manager menjadi kepala operasional cabang dengan hak kelola produk, stok, kategori, pembelian, pemasok, pelanggan, keuangan, QRIS, printer, laporan, dan Kasir pada cabangnya.
+- Menambahkan Kosongkan Stok, Arsipkan, Pulihkan, dan Hapus Permanen produk dengan pemeriksaan riwayat menyeluruh.
+- Hapus permanen hanya untuk produk stok 0 tanpa riwayat; produk bersejarah wajib diarsipkan.
+- Firestore Rules membuka perubahan kategori bagi Manager tanpa membuka pengaturan global.
+- Identitas usaha, Owner, Manager lain, cabang, restore/reset cloud, dan keamanan utama tetap Owner-only.
+
+## v5.5.0 — Smart Catalog, Multi-Unit Pricing & Owner Flow
 
 ### Katalog dan pencarian barang
 
