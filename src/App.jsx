@@ -47,8 +47,14 @@ function AppShell(){
   case'dashboard':return <DashboardScreen/>;case'controlCenter':return <ControlCenterScreen/>;case'pos':return <POSScreen/>;case'openBills':return <OpenBillsScreen onNavigate={navigate}/>;case'transactions':return <TransactionsScreen/>;case'products':return <ProductsScreen/>;case'inventory':return <ProductsScreen/>;case'promotions':return <ProductsScreen/>;case'purchases':return <PurchasesScreen/>;case'suppliers':return <SuppliersScreen/>;case'customers':return <CustomersScreen/>;case'shifts':return <ShiftsScreen/>;case'finance':return <FinanceScreen/>;case'reports':return <ReportsScreen/>;case'orders':return <OrdersScreen onNavigate={navigate}/>;case'employees':return <EmployeesScreen/>;case'branches':return <BranchesScreen/>;case'devices':return <DevicesScreen/>;case'customerDisplay':return <CustomerDisplayScreen/>;case'settings':return <SettingsScreen/>;default:return <POSScreen/>}}
  const bottomIds=['pos','transactions','products'];const bottom=bottomIds.map(id=>allowed.find(m=>m.id===id)).filter(Boolean).slice(0,4);
  return <div className={`h-screen flex overflow-hidden font-sans app-shell-premium ${db.configs.darkMode?'theme-dark':'theme-light'}`}>
-  <aside className="hidden md:flex w-20 lg:w-64 bg-emerald-900 text-white flex-col shrink-0 sidebar-nav sidebar-premium">
-   <div className="h-[72px] border-b border-emerald-800 flex items-center justify-center lg:justify-start gap-3 px-4 lg:px-5"><img src="/logo-bm.svg" alt="BM" className="w-11 h-11 rounded-2xl shadow-lg ring-1 ring-white/20"/><div className="hidden lg:block"><p className="font-black tracking-tight truncate" title={storeName}>{storeName}</p><p className="text-[10px] text-emerald-300">POS Hybrid v{APP_VERSION}</p></div></div>
+  <aside className="hidden md:flex w-20 lg:w-[17.5rem] xl:w-72 bg-emerald-900 text-white flex-col shrink-0 sidebar-nav sidebar-premium">
+   <div className="sidebar-brand border-b border-emerald-800 flex items-center justify-center lg:justify-start gap-3 px-4 lg:px-5">
+    <img src="/logo-bm.svg" alt="BM" className="w-11 h-11 rounded-2xl shadow-lg ring-1 ring-white/20 shrink-0"/>
+    <div className="sidebar-brand-copy hidden lg:flex">
+     <p className={`sidebar-store-name font-black tracking-tight ${storeName.length>20?'is-long':''}`} title={storeName}>{storeName}</p>
+     <p className="sidebar-store-meta text-emerald-300">POS Hybrid <span>v{APP_VERSION}</span></p>
+    </div>
+   </div>
    <nav className="flex-1 overflow-y-auto p-2 lg:p-3 space-y-1 custom-scrollbar">{allowed.map(module=>{const Icon=module.icon;return <button key={module.id} title={module.label} onClick={()=>navigate(module.id)} className={`w-full min-h-[48px] rounded-xl flex items-center justify-center lg:justify-start gap-3 px-3 transition-colors ${active===module.id?'bg-emerald-600 text-white shadow-md':'text-emerald-100 hover:bg-emerald-800'}`}><Icon size={21}/><span className="hidden lg:block font-bold text-sm whitespace-nowrap">{module.label}</span></button>})}</nav>
    <div className="p-2 lg:p-3 border-t border-emerald-800"><button onClick={logout} className="w-full min-h-[48px] rounded-xl bg-red-500/10 text-red-100 hover:bg-red-500 flex items-center justify-center lg:justify-start gap-3 px-3"><LogOut size={20}/><span className="hidden lg:block font-bold">Keluar</span></button></div>
   </aside>

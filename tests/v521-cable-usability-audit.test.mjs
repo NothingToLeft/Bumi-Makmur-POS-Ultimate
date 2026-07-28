@@ -22,7 +22,7 @@ test('kabel memakai kelipatan setengah meter dan nilai 0,499 dinormalisasi menja
 test('migrasi memperbaiki kelipatan kabel lama yang hampir setengah meter', () => {
   const migrated = normalizeDbShape({
     products: [{ id: 'KABEL-LAMA', name: 'Kabel NYM', category: 'Listrik', baseUnit: 'meter', allowFractional: true, quantityStep: 0.499, stock: 20, minStock: 5, conversions: [{ unit: 'roll', factor: 50 }] }]
-  }, { meta: {}, configs: {}, categories: [], units: [], products: [] }, '5.2.1');
+  }, { meta: {}, configs: {}, categories: [], units: [], products: [] }, '5.2.2');
   assert.equal(migrated.products[0].quantityStep, 0.5);
 });
 

@@ -272,3 +272,56 @@ body.is-electron .sidebar-premium {
 .desktop-customer-display * {
   cursor: default;
 }
+
+/* v5.2.2 responsive branch identity in the desktop sidebar */
+.sidebar-brand {
+  min-height: 88px;
+  height: auto;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.sidebar-brand-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  align-self: stretch;
+}
+.sidebar-store-name {
+  display: -webkit-box;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: .94rem;
+  line-height: 1.16;
+  letter-spacing: -.018em;
+  text-wrap: balance;
+}
+.sidebar-store-name.is-long {
+  font-size: .84rem;
+  line-height: 1.18;
+}
+.sidebar-store-meta {
+  margin-top: 5px;
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+.sidebar-store-meta span {
+  color: #d1fae5;
+  font-weight: 800;
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .sidebar-store-name { font-size: .88rem; }
+  .sidebar-store-name.is-long { font-size: .8rem; }
+}
+@media (min-width: 1024px) {
+  body.is-electron .sidebar-premium { width: 288px; }
+}

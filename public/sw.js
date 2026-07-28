@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bumi-makmur-pos-freesync-v5.2.1';
+const CACHE_NAME = 'bumi-makmur-pos-freesync-v5.2.2';
 const APP_SHELL = [
   '/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/logo-bm.svg',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png'

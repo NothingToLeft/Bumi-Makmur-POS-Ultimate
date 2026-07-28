@@ -1,47 +1,31 @@
-# Build & QA Report — Bumi Makmur POS v5.2.1
+# Build & QA Report — Bumi Makmur POS v5.2.2
 
-## Lingkup audit
+## Ruang lingkup
 
-- Kelipatan penjualan kabel setengah meter.
-- Migrasi nilai lama `0,499` menjadi `0,5`.
-- Normalisasi kuantitas pada checkout, edit item, split bill, refund, retur pembelian, penyesuaian, opname, transfer, pembelian, dan pesanan online.
-- Konversi satuan pembelian roll/box ke satuan dasar.
-- Perhitungan harga beli ketika satuan item pembelian diubah.
-- Responsivitas form Pembelian/Restok dan form kuantitas pada HP, tablet, Web, dan Desktop.
-- Regresi Firebase Spark, offline queue, QRIS, scanner, printer, Android, PWA, dan Windows.
+Hotfix responsif untuk identitas cabang pada sidebar Web dan Desktop Windows.
 
-## Hasil pemeriksaan lokal
+## Perubahan source
 
-```text
-npm run test:core
-Tests : 100
-Pass  : 100
-Fail  : 0
-```
+- `src/App.jsx`: struktur identitas sidebar diubah dari teks `truncate` satu baris menjadi blok nama adaptif dua baris.
+- `src/index.css`: menambahkan aturan wrapping, line clamp dua baris, ukuran font adaptif, tinggi header fleksibel, dan lebar sidebar desktop 288 px.
+- `tests/v522-sidebar-branding.test.mjs`: regression test khusus nama cabang panjang.
+- Versi aplikasi, cache service worker, workflow Android/Windows, dokumentasi, dan catatan rilis dinaikkan ke 5.2.2.
+
+## Hasil pemeriksaan
 
 ```text
-npm run audit:static
-AUDIT LULUS
-JS/JSX/MJS : 66 file
-JSON       : 4 file valid
+Core tests             : 101/101 lulus
+Static audit           : lulus
+JS/JSX/MJS diperiksa   : 67 file
+JSON valid             : 4 file
+Secret/private key scan: lulus
+Firestore paid service : tidak ditemukan
 ```
 
-```text
-TypeScript parser (JS/JSX/MJS/CJS)
-Source : 62 file
-Error  : 0
-```
+## Batas pemeriksaan lokal
 
-## Build production
+`npm install` tidak selesai dalam batas waktu lingkungan penyusunan, sehingga kompilasi Vite produksi tidak diklaim sebagai hasil lokal. Workflow GitHub Actions `test-only` tetap menjadi gerbang kompilasi final sebelum membuat installer.
 
-Perintah `npm install` pada lingkungan penyusunan mengalami timeout, sehingga Vite production build lokal belum dapat dijadikan bukti final. Workflow GitHub Actions `test-only` tetap menjadi gerbang wajib dan akan menjalankan instalasi dependency, core tests, static audit, serta `vite build`.
+## Firebase
 
-## Status kompatibilitas
-
-- Firebase Spark/free tier: dipertahankan.
-- Cloud Functions: tidak digunakan.
-- Firebase Storage: tidak digunakan.
-- Firestore Rules: tidak berubah dari v5.2.0.
-- Package ID Android: tetap `app.bumimakmur.pos`.
-- Desktop app ID: tetap `app.bumimakmur.pos.desktop`.
-- Data dan akun lama: dipertahankan saat update langsung.
+Tidak ada perubahan Firestore Rules, indexes, Storage, Functions, Blaze, atau billing.

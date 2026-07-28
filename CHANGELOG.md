@@ -1,5 +1,16 @@
 # Changelog Bumi Makmur POS
 
+## v5.2.2 — Responsive Sidebar Identity Fix
+
+- Nama cabang panjang pada sidebar desktop tidak lagi dipotong satu baris.
+- Nama tampil hingga dua baris dengan ukuran huruf adaptif.
+- Sidebar Web/Windows dibuat sedikit lebih lega dan bagian identitas memiliki tinggi fleksibel.
+- Versi aplikasi tetap berada pada baris metadata terpisah.
+- Menambahkan regression test khusus nama cabang panjang.
+- Tidak ada perubahan data atau Firestore Rules.
+
+---
+
 ## v5.2.1 — Cable Half-Meter & Quantity Usability Fix
 
 ### Kelipatan kabel diperbaiki
@@ -138,6 +149,17 @@
 - Memperbaiki tombol sinkronisasi kosong, menambahkan editor cabang, dan menyelaraskan identitas aplikasi dengan cabang aktif.
 
 # Changelog Bumi Makmur POS
+
+## v5.2.2 — Responsive Sidebar Identity Fix
+
+- Nama cabang panjang pada sidebar desktop tidak lagi dipotong satu baris.
+- Nama tampil hingga dua baris dengan ukuran huruf adaptif.
+- Sidebar Web/Windows dibuat sedikit lebih lega dan bagian identitas memiliki tinggi fleksibel.
+- Versi aplikasi tetap berada pada baris metadata terpisah.
+- Menambahkan regression test khusus nama cabang panjang.
+- Tidak ada perubahan data atau Firestore Rules.
+
+---
 
 ## v5.1.1 — GitHub Releases Otomatis
 

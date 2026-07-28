@@ -1,4 +1,11 @@
-# Changelog Bumi Makmur POS v5.2.1
+# Changelog Bumi Makmur POS v5.2.2
+
+## Responsive Sidebar Identity Fix
+- Nama cabang panjang tampil utuh hingga dua baris.
+- Ukuran huruf identitas menyesuaikan panjang nama.
+- Sidebar desktop diperlebar secara terukur dan versi aplikasi dipisahkan pada baris metadata.
+- Tidak ada perubahan data atau Firestore Rules.
+
 
 ## Smart Inventory & Fractional Sales
 
