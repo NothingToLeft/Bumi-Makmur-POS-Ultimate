@@ -1,4 +1,4 @@
-# Firebase Spark — Setup Gratis Bumi Makmur POS v5.6.0
+# Firebase Spark — Setup Gratis Bumi Makmur POS v5.6.1
 
 Project tetap memakai **Firebase Spark/free tier**. Jangan upgrade Blaze dan jangan aktifkan billing.
 

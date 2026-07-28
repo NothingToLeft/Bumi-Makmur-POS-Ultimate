@@ -1,3 +1,12 @@
+# Changelog
+
+## v5.6.1 — Quiet Sync UI & Professional Settings Polish
+
+- Mengurangi peringatan cloud berulang dan mengembalikan halaman Cloud & Backup ke tampilan ringkas.
+- Diagnostik teknis tetap lengkap tetapi dipindahkan ke panel buka-tutup.
+- Banner global tidak ditampilkan lagi saat pengguna sudah berada di Pengaturan Cloud.
+- Tidak mengubah data, Firestore Rules, maupun fitur operasional v5.6.0.
+
 # Changelog Bumi Makmur POS
 
 ## v5.6.0 — Stability, Sync, Import & Operational Audit

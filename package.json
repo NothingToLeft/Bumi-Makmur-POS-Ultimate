@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "5.6.0",
+  "version": "5.6.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -46,7 +46,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v5.6.0: stabilisasi sinkronisasi Web-PC-Android, Pusat Diagnostik Cloud, impor Excel/CSV produk dan stok, riwayat harga, label barcode massal, PO/restok profesional, validasi backup, multi-satuan, varian, dan Firebase Spark FreeSync.",
+  "description": "Bumi Makmur POS v5.6.1: UI sinkronisasi ringkas, diagnostik bertahap, stabilisasi Web-PC-Android, impor Excel/CSV, multi-satuan, varian, dan Firebase Spark FreeSync.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

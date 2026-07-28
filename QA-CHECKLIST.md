@@ -1,12 +1,12 @@
-# QA Checklist Bumi Makmur POS v5.6.0
+# QA Checklist Bumi Makmur POS v5.6.1
 
 ## Build, versi, dan keamanan
 - [ ] `npm run test:core` menghasilkan 125 lulus, 0 gagal.
 - [ ] `npm run audit:static` menampilkan `AUDIT LULUS`.
 - [ ] Workflow `test-only` berhasil menjalankan Vite build.
-- [ ] Firestore Rules v5.6.0 berhasil dideploy.
-- [ ] Cloudflare Pages menampilkan v5.6.0.
-- [ ] EXE/MSI dan APK/AAB muncul pada GitHub Release v5.6.0.
+- [ ] Firestore Rules v5.6.1 berhasil dideploy.
+- [ ] Cloudflare Pages menampilkan v5.6.1.
+- [ ] EXE/MSI dan APK/AAB muncul pada GitHub Release v5.6.1.
 - [ ] Tidak ada Cloud Functions, Firebase Storage, Blaze, secret, atau private key di repository.
 
 ## Sinkronisasi Web–PC–Android
