@@ -46,6 +46,12 @@ export {
 };
 
 const GLOBAL_COLLECTIONS = new Set(['printerProfiles', 'campaigns']);
+const OPTIONAL_SYNC_COLLECTIONS = new Set([
+  'purchaseOrders',
+  'productPriceHistory',
+  'approvalRequests',
+  'deviceSessions'
+]);
 const CASHIER_COLLECTIONS = new Set([
   'branches', 'products', 'promotions', 'customers', 'sales', 'heldSales',
   'stockMovements', 'receivables', 'refunds', 'shifts', 'cashMovements',
@@ -139,7 +145,10 @@ async function loadCollectionRows(name, profile, storeId = STORE_ID) {
 function collectionErrorHandler(name, onError) {
   return error => {
     console.error(`Sinkronisasi koleksi ${name} gagal.`, error);
-    onError?.(error);
+    onError?.(error, {
+      collectionName: name,
+      optional: OPTIONAL_SYNC_COLLECTIONS.has(name)
+    });
   };
 }
 
@@ -222,7 +231,7 @@ export async function publishPublicEmployeeDirectory(db, branchId, storeId = STO
   return employees.map(item => ({ ...item, branchId: String(branchId) }));
 }
 
-export async function loadCloudDb(seed, profile, storeId = STORE_ID) {
+export async function loadCloudDb(seed, profile, storeId = STORE_ID, options = {}) {
   requireCloud();
   const settingsSnapshot = await getDocFromServer(settingsRef(storeId));
   const result = clone(seed);
@@ -231,7 +240,19 @@ export async function loadCloudDb(seed, profile, storeId = STORE_ID) {
     for (const key of SETTINGS_KEYS) if (settings[key] !== undefined) result[key] = settings[key];
   }
   const rows = await Promise.all(
-    CLOUD_ENTITY_COLLECTIONS.map(async name => [name, await loadCollectionRows(name, profile, storeId)])
+    CLOUD_ENTITY_COLLECTIONS.map(async name => {
+      try {
+        return [name, await loadCollectionRows(name, profile, storeId)];
+      } catch (error) {
+        const context = {
+          collectionName: name,
+          optional: OPTIONAL_SYNC_COLLECTIONS.has(name)
+        };
+        options.onCollectionError?.(error, context);
+        if (!context.optional) throw error;
+        return [name, clone(seed?.[name] || [])];
+      }
+    })
   );
   for (const [name, items] of rows) result[name] = items;
   return result;
@@ -250,7 +271,7 @@ export function subscribeCloudDb(seed, profile, onChange, onError, storeId = STO
       for (const key of SETTINGS_KEYS) if (settings[key] !== undefined) state[key] = settings[key];
       emit();
     }
-  }, onError));
+  }, error => onError?.(error, { collectionName: '__settings__', optional: false })));
 
   for (const name of CLOUD_ENTITY_COLLECTIONS) {
     const handleError = collectionErrorHandler(name, onError);

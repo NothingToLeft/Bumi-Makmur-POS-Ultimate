@@ -198,6 +198,7 @@ export function PosProvider({ children }) {
   const markSyncSuccess = useCallback(() => {
     const value = nowISO();
     setLastSyncSuccessAt(value);
+    setCloudError('');
     localStorage.setItem(SYNC_SUCCESS_KEY, value);
     return value;
   }, []);
@@ -561,7 +562,15 @@ export function PosProvider({ children }) {
           console.warn('Antrean belum seluruhnya tersinkron; realtime tetap dilanjutkan.', syncError);
         }
         const loaded = await withTimeout(
-          loadCloudDb(seedRef.current, profile, profile.storeId || STORE_ID),
+          loadCloudDb(hasLocal ? dbRef.current : seedRef.current, profile, profile.storeId || STORE_ID, {
+            onCollectionError: (error, context = {}) => {
+              recordSyncDiagnostic(error, {
+                mutationAction: 'COLLECTION_BOOTSTRAP',
+                collection: context.collectionName,
+                branchId: profile.branchId || ''
+              });
+            }
+          }),
           10000,
           'Firebase terlalu lama merespons. Data lokal tetap digunakan.'
         );
@@ -596,9 +605,18 @@ export function PosProvider({ children }) {
             setPendingSyncCount(getOfflineQueueStats(storeCode).count);
             void saveCachedDb(storeCode, merged, profile).catch(error => console.warn('Snapshot realtime gagal disimpan lokal.', error));
           },
-          error => {
+          (error, context = {}) => {
             console.error('Realtime Firestore gagal.', error);
-            const diagnostic = recordSyncDiagnostic(error, { mutationAction: 'REALTIME_LISTENER', branchId: profile.branchId || '' });
+            const diagnostic = recordSyncDiagnostic(error, {
+              mutationAction: 'REALTIME_LISTENER',
+              collection: context.collectionName,
+              branchId: profile.branchId || ''
+            });
+            if (context.optional) {
+              setCloudReady(true);
+              setCloudLoading(false);
+              return;
+            }
             if (diagnostic.permanent) setCloudError(friendlyCloudError(error, 'Realtime cloud terputus; data lokal tetap aktif.'));
             setCloudReady(false);
             setCloudLoading(false);
@@ -2314,7 +2332,7 @@ export function PosProvider({ children }) {
   }), [db, branchId]);
 
   const queueSummary = useMemo(() => summarizePendingMutations(readPendingMutations(storeCode)), [pendingSyncCount, storeCode]);
-  const authMatched = !currentUser || !firebaseConfigured || !auth?.currentUser || auth.currentUser.uid === currentUser.id;
+  const authMatched = !currentUser || !firebaseConfigured || Boolean(auth?.currentUser && auth.currentUser.uid === currentUser.id);
   const syncStatus = useMemo(() => buildSyncStatus({
     online, cloudReady, cloudSaving, pendingCount: pendingSyncCount, cloudError,
     authMatched, lastSuccessAt: lastSyncSuccessAt, lastAttemptAt: lastSyncAttemptAt

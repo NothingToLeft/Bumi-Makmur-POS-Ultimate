@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.6.1
+# Bumi Makmur POS FreeSync v5.6.2
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.6.1 berfokus pada stabilisasi sinkronisasi lintas perangkat, Pusat Diagnostik Cloud, impor produk/stok dari Excel atau CSV, riwayat harga, label barcode massal, Purchase Order, persetujuan diskon, validasi backup, dan closing shift profesional. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.6.2 berfokus pada pemulihan sesi Firebase Auth Desktop Windows, sinkronisasi inti yang tetap aktif ketika satu modul tambahan bermasalah, diagnostik per koleksi, serta seluruh fitur impor produk/stok, riwayat harga, label barcode massal, Purchase Order, approval, backup, dan closing profesional. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,7 +11,14 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rili
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Fitur utama v5.6.1
+## Fitur utama v5.6.2
+
+### Pemulihan cloud Desktop Windows
+
+- Firebase Auth Desktop memakai IndexedDB dengan fallback localStorage.
+- - Sesi Owner/Karyawan dipulihkan sebelum listener Firestore dibuka.
+- Kegagalan koleksi tambahan seperti PO atau riwayat harga tidak lagi mematikan sinkronisasi inti Produk, Stok, Transaksi, Cabang, dan Karyawan.
+- Diagnostik menampilkan nama koleksi yang gagal dan menggabungkan error berulang.
 
 ### Stability Center dan Diagnostik Cloud
 

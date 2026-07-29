@@ -88,10 +88,6 @@ export function buildSyncStatus({
     code: 'syncing', tone: 'blue', title: 'Menyinkronkan perubahan',
     detail: pending ? `${pending} pembaruan sedang diproses.` : 'Memeriksa data terbaru dari cloud.', healthy: true, retryable: false, lastSuccessAt, lastAttemptAt
   };
-  if (cloudError) return {
-    code: 'degraded', tone: 'orange', title: 'Cloud perlu perhatian',
-    detail: cloudError, healthy: false, retryable: true, lastSuccessAt, lastAttemptAt
-  };
   if (pending > 0) return {
     code: 'queued', tone: 'orange', title: 'Menunggu sinkronisasi',
     detail: `${pending} pembaruan tersimpan lokal dan akan dikirim otomatis.`, healthy: true, retryable: true, lastSuccessAt, lastAttemptAt
@@ -101,6 +97,10 @@ export function buildSyncStatus({
     detail: lastSuccessAt ? `Cloud terakhir berhasil ${new Date(lastSuccessAt).toLocaleString('id-ID')}.` : 'Firebase dan cache lokal aktif.',
     healthy: true, retryable: false, lastSuccessAt, lastAttemptAt
   };
+  if (cloudError) return {
+    code: 'degraded', tone: 'orange', title: 'Cloud perlu perhatian',
+    detail: cloudError, healthy: false, retryable: true, lastSuccessAt, lastAttemptAt
+  };
   return {
     code: 'local-only', tone: 'gray', title: 'Data lokal aktif',
     detail: 'Cloud belum tersambung, tetapi aplikasi tetap dapat digunakan.', healthy: true, retryable: true, lastSuccessAt, lastAttemptAt
@@ -109,7 +109,22 @@ export function buildSyncStatus({
 
 export function appendSyncDiagnostic(current = [], entry) {
   if (!entry) return current;
-  const next = [entry, ...current.filter(item => item.id !== entry.id)];
+  const signature = item => [
+    item?.category, item?.code, item?.mutationAction, item?.collection,
+    item?.entityId, item?.branchId
+  ].map(text).join('|');
+  const match = current.find(item => signature(item) === signature(entry));
+  if (match) {
+    const merged = {
+      ...match,
+      ...entry,
+      id: match.id,
+      firstAt: match.firstAt || match.at,
+      occurrences: Number(match.occurrences || 1) + 1
+    };
+    return [merged, ...current.filter(item => item.id !== match.id)].slice(0, SYNC_DIAGNOSTIC_LIMIT);
+  }
+  const next = [{ ...entry, occurrences: 1 }, ...current.filter(item => item.id !== entry.id)];
   return next.slice(0, SYNC_DIAGNOSTIC_LIMIT);
 }
 

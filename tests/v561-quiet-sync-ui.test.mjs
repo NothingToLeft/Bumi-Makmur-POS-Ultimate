@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const source = async path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('halaman cloud v5.6.1 ringkas tanpa panel status duplikat', async () => {
+test('halaman cloud v5.6.2 ringkas tanpa panel status duplikat', async () => {
   const settings = await source('src/screens/DeviceSettingsScreens.jsx');
   assert.match(settings, /Detail teknis disembunyikan agar halaman tetap ringkas/);
   assert.match(settings, /<details className="group"/);

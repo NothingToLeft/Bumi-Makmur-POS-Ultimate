@@ -1,5 +1,11 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { browserLocalPersistence, getAuth, setPersistence } from 'firebase/auth';
+import {
+  browserLocalPersistence,
+  getAuth,
+  indexedDBLocalPersistence,
+  initializeAuth,
+  onAuthStateChanged
+} from 'firebase/auth';
 import {
   getFirestore,
   initializeFirestore,
@@ -36,10 +42,30 @@ let authPersistenceReady = Promise.resolve();
 
 if (firebaseConfigured) {
   app = getApps()[0] || initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch(error => {
-    console.warn('Persistensi sesi Firebase Auth gagal diaktifkan.', error);
-  });
+  try {
+    // Desktop Electron memakai origin lokal khusus. Persistence didefinisikan
+    // eksplisit agar sesi Auth dapat dipulihkan dari IndexedDB, dengan
+    // localStorage sebagai fallback pada Web/Android WebView.
+    auth = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence]
+    });
+  } catch (error) {
+    // Hot reload atau initialisasi kedua memakai instance Auth yang sudah ada.
+    auth = getAuth(app);
+  }
+  authPersistenceReady = typeof auth.authStateReady === 'function'
+    ? auth.authStateReady().catch(error => {
+        console.warn('Pemulihan sesi Firebase Auth belum selesai.', error);
+      })
+    : new Promise(resolve => {
+        const unsubscribe = onAuthStateChanged(auth, () => {
+          unsubscribe();
+          resolve();
+        }, error => {
+          console.warn('Pemulihan sesi Firebase Auth gagal.', error);
+          resolve();
+        });
+      });
 
   try {
     firestore = initializeFirestore(app, {

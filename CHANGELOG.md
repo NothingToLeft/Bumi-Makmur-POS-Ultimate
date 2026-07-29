@@ -1,5 +1,16 @@
 # Changelog
 
+## v5.6.2 — Desktop Cloud Session Recovery
+
+- Memperbaiki persistensi Firebase Authentication pada installer Windows menggunakan IndexedDB dengan fallback localStorage.
+- Menunggu pemulihan sesi Auth selesai sebelum membaca profil dan membuka listener Firestore.
+- Sinkronisasi inti tidak lagi dinonaktifkan ketika satu koleksi fitur tambahan belum dapat dibaca.
+- Diagnostik realtime dan bootstrap kini mencatat nama koleksi yang gagal.
+- Error identik digabung menjadi satu catatan dengan jumlah kejadian.
+- Status cloud yang sudah tersinkron tidak lagi ditimpa pesan error lama.
+- Tidak menghapus data, tidak mengurangi fitur, dan tidak mengubah Firestore Rules.
+
+
 ## v5.6.1 — Quiet Sync UI & Professional Settings Polish
 
 - Mengurangi peringatan cloud berulang dan mengembalikan halaman Cloud & Backup ke tampilan ringkas.
