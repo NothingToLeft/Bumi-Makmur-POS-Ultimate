@@ -9,7 +9,7 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   const main = await read('electron/main.cjs');
   const preload = await read('electron/preload.cjs');
   const workflow = await read('.github/workflows/build-windows.yml');
-  assert.equal(pkg.version, '5.6.2');
+  assert.equal(pkg.version, '5.7.0');
   assert.equal(pkg.main, 'electron/main.cjs');
   assert.ok(pkg.devDependencies.electron);
   assert.ok(pkg.devDependencies['electron-builder']);
@@ -51,12 +51,15 @@ test('nama toko dapat diubah Owner dan diterapkan lintas login, shell, nota, QRI
   assert.match(customerDisplay, /companyName/);
 });
 
-test('input produk baru mendukung kamera dan scanner USB Bluetooth tanpa mengetik barcode', async () => {
+test('input produk baru mendukung Smart Scanner kamera dan scanner USB Bluetooth tanpa mengetik barcode', async () => {
   const products = await read('src/screens/ProductsScreen.jsx');
+  const scanner = await read('src/components/BarcodeScannerModal.jsx');
   assert.match(products, /Scan Barcode Barang Baru/);
-  assert.match(products, /BarcodeDetector/);
-  assert.match(products, /requestCameraPermission/);
-  assert.match(products, /Scanner USB\/Bluetooth/);
+  assert.match(products, /BarcodeScannerModal/);
+  assert.match(scanner, /requestCameraPermission/);
+  assert.match(scanner, /Scanner USB \/ Bluetooth/);
+  assert.match(scanner, /Depan \/ Belakang/);
+  assert.match(scanner, /Scan dari Foto/);
   assert.match(products, /Barcode ini sudah dipakai barang lain/);
   assert.match(products, /placeholder="Scan tanpa mengetik nomor"/);
 });

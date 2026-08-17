@@ -72,7 +72,7 @@ test('ringkasan antrean menjelaskan operasi dan koleksi yang tertunda', () => {
 
 test('restore backup memvalidasi struktur sebelum mengganti cloud', () => {
   const valid = validateBackupPayload({
-    meta: { version: '5.6.2' }, configs: {}, branches: [], users: [], products: [], sales: [], purchases: [], stockMovements: []
+    meta: { version: '5.7.0' }, configs: {}, branches: [], users: [], products: [], sales: [], purchases: [], stockMovements: []
   });
   assert.equal(valid.valid, true);
   const invalid = validateBackupPayload({ meta: {}, configs: {}, branches: [] });
@@ -116,12 +116,12 @@ test('Firestore Rules membatasi riwayat harga, approval, PO, dan sesi perangkat'
   assert.match(rules, /deviceSessions/);
 });
 
-test('closing harian dapat dicetak dan workflow rilis memakai versi 5.6.2', async () => {
+test('closing harian dapat dicetak dan workflow rilis memakai versi 5.7.0', async () => {
   const [shift, android, windows] = await Promise.all([
     source('src/screens/ShiftFinanceScreens.jsx'), source('.github/workflows/build-android.yml'), source('.github/workflows/build-windows.yml')
   ]);
   assert.match(shift, /LAPORAN CLOSING SHIFT/);
   assert.match(shift, /Cetak laporan closing/);
-  assert.match(android, /5\.6\.2/);
-  assert.match(windows, /5\.6\.2/);
+  assert.match(android, /5\.7\.0/);
+  assert.match(windows, /5\.7\.0/);
 });

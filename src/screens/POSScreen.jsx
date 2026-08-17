@@ -7,9 +7,9 @@ import {
   priceForSaleUnit, saleUnitOptions
 } from '../utils/fractionalUnits.js';
 import { Badge, Button, Card, Field, Input, Modal, MoneyInput, SearchBox, Select, Textarea } from '../components/ui.jsx';
-import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
 import { copyReceiptText, getReceiptLogo, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
 import { findProductByCode, isEditableTarget } from '../utils/barcode.js';
+import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
 import { sortProductsByName } from '../utils/productCatalog.js';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
@@ -119,15 +119,18 @@ export default function POSScreen() {
   };
 
   const addCodeToCart = rawCode => {
-    const result = findProductByCode(scoped.products, rawCode);
+    const normalizedCode = String(rawCode || '').trim();
+    const result = findProductByCode(scoped.products, normalizedCode);
     if (!result) {
-      setScanNotice(`Barcode/SKU "${String(rawCode || '').trim()}" tidak ditemukan.`);
-      return false;
+      const message = `Barcode/SKU "${normalizedCode}" tidak ditemukan.`;
+      setScanNotice(message);
+      return { ok: false, message };
     }
     if (result.ambiguous) {
-      setBarcodeChoices({ code: String(rawCode || '').trim(), matches: result.matches || [] });
-      setScanNotice(`Barcode ditemukan pada ${result.matches?.length || 0} varian. Pilih watt/ukuran yang benar.`);
-      return true;
+      const message = `Barcode ditemukan pada ${result.matches?.length || 0} varian. Pilih watt/ukuran yang benar.`;
+      setBarcodeChoices({ code: normalizedCode, matches: result.matches || [] });
+      setScanNotice(message);
+      return { ok: true, close: true, message };
     }
     const tierPrice = priceFor(result.product, saleType);
     const options = { ...result.options };
@@ -139,10 +142,11 @@ export default function POSScreen() {
     }
     addProduct(result.product, options);
     setSearch('');
-    setScanNotice(`${result.product.name} ditambahkan ke keranjang.`);
+    const message = `${result.product.name} ditambahkan ke keranjang.`;
+    setScanNotice(message);
     window.clearTimeout(scanNoticeTimerRef.current);
     scanNoticeTimerRef.current = window.setTimeout(() => setScanNotice(''), 2200);
-    return true;
+    return { ok: true, message };
   };
 
   useEffect(() => {
@@ -321,11 +325,7 @@ export default function POSScreen() {
       {discountApproval && <DiscountApprovalModal approval={discountApproval} onClose={() => setDiscountApproval(null)} onApprove={async pin => { const approval = await authorizeManagerPin(pin, 'SALE_DISCOUNT'); await finalizePayment(discountApproval.payments, approval); }}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
-      {scannerOpen && <ScannerModal products={scoped.products} onClose={() => setScannerOpen(false)} onDetected={result => {
-        setScannerOpen(false);
-        if (result?.ambiguous) setBarcodeChoices({ code: result.code, matches: result.matches || [] });
-        else if (result?.product) addProduct(result.product, result.options || {});
-      }}/>}      
+      {scannerOpen && <BarcodeScannerModal title="Scan Barcode Kasir" allowContinuous onClose={() => setScannerOpen(false)} onDetected={addCodeToCart} helperText="Kamera mendukung pemilihan lensa depan/belakang, flash, zoom, dan scan dari foto. Untuk kasir cepat, aktifkan Mode Scan Cepat agar kamera tetap terbuka setelah barang masuk."/>}      
       {barcodeChoices && <VariantBarcodeChoiceModal code={barcodeChoices.code} matches={barcodeChoices.matches} saleType={saleType} onClose={() => setBarcodeChoices(null)} onSelect={match => { addProduct(match.product, match.options || {}); setBarcodeChoices(null); setScanNotice(`${match.product.name} ditambahkan ke keranjang.`); }}/>}      
       {customOpen && <CustomItemModal onClose={() => setCustomOpen(false)} onAdd={line => { setCart(previous => [...previous, line]); setCustomOpen(false); }}/>}      
       {receipt && <ReceiptModal sale={receipt} configs={receiptDisplayConfig} onClose={() => setReceipt(null)}/>}      
@@ -519,130 +519,6 @@ function SplitBillModal({ cart, onClose, onSplit }) {
 }
 
 function CustomItemModal({ onClose, onAdd }) { const [name,setName]=useState('Item Kustom'); const [price,setPrice]=useState(0); return <Modal title="Nominal / Item Kustom" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={()=>onAdd({lineId:generateId('LINE'),productId:`CUSTOM-${Date.now()}`,name,category:'Kustom',sku:'CUSTOM',barcode:'',qty:1,baseQty:1,unit:'item',factor:1,price:Number(price),modalPrice:0,itemDiscount:0,note:'',variant:'',modifiers:[],bundleItems:[]})} disabled={!name||Number(price)<=0}>Tambah</Button></>}><div className="space-y-3"><Field label="Nama"><Input value={name} onChange={event=>setName(event.target.value)}/></Field><Field label="Nominal"><MoneyInput value={price} onValueChange={setPrice} autoFocus/></Field></div></Modal>; }
-
-function ScannerModal({ products, onClose, onDetected }) {
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
-  const [cameraStatus, setCameraStatus] = useState('idle');
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const frameRef = useRef(null);
-  const detectedRef = useRef(false);
-  const aliveRef = useRef(true);
-
-  const stopCamera = () => {
-    if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    frameRef.current = null;
-    streamRef.current?.getTracks().forEach(track => track.stop());
-    streamRef.current = null;
-  };
-
-  useEffect(() => {
-    aliveRef.current = true;
-    void startCamera();
-    return () => { aliveRef.current = false; stopCamera(); };
-  }, []);
-
-  const resolveProduct = rawCode => {
-    const normalized = String(rawCode || '').trim();
-    const result = findProductByCode(products, normalized);
-    if (!result) {
-      setError(`Barcode/SKU "${normalized}" tidak ditemukan.`);
-      return false;
-    }
-    detectedRef.current = true;
-    stopCamera();
-    onDetected(result);
-    return true;
-  };
-
-  const find = () => resolveProduct(code);
-
-  const startCamera = async () => {
-    try {
-      stopCamera();
-      setError('');
-      detectedRef.current = false;
-      setCameraStatus('starting');
-      const permission = await requestCameraPermission();
-      if (permission.state === 'denied') throw new Error('Izin kamera ditolak. Buka Pengaturan Aplikasi lalu izinkan Kamera.');
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Kamera perangkat tidak tersedia.');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-      });
-      if (!aliveRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setCameraStatus('active');
-
-      if (!('BarcodeDetector' in window)) {
-        setError('Pemindaian otomatis belum didukung browser ini. Kamera aktif; gunakan scanner fisik atau masukkan kode manual.');
-        return;
-      }
-
-      const preferredFormats = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'];
-      const supportedFormats = typeof window.BarcodeDetector.getSupportedFormats === 'function'
-        ? await window.BarcodeDetector.getSupportedFormats()
-        : preferredFormats;
-      const formats = preferredFormats.filter(format => supportedFormats.includes(format));
-      if (!formats.length) {
-        setError('Format barcode otomatis tidak didukung perangkat ini. Gunakan scanner fisik atau masukkan kode manual.');
-        return;
-      }
-      const detector = new window.BarcodeDetector({ formats });
-      const scanFrame = async () => {
-        if (detectedRef.current || !videoRef.current || !streamRef.current) return;
-        try {
-          const results = await detector.detect(videoRef.current);
-          const value = results?.[0]?.rawValue;
-          if (value) {
-            setCode(value);
-            if (resolveProduct(value)) return;
-          }
-        } catch (scanError) {
-          // Beberapa perangkat gagal mendeteksi saat video belum siap; coba lagi pada frame berikutnya.
-        }
-        frameRef.current = requestAnimationFrame(scanFrame);
-      };
-      frameRef.current = requestAnimationFrame(scanFrame);
-    } catch (err) {
-      stopCamera();
-      if (!aliveRef.current) return;
-      setCameraStatus('error');
-      setError(err.message || 'Kamera tidak dapat dibuka.');
-    }
-  };
-
-  const close = () => { stopCamera(); onClose(); };
-
-  return (
-    <Modal title="Scan Barcode" onClose={close} size="md">
-      <div className="space-y-3">
-        <div className="relative overflow-hidden rounded-2xl bg-black aspect-video">
-          <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover"/>
-          {cameraStatus !== 'active' && <div className="absolute inset-0 flex items-center justify-center text-white/80 text-sm">{cameraStatus === 'error' ? 'Kamera gagal dibuka' : 'Mempersiapkan kamera...'}</div>}
-          {cameraStatus === 'active' && <div className="absolute inset-x-8 top-1/2 h-0.5 bg-red-500 shadow-[0_0_12px_rgba(239,68,68,.9)]"/>}
-        </div>
-        {cameraStatus === 'error' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Button variant="secondary" onClick={startCamera} className="w-full"><ScanLine size={18}/> Coba Lagi</Button>
-            <Button variant="secondary" onClick={() => void openNativeAppSettings()} className="w-full">Buka Pengaturan Izin</Button>
-          </div>
-        )}
-        <p className="text-xs text-gray-500">Mendukung BarcodeDetector bila tersedia. Scanner USB/Bluetooth yang bekerja sebagai keyboard dapat langsung mengisi kolom di bawah.</p>
-        <div className="flex gap-2">
-          <Input value={code} onChange={event => setCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && find()} placeholder="Ketik/scan barcode atau SKU" autoFocus/>
-          <Button onClick={find}>Cari</Button>
-        </div>
-        {error && <p className="text-sm text-red-600 font-bold">{error}</p>}
-      </div>
-    </Modal>
-  );
-}
 
 function ReceiptModal({ sale, configs, onClose }) {
   const receiptLogo = getReceiptLogo(configs);

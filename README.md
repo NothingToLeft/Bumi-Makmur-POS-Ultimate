@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.6.2
+# Bumi Makmur POS FreeSync v5.7.0
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.6.2 berfokus pada pemulihan sesi Firebase Auth Desktop Windows, sinkronisasi inti yang tetap aktif ketika satu modul tambahan bermasalah, diagnostik per koleksi, serta seluruh fitur impor produk/stok, riwayat harga, label barcode massal, Purchase Order, approval, backup, dan closing profesional. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.7.0 berfokus pada Smart Barcode Scanner dengan kamera depan/belakang, pemilih lensa, flash, zoom, scan dari foto, dan Mode Scan Cepat, sambil mempertahankan pemulihan sesi Firebase Auth Desktop, impor produk/stok, riwayat harga, label barcode massal, Purchase Order, approval, backup, dan closing profesional. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,12 +11,23 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rili
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Fitur utama v5.6.2
+## Fitur utama v5.7.0
+
+### Smart Barcode Scanner & Camera Control
+
+- Kamera depan dan belakang dapat dipilih dari scanner.
+- Pada perangkat multi-kamera, pengguna dapat memilih lensa/device yang tersedia.
+- Flash/torch, zoom, dan fokus kontinu dipakai bila perangkat mendukung.
+- Barcode dapat dibaca dari foto yang tersimpan.
+- Kasir memiliki Mode Scan Cepat untuk scan banyak barang tanpa menutup kamera.
+- Bunyi dan getar scan dapat diatur.
+- Scanner yang sama dipakai pada Kasir, Tambah Barang, Product Picker, pembelian/restok, penyesuaian stok, dan transfer.
+- Scanner USB/Bluetooth tetap didukung.
 
 ### Pemulihan cloud Desktop Windows
 
 - Firebase Auth Desktop memakai IndexedDB dengan fallback localStorage.
-- - Sesi Owner/Karyawan dipulihkan sebelum listener Firestore dibuka.
+- Sesi Owner/Karyawan dipulihkan sebelum listener Firestore dibuka.
 - Kegagalan koleksi tambahan seperti PO atau riwayat harga tidak lagi mematikan sinkronisasi inti Produk, Stok, Transaksi, Cabang, dan Karyawan.
 - Diagnostik menampilkan nama koleksi yang gagal dan menggabungkan error berulang.
 
@@ -157,13 +168,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v5.6.1.
+2. Ekstrak ZIP v5.7.0.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v5.2 Smart Inventory, Fractional Sales, and Employee Picker
+Bumi Makmur POS v5.7.0 Smart Barcode Scanner and Camera Control
 ```
 
 6. Klik **Push origin**.
@@ -174,29 +185,21 @@ Bumi Makmur POS v5.2 Smart Inventory, Fractional Sales, and Employee Picker
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.6.1
+→ Build Bumi Makmur POS v5.7.0
 → test-only
 ```
 
 Pastikan core tests, audit statis, dan Vite build hijau.
 
-### 2. Deploy Firestore Rules — wajib
+### 2. Firestore Rules
 
-v5.6.1 menambahkan dokumen `publicEmployees` untuk dropdown nama karyawan. Jalankan:
-
-```text
-Actions
-→ Deploy Firebase Spark Rules
-→ Run workflow
-```
-
-Tetap memakai Firebase Spark gratis.
+v5.7.0 tidak mengubah struktur atau izin Firestore, jadi **tidak perlu deploy ulang Rules** bila Rules v5.6 sudah terpasang.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.6.1
+→ Build Bumi Makmur POS v5.7.0
 → android-release
 ```
 
@@ -206,11 +209,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v5.6.1
+→ Build Bumi Makmur POS Desktop v5.7.0
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.6.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.7.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 

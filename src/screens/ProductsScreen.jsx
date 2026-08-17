@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Package, Plus, Star, Archive, ArchiveRestore, Eye, EyeOff, Pencil, Printer, Percent, TrendingUp,
-  ScanLine, Camera, Keyboard, Boxes, AlertTriangle, ArrowLeftRight, ClipboardCheck,
+  ScanLine, Boxes, AlertTriangle, ArrowLeftRight, ClipboardCheck,
   SlidersHorizontal, History, Download, Upload, PackagePlus, CircleDollarSign, Ruler, Layers3, Trash2, WandSparkles, Copy, Tags, FolderPlus, Barcode
 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
@@ -13,7 +13,6 @@ import {
   QUANTITY_STEP_PRESETS, formatQuantity, fractionalSaleLabel, normalizeQuantity, normalizeQuantityStep, normalizeSignedQuantity,
   quantityStepLabel, recommendedQuantityStep
 } from '../utils/fractionalUnits.js';
-import { openNativeAppSettings, requestCameraPermission } from '../services/nativeDevice.js';
 import { barcodeSvgMarkup } from '../utils/barcodeLabel.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
 import { buildProductLifecycleSummary, productLifecycleLabel } from '../utils/productLifecycle.js';
@@ -28,6 +27,7 @@ import {
 import ProductPicker from '../components/ProductPicker.jsx';
 import InventoryImportModal from '../components/InventoryImportModal.jsx';
 import BulkBarcodeLabelsModal from '../components/BulkBarcodeLabelsModal.jsx';
+import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
 
 const DEFAULT_MARKUPS = { retail: 30, wholesale: 20, project: 15 };
 const PRICE_TIERS = [
@@ -804,7 +804,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
         </div>
       </div>
       {categoryQuickOpen && onAddCategory && <Modal title="Kategori Baru" onClose={() => setCategoryQuickOpen(false)} size="sm" footer={<><Button variant="secondary" onClick={() => setCategoryQuickOpen(false)}>Batal</Button><Button onClick={addCategoryInline} disabled={newCategoryName.trim().length < 2}>Simpan Kategori</Button></>}><Field label="Nama Kategori"><Input value={newCategoryName} onChange={event => setNewCategoryName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCategoryInline(); } }} placeholder="Contoh: Kabel & Aksesori" autoFocus/></Field></Modal>}
-      {barcodeScannerOpen && <ProductBarcodeScannerModal onClose={() => setBarcodeScannerOpen(false)} onDetected={rawCode => {
+      {barcodeScannerOpen && <BarcodeScannerModal title="Scan Barcode Barang Baru" onClose={() => setBarcodeScannerOpen(false)} onDetected={rawCode => {
         const code = String(rawCode || '').trim();
         if (!code) return 'Barcode belum terbaca.';
         const duplicate = products.find(item => item.id !== form.id && item.active !== false && String(item.barcode || '') === code);
@@ -905,7 +905,7 @@ function VariantGroupFormModal({
       </Card>
     </div>
     {categoryOpen&&onAddCategory&&<Modal title="Kategori Baru" onClose={()=>setCategoryOpen(false)} size="sm" footer={<><Button variant="secondary" onClick={()=>setCategoryOpen(false)}>Batal</Button><Button onClick={addCategory} disabled={categoryName.trim().length<2}>Simpan Kategori</Button></>}><Field label="Nama Kategori"><Input value={categoryName} onChange={event=>setCategoryName(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addCategory();}}} placeholder="Contoh: Lampu & Penerangan" autoFocus/></Field></Modal>}
-    {barcodeScannerOpen && <ProductBarcodeScannerModal onClose={() => { setBarcodeScannerOpen(false); setVariantScannerIndex(null); }} onDetected={rawCode => {
+    {barcodeScannerOpen && <BarcodeScannerModal title="Scan Barcode Barang Baru" onClose={() => { setBarcodeScannerOpen(false); setVariantScannerIndex(null); }} onDetected={rawCode => {
       const code = String(rawCode || '').trim();
       if (!code) return 'Barcode belum terbaca.';
       if (variantScannerIndex == null) {
@@ -990,93 +990,6 @@ function TransferModal({ products, branches, activeBranchId, onClose, onSave }) 
       <Field label={`Jumlah (${product?.baseUnit || 'unit'})`} hint={`${quantityStepLabel(step, product?.baseUnit || 'unit')}. Maksimal ${formatQuantity(maxQty)} ${product?.baseUnit || 'unit'}.`}><Input type="number" inputMode="decimal" min={step} max={maxQty || undefined} step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(safeQty || '')}/></Field>
       {normalizedQty > maxQty && <p className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">Jumlah melebihi stok tersedia.</p>}
       <Field label="Catatan"><Textarea value={notes} onChange={event => setNotes(event.target.value)}/></Field>
-    </div>
-  </Modal>;
-}
-function ProductBarcodeScannerModal({ onClose, onDetected }) {
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
-  const [cameraStatus, setCameraStatus] = useState('idle');
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const frameRef = useRef(null);
-  const detectedRef = useRef(false);
-  const aliveRef = useRef(true);
-
-  const stopCamera = () => {
-    if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    frameRef.current = null;
-    streamRef.current?.getTracks().forEach(track => track.stop());
-    streamRef.current = null;
-  };
-
-  const accept = rawCode => {
-    const normalized = String(rawCode || '').trim();
-    if (!normalized) { setError('Arahkan kamera ke barcode atau gunakan scanner fisik.'); return false; }
-    const result = onDetected(normalized);
-    if (result !== true) { setError(typeof result === 'string' ? result : 'Barcode tidak dapat digunakan.'); return false; }
-    detectedRef.current = true;
-    stopCamera();
-    onClose();
-    return true;
-  };
-
-  const startCamera = async () => {
-    try {
-      stopCamera();
-      setError('');
-      detectedRef.current = false;
-      setCameraStatus('starting');
-      const permission = await requestCameraPermission();
-      if (permission.state === 'denied') throw new Error('Izin kamera ditolak. Buka Pengaturan Aplikasi lalu izinkan Kamera.');
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Kamera perangkat tidak tersedia.');
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-      if (!aliveRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
-      streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
-      setCameraStatus('active');
-      if (!('BarcodeDetector' in window)) { setError('Deteksi otomatis belum didukung perangkat ini. Gunakan scanner USB/Bluetooth atau masukkan kode pada kolom.'); return; }
-      const preferred = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf'];
-      const supported = typeof window.BarcodeDetector.getSupportedFormats === 'function' ? await window.BarcodeDetector.getSupportedFormats() : preferred;
-      const formats = preferred.filter(format => supported.includes(format));
-      if (!formats.length) { setError('Format barcode tidak didukung kamera perangkat ini. Gunakan scanner fisik.'); return; }
-      const detector = new window.BarcodeDetector({ formats });
-      const scanFrame = async () => {
-        if (detectedRef.current || !videoRef.current || !streamRef.current) return;
-        try {
-          const results = await detector.detect(videoRef.current);
-          const value = results?.[0]?.rawValue;
-          if (value) { setCode(value); if (accept(value)) return; }
-        } catch {}
-        frameRef.current = requestAnimationFrame(scanFrame);
-      };
-      frameRef.current = requestAnimationFrame(scanFrame);
-    } catch (cameraError) {
-      stopCamera();
-      if (!aliveRef.current) return;
-      setCameraStatus('error');
-      setError(cameraError.message || 'Kamera tidak dapat dibuka.');
-    }
-  };
-
-  useEffect(() => {
-    aliveRef.current = true;
-    void startCamera();
-    return () => { aliveRef.current = false; stopCamera(); };
-  }, []);
-
-  const close = () => { stopCamera(); onClose(); };
-  return <Modal title="Scan Barcode Barang Baru" onClose={close} size="md">
-    <div className="space-y-4">
-      <div className="relative overflow-hidden rounded-2xl bg-black aspect-video">
-        <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover"/>
-        {cameraStatus !== 'active' && <div className="absolute inset-0 flex items-center justify-center text-white/80 text-sm"><Camera className="mr-2"/>{cameraStatus === 'error' ? 'Kamera gagal dibuka' : 'Mempersiapkan kamera...'}</div>}
-        {cameraStatus === 'active' && <><div className="absolute inset-8 border-2 border-white/70 rounded-2xl"/><div className="absolute inset-x-10 top-1/2 h-0.5 bg-red-500 shadow-[0_0_12px_rgba(239,68,68,.9)]"/></>}
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><Button variant="secondary" onClick={startCamera}><ScanLine size={18}/> Scan Ulang</Button><Button variant="secondary" onClick={() => void openNativeAppSettings()}>Buka Izin Kamera</Button></div>
-      <div className="p-3 rounded-2xl bg-blue-50 border border-blue-100 flex gap-3 text-blue-900"><Keyboard className="shrink-0"/><div><p className="font-black text-sm">Scanner USB/Bluetooth</p><p className="text-xs mt-1">Klik kolom di bawah, lalu scan. Umumnya scanner akan mengetik kode dan mengirim Enter otomatis.</p></div></div>
-      <div className="flex gap-2"><Input value={code} onChange={event => setCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && accept(code)} placeholder="Barcode hasil scan" autoFocus/><Button onClick={() => accept(code)}>Pakai</Button></div>
-      {error && <p className="text-sm font-bold text-red-600">{error}</p>}
     </div>
   </Modal>;
 }

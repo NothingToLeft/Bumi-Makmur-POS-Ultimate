@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, Package, SearchX } from 'lucide-react';
+import { ChevronDown, Package, ScanLine, SearchX } from 'lucide-react';
 import { Badge, Button, Modal, SearchBox, Select } from './ui.jsx';
 import { formatQuantity } from '../utils/fractionalUnits.js';
 import { productSearchText, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
+import { findProductByCode } from '../utils/barcode.js';
+import BarcodeScannerModal from './BarcodeScannerModal.jsx';
 
 export default function ProductPicker({
   products = [], value = '', onChange, label = 'Barang', placeholder = 'Pilih barang',
@@ -11,6 +13,8 @@ export default function ProductPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanNotice, setScanNotice] = useState('');
   const sorted = useMemo(() => sortProductsByName(products.filter(product => includeInactive || product.active !== false)), [products, includeInactive]);
   const selected = sorted.find(product => product.id === value) || products.find(product => product.id === value);
   const categories = useMemo(() => sortCategories(sorted.map(product => product.category)), [sorted]);
@@ -23,6 +27,21 @@ export default function ProductPicker({
     onChange?.(product?.id || '', product || null);
     setOpen(false);
     setSearch('');
+    setScanNotice('');
+  };
+
+  const handleScannedCode = code => {
+    const result = findProductByCode(sorted, code);
+    if (!result) return `Barcode/SKU \"${String(code || '').trim()}\" tidak ditemukan.`;
+    if (result.ambiguous) {
+      setCategory('all');
+      setSearch(String(code || '').trim());
+      const message = `Ditemukan ${result.matches?.length || 0} varian dengan barcode yang sama. Pilih varian yang benar dari daftar.`;
+      setScanNotice(message);
+      return { ok: true, close: true, message };
+    }
+    select(result.product);
+    return { ok: true, close: true, message: `${result.product.name} dipilih.` };
   };
 
   return <>
@@ -38,7 +57,8 @@ export default function ProductPicker({
     </label>
     {open && <Modal title="Pilih Barang" onClose={() => setOpen(false)} size="md" footer={<Button variant="secondary" onClick={() => setOpen(false)}>Tutup</Button>}>
       <div className="space-y-3">
-        <SearchBox value={search} onChange={setSearch} placeholder="Cari nama, SKU, barcode, kategori, atau rak..." inputProps={{ autoFocus: true }}/>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center"><SearchBox value={search} onChange={setSearch} placeholder="Cari nama, SKU, barcode, kategori, atau rak..." inputProps={{ autoFocus: true }}/><Button variant="secondary" onClick={() => setScannerOpen(true)} className="px-3 min-h-[48px]" title="Scan barcode untuk memilih barang"><ScanLine size={18}/><span className="hidden sm:inline">Scan</span></Button></div>
+        {scanNotice && <p className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded-xl p-3">{scanNotice}</p>}
         <Select value={category} onChange={event => setCategory(event.target.value)}>
           <option value="all">Semua kategori</option>
           {categories.map(item => <option key={item} value={item}>{item}</option>)}
@@ -53,5 +73,6 @@ export default function ProductPicker({
         </div>
       </div>
     </Modal>}
+    {scannerOpen && <BarcodeScannerModal title="Scan untuk Pilih Barang" onClose={() => setScannerOpen(false)} onDetected={handleScannedCode} helperText="Scan barcode atau SKU untuk langsung memilih barang. Jika barcode dipakai bersama oleh beberapa varian, daftar akan difilter agar Anda tinggal memilih variannya."/>}
   </>;
 }

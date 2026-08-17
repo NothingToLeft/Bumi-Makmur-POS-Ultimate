@@ -1,15 +1,21 @@
 # Changelog
 
+## v5.7.0 — Smart Barcode Scanner & Camera Control
+
+- Scanner kamera bersama berbasis ZXing untuk Kasir, Produk, Product Picker, dan Tes Scanner.
+- Mendukung kamera depan/belakang, pemilih lensa, flash/torch, zoom, dan fokus kontinu jika tersedia.
+- Menambahkan Scan dari Foto, bunyi/getar, Mode Scan Cepat, dan perlindungan hasil kamera ganda.
+- Scanner USB/Bluetooth tetap didukung.
+- Pemulihan sesi cloud Desktop dari v5.6.2 tetap dipertahankan.
+- Tidak mengubah data atau Firestore Rules.
+
 ## v5.6.2 — Desktop Cloud Session Recovery
 
-- Memperbaiki persistensi Firebase Authentication pada installer Windows menggunakan IndexedDB dengan fallback localStorage.
-- Menunggu pemulihan sesi Auth selesai sebelum membaca profil dan membuka listener Firestore.
-- Sinkronisasi inti tidak lagi dinonaktifkan ketika satu koleksi fitur tambahan belum dapat dibaca.
-- Diagnostik realtime dan bootstrap kini mencatat nama koleksi yang gagal.
-- Error identik digabung menjadi satu catatan dengan jumlah kejadian.
-- Status cloud yang sudah tersinkron tidak lagi ditimpa pesan error lama.
-- Tidak menghapus data, tidak mengurangi fitur, dan tidak mengubah Firestore Rules.
-
+- Firebase Auth Desktop memakai IndexedDB dengan fallback localStorage.
+- Menunggu pemulihan sesi Auth sebelum listener Firestore dibuka.
+- Koleksi tambahan tidak lagi mematikan sinkronisasi inti.
+- Diagnostik mencatat nama koleksi dan menggabungkan error berulang.
+- Status tersinkron tidak lagi dikalahkan error lama.
 
 ## v5.6.1 — Quiet Sync UI & Professional Settings Polish
 
