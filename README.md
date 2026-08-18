@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.7.0
+# Bumi Makmur POS FreeSync v5.8.0
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.7.0 berfokus pada Smart Barcode Scanner dengan kamera depan/belakang, pemilih lensa, flash, zoom, scan dari foto, dan Mode Scan Cepat, sambil mempertahankan pemulihan sesi Firebase Auth Desktop, impor produk/stok, riwayat harga, label barcode massal, Purchase Order, approval, backup, dan closing profesional. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.8.0 adalah Business Suite untuk operasional toko listrik/material: Smart Restock, PO dengan penerimaan parsial, riwayat harga pemasok, quotation, serial & garansi, stock opname scanner, inventory aging, proteksi harga modal, serta perapihan navigasi; Smart Barcode Scanner dan seluruh fitur v5.7 tetap dipertahankan. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,7 +11,20 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rili
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Fitur utama v5.7.0
+## Fitur utama v5.8.0
+
+### Business Suite & Smart Inventory
+
+- Smart Restock menghitung kebutuhan pembelian berdasarkan kecepatan penjualan, stok minimum, lead time, safety stock, dan PO yang belum diterima.
+- Smart Restock dapat membuat Draft PO per pemasok.
+- PO mendukung penerimaan parsial; stok/HPP/hutang hanya berubah sesuai barang yang diterima.
+- Riwayat harga pemasok membantu melihat harga beli terakhir per barang dan supplier.
+- Penawaran proyek dapat dicetak/Save PDF dan dikonversi menjadi Open Bill.
+- Produk tertentu dapat memakai Serial Number, masa garansi, dan riwayat klaim.
+- Stock Opname Scanner mencatat physical count serta alasan selisih per item.
+- Laporan baru mencakup inventory aging, dead stock, modal tertahan, margin, Smart Restock, dan aging piutang.
+- Tindakan sensitif dan penjualan di bawah modal meminta PIN approval sesuai role.
+- QRIS preview berusaha memotong hanya simbol QR dari poster QRIS resmi; **QRIS Mode Kasir tidak ditambahkan**.
 
 ### Smart Barcode Scanner & Camera Control
 
@@ -168,13 +181,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v5.7.0.
+2. Ekstrak ZIP v5.8.0.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v5.7.0 Smart Barcode Scanner and Camera Control
+Bumi Makmur POS v5.8.0 Business Suite and Smart Inventory
 ```
 
 6. Klik **Push origin**.
@@ -185,7 +198,7 @@ Bumi Makmur POS v5.7.0 Smart Barcode Scanner and Camera Control
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.7.0
+→ Build Bumi Makmur POS v5.8.0
 → test-only
 ```
 
@@ -193,13 +206,13 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Firestore Rules
 
-v5.7.0 tidak mengubah struktur atau izin Firestore, jadi **tidak perlu deploy ulang Rules** bila Rules v5.6 sudah terpasang.
+v5.8.0 **menambah koleksi dan izin Firestore** untuk quotation, riwayat harga pemasok, serial, dan garansi. Jalankan workflow **Deploy Firebase Spark Rules** sekali setelah source v5.8.0 di-push. Tetap Firebase Spark, tanpa Blaze.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.7.0
+→ Build Bumi Makmur POS v5.8.0
 → android-release
 ```
 
@@ -209,11 +222,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v5.7.0
+→ Build Bumi Makmur POS Desktop v5.8.0
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.7.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.8.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -229,3 +242,25 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.7.0
 ## Catatan installer Windows
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
+
+## Release acceptance v5.8.0
+
+Full-pass source audit final pada 19 Agustus 2026 menghasilkan:
+
+- **161/161 automated core/regression tests PASS**.
+- Static project audit **PASS**.
+- Parser JS/JSX seluruh `src` **PASS**.
+- Electron/Android helper Node syntax **PASS**.
+- GitHub Actions YAML dan JSON konfigurasi **PASS**.
+- Firebase Spark-only guard **PASS**.
+
+Acceptance flow produksi yang disarankan setelah push:
+
+1. Backup JSON dan pastikan Antrean Offline = 0.
+2. Deploy Firestore Rules v5.8 sekali.
+3. Jalankan Android workflow `test-only` sampai hijau.
+4. Jalankan `android-release`; APK/AAB dipublikasikan ke GitHub Releases.
+5. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
+6. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
+
+Lihat `QA-REPORT-Bumi-Makmur-POS-v5.8.0.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.

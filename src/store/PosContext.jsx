@@ -119,7 +119,9 @@ const ACTION_PERMISSIONS = {
   SHIFT_START: 'shifts.manage', SHIFT_END: 'shifts.manage', CASH_MOVEMENT: 'shifts.manage',
   BILL_HOLD: 'pos.use', BILL_DELETE: 'pos.use', SALE_COMPLETE: 'pos.use',
   SALE_REFUND: 'transactions.refund', SALE_VOID: 'transactions.void',
-  PURCHASE_CREATE: 'purchases.manage', PURCHASE_UPDATE: 'purchases.manage', PURCHASE_RETURN: 'purchases.manage', PURCHASE_ORDER_CREATE: 'purchases.manage', PURCHASE_ORDER_UPDATE: 'purchases.manage',
+  PURCHASE_CREATE: 'purchases.manage', PURCHASE_UPDATE: 'purchases.manage', PURCHASE_RETURN: 'purchases.manage', PURCHASE_ORDER_CREATE: 'purchases.manage', PURCHASE_ORDER_UPDATE: 'purchases.manage', PURCHASE_ORDER_RECEIVE: 'purchases.manage',
+  QUOTATION_CREATE: 'quotations.manage', QUOTATION_UPDATE: 'quotations.manage', QUOTATION_CONVERT: 'quotations.manage',
+  SERIAL_CREATE: 'warranty.manage', SERIAL_UPDATE: 'warranty.manage', WARRANTY_CLAIM_CREATE: 'warranty.manage', WARRANTY_CLAIM_UPDATE: 'warranty.manage',
   RECEIVABLE_PAYMENT: 'finance.manage', PAYABLE_PAYMENT: 'finance.manage', EXPENSE_CREATE: 'finance.manage',
   STOCK_ADJUST: 'inventory.manage', STOCK_RESET: 'inventory.manage', STOCK_OPNAME: 'inventory.manage', STOCK_TRANSFER: 'inventory.manage',
   ORDER_CREATE: 'orders.manage', ORDER_UPDATE: 'orders.manage', ORDER_TO_BILL: 'orders.manage',
@@ -129,7 +131,7 @@ const ACTION_PERMISSIONS = {
 
 export function PosProvider({ children }) {
   const seedRef = useRef(createSeedDb());
-  const [db, setDb] = useState(() => ({ ...seedRef.current, users: [], branches: [], products: [], suppliers: [], customers: [], promotions: [], sales: [], heldSales: [], purchases: [], purchaseOrders: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [], branchPaymentProfiles: [], productPriceHistory: [], approvalRequests: [], deviceSessions: [], expenses: [], receivables: [], payables: [], refunds: [], shifts: [], cashMovements: [], onlineOrders: [], printerProfiles: [], campaigns: [], feedback: [], auditLogs: [] }));
+  const [db, setDb] = useState(() => ({ ...seedRef.current, users: [], branches: [], products: [], suppliers: [], customers: [], promotions: [], sales: [], heldSales: [], purchases: [], purchaseOrders: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [], branchPaymentProfiles: [], productPriceHistory: [], supplierPriceHistory: [], quotations: [], serialNumbers: [], warrantyClaims: [], approvalRequests: [], deviceSessions: [], expenses: [], receivables: [], payables: [], refunds: [], shifts: [], cashMovements: [], onlineOrders: [], printerProfiles: [], campaigns: [], feedback: [], auditLogs: [] }));
   const dbRef = useRef(db);
   const [currentUser, setCurrentUser] = useState(null);
   const currentUserRef = useRef(null);
@@ -1339,6 +1341,8 @@ export function PosProvider({ children }) {
       const allowFractional = data.allowFractional === true;
       const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional, recommendedQuantityStep(data.baseUnit, data.category));
       const conversions = normalizeConversionRows(data.conversions || [], data.baseUnit || 'pcs');
+      if (data.serialTracking === true && allowFractional) throw new Error('Produk berserial tidak dapat dijual pecahan. Gunakan satuan dasar per unit/pcs.');
+      if (data.serialTracking === true && conversions.some(row => !Number.isInteger(Number(row.factor || 0)))) throw new Error('Konversi kemasan produk berserial harus berisi jumlah unit bulat.');
       const saved = [];
       for (const row of rows) {
         const variantName = String(row.variantName || '').trim();
@@ -1371,6 +1375,7 @@ export function PosProvider({ children }) {
         const item = {
           id: row.id || generateId('PRD'), branchId: targetBranchId,
           name: productName, parentName, variantName, variantGroupId, productType: 'variant', sharedBarcode,
+          brand: String(data.brand || '').trim(), specifications: String(data.specifications || '').trim(),
           category: data.category || 'Lainnya', sku, barcode: internalBarcode,
           baseUnit: data.baseUnit || 'pcs', stock: quantity(initialStock), minStock: quantity(minimumStock),
           rack: row.rack || '-', modalPrice: money(row.modalPrice), initialModalPrice: existing?.initialModalPrice ?? money(row.modalPrice),
@@ -1382,7 +1387,8 @@ export function PosProvider({ children }) {
           },
           variants: [], conversions, allowFractional, quantityStep, bundleItems: [],
           favorite: Boolean(row.favorite), available: row.available !== false, active: row.active !== false,
-          trackStock: data.trackStock !== false, updatedAt: nowISO()
+          trackStock: data.trackStock !== false, serialTracking: data.serialTracking === true,
+          warrantyMonths: Math.max(0, Math.round(Number(data.warrantyMonths || 0))), updatedAt: nowISO()
         };
         appendProductPriceHistory(next, existing, item, existing ? 'Edit produk varian' : 'Produk varian baru', currentUserRef.current?.id);
         if (existing) next.products = next.products.map(product => product.id === item.id ? item : product);
@@ -1414,13 +1420,16 @@ export function PosProvider({ children }) {
     }
     const allowFractional = data.allowFractional === true;
     const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional, recommendedQuantityStep(data.baseUnit, data.category));
+    const productConversions = normalizeConversionRows(data.conversions || [], data.baseUnit || 'pcs');
+    if (data.serialTracking === true && allowFractional) throw new Error('Produk berserial tidak dapat dijual pecahan. Gunakan satuan dasar per unit/pcs.');
+    if (data.serialTracking === true && productConversions.some(row => !Number.isInteger(Number(row.factor || 0)))) throw new Error('Konversi kemasan produk berserial harus berisi jumlah unit bulat.');
     const quantityProfile = { name: productName, baseUnit: data.baseUnit || 'pcs', allowFractional, quantityStep };
     const initialStock = existing?.stock ?? validateBaseQuantity(quantityProfile, data.stock || 0, 'Stok awal');
     const minimumStock = validateBaseQuantity(quantityProfile, data.minStock || 0, 'Stok minimum');
     if (initialStock < 0 || minimumStock < 0) throw new Error('Stok awal dan stok minimum tidak boleh negatif.');
     const item = {
       id: data.id || generateId('PRD'), branchId: targetBranchId,
-      name: productName, category: data.category || 'Lainnya', sku,
+      name: productName, brand: String(data.brand || '').trim(), specifications: String(data.specifications || '').trim(), category: data.category || 'Lainnya', sku,
       barcode, baseUnit: data.baseUnit || 'pcs', stock: quantity(initialStock),
       minStock: quantity(minimumStock), rack: data.rack || '-', modalPrice: money(data.modalPrice),
       initialModalPrice: existing?.initialModalPrice ?? money(data.modalPrice),
@@ -1435,10 +1444,11 @@ export function PosProvider({ children }) {
         project: Math.max(0, Number(data.markups?.project || 0))
       },
       variants: data.variants || [],
-      conversions: normalizeConversionRows(data.conversions || [], data.baseUnit || 'pcs'),
+      conversions: productConversions,
       allowFractional, quantityStep, bundleItems: data.bundleItems || [],
       favorite: Boolean(data.favorite), available: data.available !== false, active: data.active !== false,
-      trackStock: data.trackStock !== false, updatedAt: nowISO()
+      trackStock: data.trackStock !== false, serialTracking: data.serialTracking === true,
+      warrantyMonths: Math.max(0, Math.round(Number(data.warrantyMonths || 0))), updatedAt: nowISO()
     };
     appendProductPriceHistory(next, existing, item, existing ? 'Edit produk' : 'Produk baru', currentUserRef.current?.id);
     if (existing) next.products = next.products.map(product => product.id === item.id ? item : product);
@@ -1756,6 +1766,33 @@ export function PosProvider({ children }) {
       if (itemDiscount > price * qty) throw new Error(`Diskon item ${item.name || 'item'} melebihi subtotal.`);
       return { ...item, qty, price, itemDiscount, netUnitPrice: Math.max(0, price - itemDiscount / qty) };
     });
+    const usedSerialIds = new Set();
+    for (const item of normalizedItems) {
+      const product = next.products.find(row => row.id === item.productId && row.branchId === branchId);
+      if (!product?.serialTracking) continue;
+      const requiredSerials = Math.round(Number(item.baseQty ?? Number(item.qty) * Number(item.factor || 1)));
+      if (requiredSerials <= 0 || Math.abs(requiredSerials - Number(item.baseQty ?? Number(item.qty) * Number(item.factor || 1))) > 0.000001) throw new Error(`Jumlah ${product.name} harus berupa unit bulat karena memakai nomor serial.`);
+      const serialIds = [...new Set((item.serialIds || []).filter(Boolean))];
+      if (serialIds.length !== requiredSerials) throw new Error(`${product.name} membutuhkan ${requiredSerials} nomor serial. Pilih serial pada detail item sebelum pembayaran.`);
+      for (const serialId of serialIds) {
+        if (usedSerialIds.has(serialId)) throw new Error(`Nomor serial yang sama dipilih lebih dari sekali pada transaksi.`);
+        const serial = (next.serialNumbers || []).find(row => row.id === serialId && row.branchId === branchId && row.productId === product.id);
+        if (!serial) throw new Error(`Nomor serial untuk ${product.name} tidak ditemukan.`);
+        if (serial.status !== 'IN_STOCK') throw new Error(`Serial ${serial.serial} tidak tersedia untuk dijual (status ${serial.status}).`);
+        usedSerialIds.add(serialId);
+      }
+      item.serialIds = serialIds;
+    }
+
+    const rawStockRows = normalizedItems.flatMap(item => resolveProductStockRows(next, item));
+    const estimatedCost = Math.round(rawStockRows.reduce((sum, row) => sum + Math.max(0, Number(row.product?.modalPrice || 0)) * Math.max(0, Number(row.qty || 0)), 0));
+    const belowCostItems = normalizedItems.filter(item => {
+      const lineStockRows = resolveProductStockRows(next, item);
+      const lineCost = lineStockRows.reduce((sum, row) => sum + Math.max(0, Number(row.product?.modalPrice || 0)) * Math.max(0, Number(row.qty || 0)), 0);
+      const lineRevenue = Math.max(0, Number(item.price || 0) * Number(item.qty || 0) - Number(item.itemDiscount || 0));
+      return lineCost > lineRevenue + 0.000001;
+    });
+
     const recalculatedSubtotal = Math.round(normalizedItems.reduce((sum, item) => sum + item.price * item.qty - item.itemDiscount, 0));
     const safeGlobalDiscount = Math.min(recalculatedSubtotal, money(payload.globalDiscount));
     const safePromoDiscount = 0;
@@ -1770,10 +1807,16 @@ export function PosProvider({ children }) {
     const approvalLimit = currentUser.role === 'kasir'
       ? Number(next.configs.cashierMaxDiscountPercent ?? 5)
       : Number(next.configs.managerMaxDiscountPercent ?? 20);
-    if (currentUser.role !== 'owner' && approvalDiscountPercent > approvalLimit && (!payload.approvedBy || !payload.approvalToken)) {
+    const hasApproval = Boolean(payload.approvedBy && payload.approvalToken);
+    if (currentUser.role !== 'owner' && approvalDiscountPercent > approvalLimit && !hasApproval) {
       throw new Error(`Diskon ${approvalDiscountPercent.toFixed(1)}% melebihi batas ${approvalLimit}%. Minta persetujuan Owner atau Store Manager.`);
     }
     const afterDiscount = Math.max(0, recalculatedSubtotal - safeGlobalDiscount - safePromoDiscount - safeLoyaltyDiscount);
+    const belowCostSale = belowCostItems.length > 0 || afterDiscount + 0.000001 < estimatedCost;
+    if (belowCostSale && !hasApproval) {
+      const names = belowCostItems.slice(0, 3).map(item => item.name).filter(Boolean).join(', ');
+      throw new Error(`Penjualan di bawah harga modal memerlukan PIN Owner/Store Manager${names ? ` (${names})` : ''}.`);
+    }
     const safeTax = next.configs.taxEnabled ? Math.round(afterDiscount * Math.max(0, Number(next.configs.taxRate || 0)) / 100) : 0;
     const safeService = next.configs.serviceEnabled ? Math.round(afterDiscount * Math.max(0, Number(next.configs.serviceRate || 0)) / 100) : 0;
     const rawTotal = afterDiscount + safeTax + safeService;
@@ -1787,7 +1830,6 @@ export function PosProvider({ children }) {
     const overpayment = paymentTotal - recalculatedTotal;
     if (overpayment > cashTotal) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan. Kelebihan hanya boleh berasal dari pembayaran tunai sebagai kembalian.');
 
-    const rawStockRows = normalizedItems.flatMap(item => resolveProductStockRows(next, item));
     const stockMap = new Map();
     for (const row of rawStockRows) {
       const previous = stockMap.get(row.product.id);
@@ -1819,16 +1861,37 @@ export function PosProvider({ children }) {
       refundedTotal: 0, syncStatus: navigator.onLine ? 'QUEUED' : 'OFFLINE_QUEUED', createdBy: currentUser.id
     };
     next.sales.unshift(sale);
+    for (const item of normalizedItems) {
+      if (!item.serialIds?.length) continue;
+      for (const serialId of item.serialIds) {
+        const serial = (next.serialNumbers || []).find(row => row.id === serialId && row.branchId === branchId);
+        if (!serial) continue;
+        const warrantyMonths = Math.max(0, Math.round(Number(serial.warrantyMonths || 0)));
+        const start = new Date(sale.createdAt);
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + warrantyMonths);
+        serial.status = 'SOLD';
+        serial.saleId = sale.id;
+        serial.customerId = sale.customerId || '';
+        serial.customerName = sale.customerName || '';
+        serial.soldAt = sale.createdAt;
+        serial.warrantyStartAt = sale.createdAt;
+        serial.warrantyEndsAt = warrantyMonths > 0 ? end.toISOString() : '';
+        serial.updatedAt = sale.createdAt;
+      }
+    }
     if (payload.approvedBy && payload.approvalToken) {
       next.approvalRequests.unshift({
-        id: generateId('APR'), branchId: sale.branchId, type: 'SALE_DISCOUNT', status: 'APPROVED',
-        referenceId: sale.id, amount: approvalDiscount, percent: Math.round(approvalDiscountPercent * 100) / 100,
+        id: generateId('APR'), branchId: sale.branchId, type: payload.approvalPurpose || (belowCostSale ? 'SALE_BELOW_COST' : 'SALE_DISCOUNT'), status: 'APPROVED',
+        referenceId: sale.id, amount: belowCostSale ? Math.max(0, estimatedCost - afterDiscount) : approvalDiscount, percent: Math.round(approvalDiscountPercent * 100) / 100,
+        estimatedCost, belowCost: belowCostSale, belowCostProducts: belowCostItems.map(item => item.productId),
         requestedBy: currentUser.id, requestedByName: currentUser.name,
         approvedBy: payload.approvedBy, approvedByName: payload.approvedByName || '',
         approvalToken: payload.approvalToken, createdAt: sale.createdAt, resolvedAt: sale.createdAt
       });
       sale.approvedBy = payload.approvedBy;
       sale.approvedByName = payload.approvedByName || '';
+      sale.approvalPurpose = payload.approvalPurpose || (belowCostSale ? 'SALE_BELOW_COST' : 'SALE_DISCOUNT');
     }
     if (payload.heldSaleId) next.heldSales = next.heldSales.filter(row => row.id !== payload.heldSaleId);
 
@@ -1877,6 +1940,8 @@ export function PosProvider({ children }) {
     if (['REFUNDED', 'VOIDED'].includes(sale.status)) throw new Error('Transaksi ini sudah selesai direfund/dibatalkan.');
     const previousRefunds = db.refunds.filter(item => item.saleId === sale.id);
     if (payload.voidAll && previousRefunds.length > 0) throw new Error('Transaksi yang sudah memiliki refund sebagian tidak dapat di-void penuh.');
+    const alreadyRefundedSerialIds = new Set(previousRefunds.flatMap(refund => (refund.items || []).flatMap(item => item.serialIds || [])));
+    const requestedRefundSerialIds = new Set();
     for (const refundItem of payload.items) {
       const original = sale.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
       if (!original) throw new Error(`Item ${refundItem.name || refundItem.productId} tidak ditemukan pada transaksi.`);
@@ -1886,6 +1951,21 @@ export function PosProvider({ children }) {
       const refundStep = Math.max(0.001, Number(original.quantityStep || 1));
       if (refundQty <= 0 || refundQty > remaining) throw new Error(`Jumlah refund ${original.name} melebihi sisa yang dapat direfund (${remaining}).`);
       if (!isStepAligned(refundQty, refundStep)) throw new Error(`Jumlah refund ${original.name} harus kelipatan ${formatQuantity(refundStep)} ${original.unit || 'satuan'}.`);
+      const originalSerialIds = Array.isArray(original.serialIds) ? original.serialIds : [];
+      if (originalSerialIds.length > 0) {
+        const basePerQty = Number(original.baseQty || original.qty || 0) / Math.max(0.000001, Number(original.qty || 0));
+        const requiredSerials = Math.round(refundQty * basePerQty);
+        const selectedSerialIds = Array.isArray(refundItem.serialIds) ? refundItem.serialIds.filter(Boolean) : [];
+        if (selectedSerialIds.length !== requiredSerials) throw new Error(`Pilih tepat ${requiredSerials} serial ${original.name} yang direfund.`);
+        for (const serialId of selectedSerialIds) {
+          if (!originalSerialIds.includes(serialId)) throw new Error(`Serial refund ${original.name} tidak termasuk pada transaksi ini.`);
+          if (alreadyRefundedSerialIds.has(serialId)) throw new Error('Salah satu serial sudah pernah direfund sebelumnya.');
+          if (requestedRefundSerialIds.has(serialId)) throw new Error('Nomor serial yang sama dipilih lebih dari sekali pada refund.');
+          const serial = (db.serialNumbers || []).find(row => row.id === serialId && row.branchId === sale.branchId);
+          if (!serial || serial.status !== 'SOLD' || serial.saleId !== sale.id) throw new Error(`Serial ${serial?.serial || serialId} tidak berstatus SOLD pada transaksi ini.`);
+          requestedRefundSerialIds.add(serialId);
+        }
+      }
     }
     const itemNetTotal = sale.items.reduce((sum, item) => sum + Math.max(0, Number(item.netUnitPrice ?? item.price) || 0) * Number(item.qty || 0), 0);
     const saleAllocationRatio = itemNetTotal > 0 ? money(sale.total) / itemNetTotal : 0;
@@ -1911,7 +1991,7 @@ export function PosProvider({ children }) {
         items: payload.items, amount, reason: payload.reason, restock: payload.restock,
         method: payload.method || 'Tunai', createdAt: nowISO(), createdBy: currentUser.id,
         approvedBy: payload.approvedBy || currentUser.id, approvedByName: payload.approvedByName || currentUser.name,
-        type: payload.voidAll ? 'VOID' : (payload.items.length === target.items.length ? 'FULL' : 'PARTIAL')
+        type: payload.voidAll ? 'VOID' : 'PARTIAL'
       };
       next.refunds.unshift(refund);
       target.refundedTotal = money(target.refundedTotal) + amount;
@@ -1921,6 +2001,45 @@ export function PosProvider({ children }) {
         return returnedQty >= Number(original.qty || 0);
       });
       if (payload.voidAll) target.status = 'VOIDED'; else if (fullyRefundedByQty) target.status = 'REFUNDED'; else target.status = 'PARTIAL_REFUND';
+      refund.type = payload.voidAll ? 'VOID' : (fullyRefundedByQty ? 'FULL' : 'PARTIAL');
+
+      // Refund transaksi tempo harus mengurangi piutang lebih dahulu agar pelanggan
+      // tidak tetap ditagih untuk barang yang sudah dikembalikan. Hanya sisa setelah
+      // pengurangan piutang yang menjadi pengembalian dana tunai/non-tunai.
+      let remainingPayout = amount;
+      let receivableReduction = 0;
+      const saleReceivables = next.receivables.filter(row => row.saleId === target.id && row.status === 'OPEN' && money(row.balance) > 0);
+      for (const receivable of saleReceivables) {
+        if (remainingPayout <= 0) break;
+        const reduction = Math.min(money(receivable.balance), remainingPayout);
+        if (reduction <= 0) continue;
+        receivable.total = Math.max(money(receivable.paid), money(receivable.total) - reduction);
+        receivable.balance = Math.max(0, money(receivable.total) - money(receivable.paid));
+        receivable.updatedAt = refund.createdAt;
+        if (receivable.balance <= 0) receivable.status = 'PAID';
+        receivable.refundAdjustments = [{ id: generateId('RADJ'), refundId: refund.id, amount: reduction, createdAt: refund.createdAt }, ...(receivable.refundAdjustments || [])];
+        receivableReduction += reduction;
+        remainingPayout -= reduction;
+      }
+      refund.receivableReduction = money(receivableReduction);
+      refund.payoutAmount = money(Math.max(0, remainingPayout));
+
+      // Poin loyalitas mengikuti refund kumulatif. Saat refund penuh, seluruh poin
+      // yang diperoleh dibalik dan seluruh poin yang pernah ditukar dikembalikan.
+      const customer = next.customers.find(row => row.id === target.customerId && row.branchId === target.branchId);
+      if (customer && target.customerId && target.customerId !== 'CUS-GENERAL') {
+        const ratio = money(target.total) > 0 ? Math.min(1, money(target.refundedTotal) / money(target.total)) : 1;
+        const desiredEarnedReversal = fullyRefundedByQty ? money(target.pointsEarned) : Math.floor(money(target.pointsEarned) * ratio);
+        const desiredRedeemedRestore = fullyRefundedByQty ? money(target.pointsRedeemed) : Math.floor(money(target.pointsRedeemed) * ratio);
+        const earnedDelta = Math.max(0, desiredEarnedReversal - money(target.pointsEarnedReversed));
+        const redeemedDelta = Math.max(0, desiredRedeemedRestore - money(target.pointsRedeemedRestored));
+        if (earnedDelta || redeemedDelta) customer.points = Math.max(0, money(customer.points) - earnedDelta + redeemedDelta);
+        target.pointsEarnedReversed = money(target.pointsEarnedReversed) + earnedDelta;
+        target.pointsRedeemedRestored = money(target.pointsRedeemedRestored) + redeemedDelta;
+        refund.pointsEarnedReversed = earnedDelta;
+        refund.pointsRedeemedRestored = redeemedDelta;
+      }
+
       if (payload.restock) {
         for (const refundItem of payload.items) {
           const original = target.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
@@ -1933,11 +2052,291 @@ export function PosProvider({ children }) {
           }
         }
       }
+      for (const refundItem of payload.items) {
+        for (const serialId of refundItem.serialIds || []) {
+          const serial = (next.serialNumbers || []).find(row => row.id === serialId && row.branchId === target.branchId);
+          if (!serial) continue;
+          serial.previousSaleId = serial.saleId || target.id;
+          serial.lastRefundId = refund.id;
+          serial.lastRefundAt = refund.createdAt;
+          if (payload.restock) {
+            serial.status = 'IN_STOCK';
+            serial.saleId = '';
+            serial.customerId = '';
+            serial.customerName = '';
+            serial.soldAt = '';
+            serial.warrantyStartAt = '';
+            serial.warrantyEndsAt = '';
+            serial.returnedAt = '';
+          } else {
+            serial.status = 'RETURNED';
+            serial.returnedAt = refund.createdAt;
+          }
+          serial.updatedAt = refund.createdAt;
+        }
+      }
       const activeShift = next.shifts.find(item => item.branchId === target.branchId && item.status === 'OPEN');
-      if (activeShift && refund.method === 'Tunai') next.cashMovements.unshift({ id: generateId('CASH'), branchId: target.branchId, shiftId: activeShift.id, type: 'REFUND', amount, note: refund.id, createdAt: refund.createdAt, userId: currentUser.id });
+      if (activeShift && refund.method === 'Tunai' && money(refund.payoutAmount) > 0) next.cashMovements.unshift({ id: generateId('CASH'), branchId: target.branchId, shiftId: activeShift.id, type: 'REFUND', amount: money(refund.payoutAmount), note: refund.id, createdAt: refund.createdAt, userId: currentUser.id });
       return refund;
     }, { approvalToken: payload.approvalToken || '' });
   };
+
+  const normalizePurchasingItems = (next, rawItems = [], targetBranchId = branchId) => (rawItems || []).map(item => {
+    const product = next.products.find(row => row.id === item.productId && row.branchId === targetBranchId);
+    if (!product) throw new Error(`Produk ${item.name || item.productId} tidak ditemukan di cabang aktif.`);
+    const qty = Number(item.qty);
+    const unit = item.unit || product.baseUnit;
+    const factor = quantity(item.factor || conversionFactor(product, unit));
+    const price = money(item.price);
+    const itemDiscount = money(item.discount);
+    const baseQty = quantity(item.baseQty ?? qty * factor);
+    const unitCost = money(item.baseUnitCost ?? calculateBaseUnitCost(price, factor));
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error(`Jumlah ${item.name || 'barang'} harus lebih dari 0.`);
+    if (!Number.isFinite(factor) || factor <= 0 || baseQty <= 0) throw new Error(`Konversi satuan ${item.name || 'barang'} tidak valid.`);
+    if (itemDiscount > qty * price) throw new Error(`Diskon ${item.name || 'barang'} melebihi subtotal item.`);
+    const quantityStep = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true, recommendedQuantityStep(product.baseUnit, product.category)) : 1;
+    if (!isStepAligned(qty, quantityStep)) throw new Error(`Jumlah ${product.name} harus mengikuti kelipatan ${formatQuantity(quantityStep)} ${unit}.`);
+    validateBaseQuantity(product, baseQty, `Jumlah pembelian ${product.name}`);
+    return { ...item, qty: quantity(qty), unit, factor, baseQty, baseUnit: product.baseUnit, quantityStep, allowFractional: quantityStep < 1, price, baseUnitCost: unitCost, discount: itemDiscount, serialTracking: product.serialTracking === true, warrantyMonths: Number(product.warrantyMonths || 0) };
+  });
+
+  const normalizeSerialValues = raw => {
+    const source = Array.isArray(raw) ? raw : String(raw || '').split(/[\n,;]+/);
+    const values = source.map(value => String(value || '').trim().toUpperCase()).filter(Boolean);
+    if (new Set(values).size !== values.length) throw new Error('Nomor serial pada penerimaan tidak boleh duplikat.');
+    return values;
+  };
+
+  const registerReceivedSerials = (next, { product, purchase, item, serials }) => {
+    if (product?.serialTracking !== true) return [];
+    const values = normalizeSerialValues(serials);
+    if (!values.length) return []; // kompatibilitas data lama: serial dapat didaftarkan sesudah penerimaan
+    const baseQty = Number(item.baseQty || 0);
+    const required = Math.round(baseQty);
+    if (Math.abs(baseQty - required) > 0.000001) throw new Error(`Produk berserial ${product.name} harus diterima dalam unit utuh.`);
+    if (values.length !== required) throw new Error(`Serial ${product.name} harus tepat ${required} nomor untuk ${formatQuantity(baseQty)} ${product.baseUnit}. Ditemukan ${values.length}.`);
+    const existingValues = new Set((next.serialNumbers || []).filter(row => row.branchId === branchId).map(row => String(row.serial || '').trim().toUpperCase()));
+    for (const serial of values) if (existingValues.has(serial)) throw new Error(`Serial ${serial} sudah terdaftar.`);
+    const createdAt = purchase.createdAt || nowISO();
+    const ids = [];
+    for (const serial of values) {
+      const row = {
+        id: generateId('SER'), branchId, serial, productId: product.id, productName: product.name,
+        warrantyMonths: Math.max(0, Math.round(Number(product.warrantyMonths || 0))), status: 'IN_STOCK',
+        purchaseId: purchase.id, saleId: '', customerId: '', customerName: '', soldAt: '', warrantyStartAt: '', warrantyEndsAt: '',
+        createdAt, updatedAt: createdAt, createdBy: currentUser.id
+      };
+      next.serialNumbers.unshift(row);
+      existingValues.add(serial);
+      ids.push(row.id);
+    }
+    return ids;
+  };
+
+  const recordSupplierPrice = (next, { supplierId, supplierName, purchaseId, product, item }) => {
+    if (!Array.isArray(next.supplierPriceHistory)) next.supplierPriceHistory = [];
+    next.supplierPriceHistory.unshift({
+      id: generateId('SPH'), branchId, supplierId: supplierId || '', supplierName: supplierName || '', purchaseId: purchaseId || '',
+      productId: product.id, productName: product.name, unit: item.unit || product.baseUnit, factor: Number(item.factor || 1),
+      unitPrice: money(item.price), unitCost: money(item.baseUnitCost), createdAt: nowISO(), userId: currentUser.id
+    });
+    next.supplierPriceHistory = next.supplierPriceHistory.slice(0, 5000);
+  };
+
+  const savePurchaseOrder = payload => commit(payload.id ? 'PURCHASE_ORDER_UPDATE' : 'PURCHASE_ORDER_CREATE', payload.orderNo || '', next => {
+    if (!payload.supplierId) throw new Error('Pemasok wajib dipilih untuk Purchase Order.');
+    const existing = (next.purchaseOrders || []).find(row => row.id === payload.id);
+    const status = payload.status || existing?.status || 'ORDERED';
+    if (!['DRAFT', 'ORDERED', 'PARTIAL', 'RECEIVED', 'CANCELLED'].includes(status)) throw new Error('Status Purchase Order tidak valid.');
+    if (existing) {
+      const allowedTransitions = {
+        DRAFT: new Set(['DRAFT', 'ORDERED', 'CANCELLED']),
+        ORDERED: new Set(['ORDERED', 'CANCELLED']),
+        PARTIAL: new Set(['PARTIAL', 'CANCELLED']),
+        RECEIVED: new Set(['RECEIVED']),
+        CANCELLED: new Set(['CANCELLED'])
+      };
+      if (!allowedTransitions[existing.status]?.has(status)) throw new Error(`Status PO tidak dapat diubah dari ${existing.status} menjadi ${status}.`);
+      if (['RECEIVED', 'CANCELLED'].includes(existing.status)) throw new Error(`Purchase Order ${existing.status} tidak dapat diubah lagi.`);
+    }
+    const items = normalizePurchasingItems(next, payload.items, branchId).map(item => {
+      const previous = existing?.items?.find(row => row.id === item.id || row.productId === item.productId);
+      return { ...item, receivedQty: quantity(previous?.receivedQty || item.receivedQty || 0), receivedBaseQty: quantity(previous?.receivedBaseQty || item.receivedBaseQty || 0) };
+    });
+    if (!items.length) throw new Error('Tambahkan minimal satu barang ke Purchase Order.');
+    if (existing?.status === 'PARTIAL' && status !== 'CANCELLED') {
+      const unchanged = existing.items.length === items.length && existing.items.every(previous => {
+        const current = items.find(row => row.id === previous.id || row.productId === previous.productId);
+        return current && Number(current.qty) === Number(previous.qty) && Number(current.factor) === Number(previous.factor) && Number(current.price) === Number(previous.price);
+      });
+      if (!unchanged) throw new Error('PO yang sudah diterima sebagian tidak boleh mengubah barang, jumlah, satuan, atau harga. Terima sisa barang atau batalkan sisa PO.');
+    }
+    const orderNo = String(payload.orderNo || existing?.orderNo || generateId('PO')).trim();
+    const duplicate = (next.purchaseOrders || []).find(row => row.id !== payload.id && row.branchId === branchId && String(row.orderNo || '').toLowerCase() === orderNo.toLowerCase());
+    if (duplicate) throw new Error(`Nomor PO ${orderNo} sudah digunakan.`);
+    const subtotal = items.reduce((sum, item) => sum + Math.max(0, item.qty * item.price - item.discount), 0);
+    const additional = money(payload.additional);
+    const discount = Math.min(subtotal + additional, money(payload.discount));
+    const total = Math.max(0, subtotal + additional - discount);
+    const order = {
+      ...(existing || {}), ...payload, id: payload.id || generateId('PO'), branchId, orderNo, status, items,
+      subtotal, additional, discount, total, supplierId: payload.supplierId, supplierName: payload.supplierName || '',
+      expectedDate: payload.expectedDate || '', notes: payload.notes || '', createdAt: existing?.createdAt || nowISO(), updatedAt: nowISO(), createdBy: existing?.createdBy || currentUser.id
+    };
+    const index = (next.purchaseOrders || []).findIndex(row => row.id === order.id);
+    if (index >= 0) next.purchaseOrders[index] = order; else next.purchaseOrders.unshift(order);
+    return order;
+  });
+
+  const receivePurchaseOrder = payload => commit('PURCHASE_ORDER_RECEIVE', payload.id, next => {
+    const order = (next.purchaseOrders || []).find(row => row.id === payload.id && row.branchId === branchId);
+    if (!order) throw new Error('Purchase Order tidak ditemukan.');
+    if (!['ORDERED', 'PARTIAL'].includes(order.status)) throw new Error('Purchase Order harus berstatus ORDERED atau PARTIAL sebelum penerimaan barang.');
+    const receivedRows = (payload.items || []).filter(row => Number(row.qty || 0) > 0);
+    if (!receivedRows.length) throw new Error('Masukkan minimal satu jumlah barang yang diterima.');
+    const purchaseItems = [];
+    for (const received of receivedRows) {
+      const ordered = order.items.find(row => row.id === received.id || row.productId === received.productId);
+      if (!ordered) throw new Error('Item penerimaan tidak ditemukan pada PO.');
+      const remainingQty = Math.max(0, Number(ordered.qty || 0) - Number(ordered.receivedQty || 0));
+      const receiveQty = quantity(received.qty);
+      if (receiveQty <= 0 || receiveQty > remainingQty + 0.000001) throw new Error(`Jumlah diterima ${ordered.name} melebihi sisa PO (${formatQuantity(remainingQty)} ${ordered.unit}).`);
+      const product = next.products.find(row => row.id === ordered.productId && row.branchId === branchId);
+      if (!product) throw new Error(`Produk ${ordered.name} tidak ditemukan.`);
+      const receiveBaseQty = validateBaseQuantity(product, receiveQty * Number(ordered.factor || 1), `Jumlah diterima ${ordered.name}`);
+      ordered.receivedQty = quantity(Number(ordered.receivedQty || 0) + receiveQty);
+      ordered.receivedBaseQty = quantity(Number(ordered.receivedBaseQty || 0) + receiveBaseQty);
+      const price = money(received.price ?? ordered.price);
+      const line = { ...ordered, id: generateId('PITEM'), qty: receiveQty, baseQty: receiveBaseQty, price, baseUnitCost: money(received.baseUnitCost ?? calculateBaseUnitCost(price, ordered.factor || 1)), discount: money(received.discount || 0), poItemId: ordered.id };
+      purchaseItems.push(line);
+    }
+    const subtotal = purchaseItems.reduce((sum, item) => sum + Math.max(0, item.qty * item.price - item.discount), 0);
+    const additional = money(payload.additional);
+    const discount = Math.min(subtotal + additional, money(payload.discount));
+    const total = Math.max(0, subtotal + additional - discount);
+    const paid = Math.min(total, money(payload.paid));
+    const balance = total - paid;
+    if (balance > 0 && !payload.dueDate) throw new Error('Tanggal jatuh tempo wajib diisi jika penerimaan belum lunas.');
+    const purchase = {
+      id: generateId('BUY'), branchId, purchaseOrderId: order.id, invoiceNo: String(payload.invoiceNo || `${order.orderNo}-${(order.receipts || []).length + 1}`).trim(),
+      supplierId: order.supplierId, supplierName: order.supplierName, status: 'RECEIVED', items: purchaseItems,
+      subtotal, additional, discount, total, paid, dueDate: payload.dueDate || '', paymentMethod: payload.paymentMethod || 'Tempo', notes: payload.notes || '',
+      createdAt: nowISO(), updatedAt: nowISO(), inventoryApplied: true, createdBy: currentUser.id
+    };
+    if (next.purchases.some(row => row.branchId === branchId && String(row.invoiceNo || '').toLowerCase() === purchase.invoiceNo.toLowerCase())) throw new Error(`Nomor faktur ${purchase.invoiceNo} sudah digunakan.`);
+    for (const item of purchase.items) {
+      const product = next.products.find(row => row.id === item.productId && row.branchId === branchId);
+      const receivedPayload = receivedRows.find(row => row.id === item.poItemId || row.productId === item.productId);
+      item.serialIds = registerReceivedSerials(next, { product, purchase, item, serials: receivedPayload?.serials });
+      item.previousModalPrice = product.modalPrice;
+      product.stock = quantity(Number(product.stock || 0) + Number(item.baseQty || 0));
+      product.modalPrice = money(item.baseUnitCost);
+      product.updatedAt = nowISO();
+      next.stockMovements.unshift({ id: generateId('MOV'), branchId, productId: product.id, productName: product.name, type: 'PURCHASE', qtyChange: Number(item.baseQty || 0), refId: purchase.id, note: `${purchase.invoiceNo} · PO ${order.orderNo} · ${formatQuantity(item.qty)} ${item.unit}`, createdAt: purchase.createdAt, userId: currentUser.id });
+      recordSupplierPrice(next, { supplierId: order.supplierId, supplierName: order.supplierName, purchaseId: purchase.id, product, item });
+    }
+    if (balance > 0) next.payables.unshift({ id: generateId('PAY'), branchId, purchaseId: purchase.id, supplierId: order.supplierId, supplierName: order.supplierName, total, paid, balance, dueDate: purchase.dueDate, status: 'OPEN', payments: [], createdAt: purchase.createdAt, updatedAt: purchase.createdAt });
+    const activeShift = next.shifts.find(row => row.branchId === branchId && row.status === 'OPEN');
+    if (activeShift && purchase.paymentMethod === 'Tunai' && paid > 0) next.cashMovements.unshift({ id: generateId('CASH'), branchId, shiftId: activeShift.id, type: 'PURCHASE', amount: paid, note: purchase.id, createdAt: purchase.createdAt, userId: currentUser.id });
+    next.purchases.unshift(purchase);
+    order.receipts = [{ purchaseId: purchase.id, invoiceNo: purchase.invoiceNo, createdAt: purchase.createdAt, total }, ...(order.receipts || [])];
+    const completed = order.items.every(item => Number(item.receivedQty || 0) + 0.000001 >= Number(item.qty || 0));
+    order.status = completed ? 'RECEIVED' : 'PARTIAL';
+    order.updatedAt = nowISO();
+    return { order: clone(order), purchase };
+  });
+
+  const saveQuotation = payload => commit(payload.id ? 'QUOTATION_UPDATE' : 'QUOTATION_CREATE', payload.quoteNo || '', next => {
+    const customer = next.customers.find(row => row.id === payload.customerId && row.branchId === branchId);
+    if (!customer) throw new Error('Pelanggan wajib dipilih untuk penawaran.');
+    const existing = (next.quotations || []).find(row => row.id === payload.id);
+    if (existing?.status === 'CONVERTED') throw new Error('Penawaran yang sudah dikonversi tidak dapat diubah. Buat penawaran baru bila ada revisi.');
+    const quoteNo = String(payload.quoteNo || existing?.quoteNo || generateId('QT')).trim();
+    const duplicateQuoteNo = (next.quotations || []).find(row => row.id !== payload.id && row.branchId === branchId && String(row.quoteNo || '').trim().toLowerCase() === quoteNo.toLowerCase());
+    if (duplicateQuoteNo) throw new Error(`Nomor penawaran ${quoteNo} sudah digunakan.`);
+    let status = payload.status || existing?.status || 'DRAFT';
+    if (!['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'CONVERTED'].includes(status)) throw new Error('Status penawaran tidak valid.');
+    const validUntil = String(payload.validUntil || '').slice(0, 10);
+    if (validUntil && validUntil < localDateKey() && !['REJECTED', 'CONVERTED'].includes(status)) status = 'EXPIRED';
+    const items = (payload.items || []).map(line => {
+      const product = next.products.find(row => row.id === line.productId && row.branchId === branchId);
+      if (!product) throw new Error(`Produk ${line.name || line.productId} tidak ditemukan.`);
+      const qty = quantity(line.qty);
+      const unit = line.unit || product.baseUnit;
+      const factor = quantity(line.factor || conversionFactor(product, unit));
+      const quantityStep = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true, recommendedQuantityStep(product.baseUnit, product.category)) : 1;
+      if (qty <= 0 || factor <= 0 || !isStepAligned(qty, quantityStep)) throw new Error(`Jumlah ${product.name} harus mengikuti kelipatan ${formatQuantity(quantityStep)} ${unit}.`);
+      const baseQty = validateBaseQuantity(product, qty * factor, `Jumlah penawaran ${product.name}`);
+      const price = money(line.price);
+      const itemDiscount = money(line.discount || 0);
+      if (itemDiscount > qty * price) throw new Error(`Diskon ${product.name} melebihi subtotal item.`);
+      return { ...line, id: line.id || generateId('QITEM'), productId: product.id, name: product.name, qty, unit, factor, baseQty, baseUnit: product.baseUnit, quantityStep, allowFractional: quantityStep < 1, price, discount: itemDiscount };
+    });
+    if (!items.length) throw new Error('Tambahkan minimal satu barang ke penawaran.');
+    const subtotal = items.reduce((sum, item) => sum + Math.max(0, item.qty * item.price - item.discount), 0);
+    const discount = Math.min(subtotal, money(payload.discount));
+    const taxable = Math.max(0, subtotal - discount);
+    const tax = payload.taxEnabled ? Math.round(taxable * Math.max(0, Number(payload.taxRate || 0)) / 100) : 0;
+    const quote = { ...(existing || {}), ...payload, id: payload.id || generateId('QUO'), branchId, quoteNo, customerId: customer.id, customerName: customer.name, customerPhone: customer.phone || '', items, subtotal, discount, tax, total: taxable + tax, status, validUntil, createdAt: existing?.createdAt || nowISO(), updatedAt: nowISO(), createdBy: existing?.createdBy || currentUser.id };
+    const index = (next.quotations || []).findIndex(row => row.id === quote.id);
+    if (index >= 0) next.quotations[index] = quote; else next.quotations.unshift(quote);
+    return quote;
+  });
+
+  const convertQuotationToBill = id => commit('QUOTATION_CONVERT', id, next => {
+    const quote = (next.quotations || []).find(row => row.id === id && row.branchId === branchId);
+    if (!quote) throw new Error('Penawaran tidak ditemukan.');
+    if (quote.status === 'CONVERTED') throw new Error('Penawaran ini sudah dikonversi.');
+    if (['REJECTED', 'EXPIRED'].includes(quote.status)) throw new Error(`Penawaran berstatus ${quote.status} tidak dapat dikonversi.`);
+    if (quote.validUntil && String(quote.validUntil).slice(0, 10) < localDateKey()) throw new Error('Masa berlaku penawaran sudah berakhir. Perpanjang tanggal penawaran sebelum dikonversi.');
+    const bill = { id: generateId('BILL'), branchId, name: `Penawaran ${quote.quoteNo}`, customerId: quote.customerId, customerName: quote.customerName, priceTier: 'retail', items: quote.items.map(item => ({ ...item, lineId: generateId('LINE'), netUnitPrice: item.price, itemDiscount: item.discount || 0 })), globalDiscount: quote.discount || 0, quotationId: quote.id, createdAt: nowISO(), updatedAt: nowISO() };
+    next.heldSales.unshift(bill);
+    quote.status = 'CONVERTED'; quote.convertedAt = nowISO(); quote.heldSaleId = bill.id; quote.updatedAt = nowISO();
+    return bill;
+  });
+
+  const saveSerialNumber = payload => commit(payload.id ? 'SERIAL_UPDATE' : 'SERIAL_CREATE', payload.serial, next => {
+    const serial = String(payload.serial || '').trim().toUpperCase();
+    if (!serial) throw new Error('Nomor serial wajib diisi.');
+    const duplicate = (next.serialNumbers || []).find(row => row.id !== payload.id && row.branchId === branchId && String(row.serial || '').trim().toUpperCase() === serial);
+    if (duplicate) throw new Error(`Serial ${serial} sudah terdaftar.`);
+    const product = next.products.find(row => row.id === payload.productId && row.branchId === branchId);
+    if (!product) throw new Error('Produk untuk serial tidak ditemukan.');
+    const existing = (next.serialNumbers || []).find(row => row.id === payload.id);
+    const sale = payload.saleId ? next.sales.find(row => row.id === payload.saleId && row.branchId === branchId) : null;
+    const purchase = payload.purchaseId ? next.purchases.find(row => row.id === payload.purchaseId && row.branchId === branchId) : null;
+    const warrantyMonths = Math.max(0, Math.round(Number(payload.warrantyMonths ?? product.warrantyMonths ?? 0)));
+    const status = payload.status || existing?.status || (sale ? 'SOLD' : 'IN_STOCK');
+    const soldAt = status === 'SOLD' ? (payload.soldAt || existing?.soldAt || sale?.createdAt || nowISO()) : (existing?.soldAt || '');
+    let warrantyEndsAt = payload.warrantyEndsAt || existing?.warrantyEndsAt || '';
+    if (soldAt && warrantyMonths > 0 && (!warrantyEndsAt || payload.warrantyMonths != null)) { const end = new Date(soldAt); end.setMonth(end.getMonth() + warrantyMonths); warrantyEndsAt = end.toISOString(); }
+    const item = { ...(existing || {}), ...payload, id: payload.id || generateId('SER'), branchId, serial, productId: product.id, productName: product.name, warrantyMonths, status, purchaseId: purchase?.id || payload.purchaseId || existing?.purchaseId || '', saleId: sale?.id || payload.saleId || existing?.saleId || '', customerId: sale?.customerId || payload.customerId || existing?.customerId || '', customerName: sale?.customerName || payload.customerName || existing?.customerName || '', soldAt, warrantyStartAt: soldAt || existing?.warrantyStartAt || '', warrantyEndsAt, createdAt: existing?.createdAt || nowISO(), updatedAt: nowISO(), createdBy: existing?.createdBy || currentUser.id };
+    const index = (next.serialNumbers || []).findIndex(row => row.id === item.id);
+    if (index >= 0) next.serialNumbers[index] = item; else next.serialNumbers.unshift(item);
+    return item;
+  });
+
+  const saveWarrantyClaim = payload => commit(payload.id ? 'WARRANTY_CLAIM_UPDATE' : 'WARRANTY_CLAIM_CREATE', payload.serialId, next => {
+    const serial = (next.serialNumbers || []).find(row => row.id === payload.serialId && row.branchId === branchId);
+    if (!serial) throw new Error('Serial garansi tidak ditemukan.');
+    if (!String(payload.issue || '').trim()) throw new Error('Keluhan/masalah garansi wajib diisi.');
+    const existing = (next.warrantyClaims || []).find(row => row.id === payload.id);
+    const status = payload.status || existing?.status || 'OPEN';
+    if (!['OPEN', 'PROCESSING', 'RESOLVED', 'REJECTED'].includes(status)) throw new Error('Status klaim garansi tidak valid.');
+    const isActive = !['RESOLVED', 'REJECTED'].includes(status);
+    if (!existing && isActive && (!serial.saleId || serial.status === 'RETURNED')) throw new Error('Klaim garansi pelanggan hanya dapat dibuat untuk serial yang masih terkait dengan penjualan aktif.');
+    if (isActive) {
+      const otherActive = (next.warrantyClaims || []).find(row => row.id !== payload.id && row.serialId === serial.id && !['RESOLVED', 'REJECTED'].includes(row.status));
+      if (otherActive) throw new Error(`Serial ${serial.serial} masih memiliki klaim aktif ${otherActive.id}. Selesaikan atau tolak klaim tersebut terlebih dahulu.`);
+    }
+    const claim = { ...(existing || {}), ...payload, id: payload.id || generateId('WRN'), branchId, serialId: serial.id, serial: serial.serial, productId: serial.productId, productName: serial.productName, customerId: payload.customerId || serial.customerId || '', customerName: payload.customerName || serial.customerName || '', issue: String(payload.issue).trim(), status, resolution: String(payload.resolution || '').trim(), createdAt: existing?.createdAt || nowISO(), updatedAt: nowISO(), createdBy: existing?.createdBy || currentUser.id };
+    const index = (next.warrantyClaims || []).findIndex(row => row.id === claim.id);
+    if (index >= 0) next.warrantyClaims[index] = claim; else next.warrantyClaims.unshift(claim);
+    const hasActiveClaim = (next.warrantyClaims || []).some(row => row.serialId === serial.id && !['RESOLVED', 'REJECTED'].includes(row.status));
+    serial.status = hasActiveClaim ? 'WARRANTY' : (serial.saleId ? 'SOLD' : serial.returnedAt ? 'RETURNED' : 'IN_STOCK');
+    serial.updatedAt = nowISO();
+    return claim;
+  });
 
   const savePurchase = payload => commit(payload.id ? 'PURCHASE_UPDATE' : 'PURCHASE_CREATE', payload.invoiceNo || '', next => {
     const existing = next.purchases.find(item => item.id === payload.id);
@@ -1984,10 +2383,12 @@ export function PosProvider({ children }) {
       for (const item of purchase.items) {
         const product = next.products.find(row => row.id === item.productId && row.branchId === purchase.branchId);
         if (!product) throw new Error(`Produk ${item.name || item.productId} tidak ditemukan di cabang aktif.`);
+        item.serialIds = registerReceivedSerials(next, { product, purchase, item, serials: item.serials });
         item.previousModalPrice = product.modalPrice;
         product.stock = quantity(product.stock + Number(item.baseQty || item.qty));
         product.modalPrice = money(item.baseUnitCost ?? calculateBaseUnitCost(item.price, item.factor || 1));
         next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE', qtyChange: Number(item.baseQty || item.qty), refId: purchase.id, note: `${purchase.invoiceNo} · ${item.qty} ${item.unit}`, createdAt: nowISO(), userId: currentUser.id });
+        recordSupplierPrice(next, { supplierId: purchase.supplierId, supplierName: purchase.supplierName, purchaseId: purchase.id, product, item });
       }
       purchase.inventoryApplied = true;
       if (balance > 0) next.payables.unshift({ id: generateId('PAY'), branchId: purchase.branchId, purchaseId: purchase.id, supplierId: purchase.supplierId, supplierName: purchase.supplierName, total, paid, balance, dueDate: purchase.dueDate, status: 'OPEN', payments: [], createdAt: nowISO(), updatedAt: nowISO() });
@@ -2006,9 +2407,11 @@ export function PosProvider({ children }) {
     if (!purchase) throw new Error('Pembelian tidak ditemukan.');
     if (!purchase.inventoryApplied || purchase.status !== 'RECEIVED') throw new Error('Hanya pembelian yang sudah diterima yang dapat diretur.');
     let total = 0;
+    const purchaseReturnId = generateId('PRET');
     const purchaseGross = purchase.items.reduce((sum, row) => sum + quantity(row.qty) * money(row.price), 0);
     const purchaseAllocationRatio = purchaseGross > 0 ? money(purchase.total) / purchaseGross : 0;
     const affectedProductIds = new Set();
+    const usedSerialIds = new Set();
     for (const item of payload.items) {
       const original = purchase.items.find(row => row.id === item.id || row.productId === item.productId);
       if (!original) throw new Error(`Item ${item.name || item.productId} tidak ditemukan pada pembelian.`);
@@ -2022,16 +2425,38 @@ export function PosProvider({ children }) {
       if (!isStepAligned(returnQty, returnStep)) throw new Error(`Jumlah retur ${original.name} harus mengikuti kelipatan ${formatQuantity(returnStep)} ${original.unit || ''}.`);
       const factor = quantity(original.factor || 1);
       const returnBaseQty = validateBaseQuantity(product, returnQty * factor, `Jumlah retur ${original.name}`);
+      const serialIds = Array.isArray(item.serialIds) ? item.serialIds.filter(Boolean) : [];
+      if (product.serialTracking === true) {
+        const requiredSerials = Math.round(returnBaseQty);
+        if (Math.abs(returnBaseQty - requiredSerials) > 0.000001) throw new Error(`Retur produk berserial ${product.name} harus dalam unit utuh.`);
+        if (serialIds.length !== requiredSerials) throw new Error(`Pilih tepat ${requiredSerials} serial ${product.name} yang dikembalikan ke pemasok.`);
+        for (const serialId of serialIds) {
+          if (usedSerialIds.has(serialId)) throw new Error('Nomor serial yang sama dipilih lebih dari sekali pada retur pembelian.');
+          const serial = (next.serialNumbers || []).find(row => row.id === serialId && row.branchId === purchase.branchId && row.productId === product.id);
+          if (!serial || serial.purchaseId !== purchase.id) throw new Error(`Serial retur ${product.name} tidak berasal dari penerimaan ${purchase.invoiceNo}.`);
+          if (serial.status !== 'IN_STOCK') throw new Error(`Serial ${serial.serial} tidak dapat diretur karena statusnya ${serial.status}.`);
+          usedSerialIds.add(serialId);
+        }
+      }
       if (product.stock < returnBaseQty) throw new Error(`Stok ${item.name} tidak cukup untuk retur. Dibutuhkan ${returnBaseQty} ${product.baseUnit || 'satuan dasar'}.`);
       product.stock = quantity(product.stock - returnBaseQty);
       affectedProductIds.add(product.id);
       item.baseQty = returnBaseQty;
       item.unit = original.unit || product.baseUnit;
       item.factor = factor;
+      item.serialIds = serialIds;
+      for (const serialId of serialIds) {
+        const serial = (next.serialNumbers || []).find(row => row.id === serialId);
+        if (!serial) continue;
+        serial.status = 'RETURNED';
+        serial.returnedAt = nowISO();
+        serial.lastPurchaseReturnId = purchaseReturnId;
+        serial.updatedAt = serial.returnedAt;
+      }
       total += Math.round(returnQty * money(original.price) * purchaseAllocationRatio);
-      next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE_RETURN', qtyChange: -returnBaseQty, refId: purchase.id, note: `${payload.reason} · ${returnQty} ${item.unit}`, createdAt: nowISO(), userId: currentUser.id });
+      next.stockMovements.unshift({ id: generateId('MOV'), branchId: purchase.branchId, productId: product.id, productName: product.name, type: 'PURCHASE_RETURN', qtyChange: -returnBaseQty, refId: purchaseReturnId, note: `${payload.reason} · ${returnQty} ${item.unit}`, createdAt: nowISO(), userId: currentUser.id });
     }
-    purchase.returns = [...(purchase.returns || []), { id: generateId('PRET'), items: payload.items, total, reason: payload.reason, createdAt: nowISO() }];
+    purchase.returns = [...(purchase.returns || []), { id: purchaseReturnId, items: payload.items, total, reason: payload.reason, createdAt: nowISO() }];
     purchase.updatedAt = nowISO();
     affectedProductIds.forEach(productId => recalculateProductModalPrice(next, productId, purchase.branchId));
     const payable = next.payables.find(item => item.purchaseId === purchase.id && item.status === 'OPEN');
@@ -2103,10 +2528,10 @@ export function PosProvider({ children }) {
       const actual = validateBaseQuantity(product, count.actual, 'Stok fisik');
       if (actual < 0) throw new Error(`Stok fisik ${product.name} tidak valid.`);
       const difference = signedQuantity(actual - Number(product.stock || 0));
-      opname.items.push({ productId: product.id, productName: product.name, system: product.stock, actual, difference });
+      opname.items.push({ productId: product.id, productName: product.name, system: product.stock, actual, difference, reason: String(count.reason || (difference ? notes : '') || '').trim() });
       if (difference !== 0) {
         product.stock = actual;
-        next.stockMovements.unshift({ id: generateId('MOV'), branchId: product.branchId, productId: product.id, productName: product.name, type: 'OPNAME', qtyChange: difference, refId: opname.id, note: notes, createdAt: opname.createdAt, userId: currentUser.id });
+        next.stockMovements.unshift({ id: generateId('MOV'), branchId: product.branchId, productId: product.id, productName: product.name, type: 'OPNAME', qtyChange: difference, refId: opname.id, note: String(count.reason || notes || 'Stok opname').trim(), createdAt: opname.createdAt, userId: currentUser.id });
       }
     }
     next.stockOpnames.unshift(opname);
@@ -2328,6 +2753,10 @@ export function PosProvider({ children }) {
     feedback: db.feedback.filter(item => item.branchId === branchId),
     paymentProfile: (db.branchPaymentProfiles || []).find(item => item.branchId === branchId) || null,
     priceHistory: (db.productPriceHistory || []).filter(item => item.branchId === branchId),
+    supplierPriceHistory: (db.supplierPriceHistory || []).filter(item => item.branchId === branchId),
+    quotations: (db.quotations || []).filter(item => item.branchId === branchId),
+    serialNumbers: (db.serialNumbers || []).filter(item => item.branchId === branchId),
+    warrantyClaims: (db.warrantyClaims || []).filter(item => item.branchId === branchId),
     approvalRequests: (db.approvalRequests || []).filter(item => item.branchId === branchId)
   }), [db, branchId]);
 
@@ -2360,7 +2789,7 @@ export function PosProvider({ children }) {
     hasPermission, setConfig, saveStoreIdentity, saveLoginAppearance, setActiveBranch, addBranch, updateBranch, deleteBranch, restoreBranch, saveCategory, deleteCategory, importInventoryRows, saveProduct, archiveProduct, restoreProduct, deleteProduct, zeroProductStock, toggleProduct,
     savePromotion, saveSupplier, saveCustomer, saveEmployee, deleteEmployee, findOpenShift, startShift, endShift, addCashMovement,
     holdSale, deleteHeldSale, completeSale, refundSale, authorizeManagerPin,
-    savePurchase, returnPurchase, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,
+    savePurchaseOrder, receivePurchaseOrder, savePurchase, returnPurchase, saveQuotation, convertQuotationToBill, saveSerialNumber, saveWarrantyClaim, payReceivable, payPayable, addExpense, adjustStock, stockOpname, transferStock,
     saveOnlineOrder, convertOrderToBill, saveBranchPaymentProfile, savePrinterProfile, saveCampaign, saveFeedback, redeemPoints,
     exportBackup, inspectBackup, importBackup, syncNow, resetDemo
   };

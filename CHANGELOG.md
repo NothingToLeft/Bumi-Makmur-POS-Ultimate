@@ -1,5 +1,20 @@
 # Changelog
 
+## v5.8.0 — Business Suite & Smart Inventory
+
+- Full-pass upgrade dari v5.7.0: Smart Restock, PO Draft/Ordered/Partial/Received, supplier price history, Stock Opname Scanner, Quotation, Serial & Garansi, inventory/receivable aging, serta PIN tindakan sensitif.
+- Multi-unit, fractional quantity, Produk Induk + Varian, shared barcode, SKU, bundle, bon/piutang, dan seluruh fitur operasional lama tetap dipertahankan.
+- Serial lifecycle terintegrasi receiving → sale → refund/restock → supplier return → warranty.
+- Refund transaksi tempo mengurangi piutang sebelum payout; loyalty earned/redeemed dikoreksi proporsional pada refund.
+- Quotation kadaluarsa diblokir dari conversion; warranty claim mencegah klaim aktif ganda.
+- Inventory aging memakai penjualan terakhir agar restock baru tidak menyembunyikan dead stock.
+- Sidebar/tab/mobile navigation dikelompokkan dan menu “Lainnya” tidak menduplikasi bottom-nav utama.
+- QRIS Adaptive v4 menampilkan QR-only preview; **QRIS Mode Kasir tidak ditambahkan**.
+- Firestore Rules Business Suite tetap Firebase Spark-only; tidak memakai Functions/Storage/Blaze.
+- Workflow artifact normal menggunakan retention 1 hari dan tidak menghambat GitHub Release bila quota artifact stale.
+- Bug fixes: HoldModal hilang, JSX Control Center invalid, approval TDZ, Draft PO dead-end, PARTIAL PO mutation, stale BusinessTools tab, refund FULL classification, serial state mismatch, receivable/loyalty refund consistency.
+- QA final: **161/161 automated tests PASS**, static audit PASS, JS/JSX parser PASS, YAML/JSON PASS.
+
 ## v5.7.0 — Smart Barcode Scanner & Camera Control
 
 - Scanner kamera bersama berbasis ZXing untuk Kasir, Produk, Product Picker, dan Tes Scanner.

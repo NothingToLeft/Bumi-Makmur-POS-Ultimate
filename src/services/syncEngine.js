@@ -3,7 +3,8 @@ export const CLOUD_ENTITY_COLLECTIONS = [
   'sales', 'heldSales', 'purchases', 'purchaseOrders', 'stockMovements', 'stockAdjustments',
   'stockOpnames', 'stockTransfers', 'expenses', 'receivables', 'payables',
   'refunds', 'shifts', 'cashMovements', 'onlineOrders', 'printerProfiles',
-  'campaigns', 'feedback', 'branchPaymentProfiles', 'productPriceHistory', 'approvalRequests', 'deviceSessions', 'auditLogs'
+  'campaigns', 'feedback', 'branchPaymentProfiles', 'productPriceHistory', 'supplierPriceHistory', 'approvalRequests', 'deviceSessions',
+  'quotations', 'serialNumbers', 'warrantyClaims', 'auditLogs'
 ];
 
 export const SETTINGS_KEYS = ['meta', 'configs', 'categories', 'units'];

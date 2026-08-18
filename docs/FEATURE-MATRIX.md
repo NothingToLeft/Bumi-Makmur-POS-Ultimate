@@ -1,35 +1,34 @@
-# Feature Matrix — Bumi Makmur POS FreeSync v5.6.1
+# Feature Matrix — Bumi Makmur POS FreeSync v5.8.0
 
 | Area | Implementasi | Status |
 |---|---|---|
-| Produk Varian | Produk induk, SKU per varian, shared barcode, barcode internal, harga/stok/HPP/rak terpisah | Baru v5.3 |
-| Login Karyawan | Pilih cabang, pilih nama dari daftar aman, PIN 4 digit, cache offline, biometrik eksplisit | Baru v5.2 |
-| Produk & Stok | Satu menu untuk barang, stok awal, harga, barcode, rak, minimum, pergerakan, opname, transfer | Baru v5.2 |
-| Penjualan Pecahan | Meter/kg/liter/potongan, langkah desimal, base quantity, konversi roll/box | Baru v5.2 |
-| Restok Multi-Satuan | Pembelian per roll/box atau satuan dasar, konversi stok dan HPP per unit dasar | Baru v5.2 |
-| Promo Otomatis | UI dihapus; transaksi baru tidak menerapkan promo; histori lama dipertahankan | Disederhanakan v5.2 |
-| Desktop Windows | Electron secure shell, installer EXE/NSIS dan MSI, shortcut kasir, layar pelanggan kedua | Aktif |
-| Identitas toko | Brand, cabang, alamat, telepon, dan tampilan login dinamis lintas perangkat | Aktif |
-| Input barcode | Kamera Android/Web, BarcodeDetector, scanner USB/Bluetooth, validasi duplikat | Aktif |
-| Pusat Kontrol | Health score, stok/restock, margin, duplikat kode, jatuh tempo, shift, omzet, CSV/print | Aktif |
-| QRIS | Adaptive PNG/WebP, preview/metadata, profil per cabang, scope Owner/Manager/Kasir | Aktif |
-| Kasir | Barcode, varian, modifier, bundle, item kustom, diskon manual, loyalty, pajak/service | Aktif |
+| Smart Restock | Velocity 30 hari, min stock, lead time, safety stock, outstanding PO, supplier price | v5.8 |
+| Draft PO Otomatis | Restock suggestion dikelompokkan per pemasok | v5.8 |
+| Purchase Order | DRAFT/ORDERED/PARTIAL/RECEIVED/CANCELLED + partial receiving | v5.8 |
+| Harga Pemasok | Riwayat harga per supplier/product + normalized base cost | v5.8 |
+| Penawaran | Quotation, masa berlaku, diskon/pajak, print/Save PDF, convert Open Bill | v5.8 |
+| Serial & Garansi | Serial per unit, warranty period, sale linkage, claim history | v5.8 |
+| Stock Opname Scanner | Scan barcode, physical count, variance, alasan per item | v5.8 |
+| Inventory Aging | 30/60/90+, dead stock, modal tertahan, margin/restock priority | v5.8 |
+| Piutang Aging | Current, 1-30, 31-60, 61-90, 90+ | v5.8 |
+| PIN Sensitif | Below-cost sale, cost override, stock actions, restore/reset | v5.8 |
+| QRIS | QR-only auto detection/crop + per-branch profile; tanpa QRIS Mode Kasir | v5.8 |
+| Produk Varian | Produk induk, SKU per varian, shared barcode, stok/harga/HPP terpisah | Aktif |
+| Unit Bertingkat | pcs/pack/dus/roll/meter/kg/liter + harga per unit | Aktif |
+| Bundle | Paket mengurangi stok komponen | Aktif |
+| Login Karyawan | Cabang + nama + PIN, cache offline | Aktif |
+| Produk & Stok | Stok awal, barcode, rak, minimum, movement, opname, transfer | Aktif |
+| Penjualan Pecahan | Fractional base unit dan conversion packaging | Aktif |
+| Barcode Scanner | ZXing multi-format, kamera depan/belakang, foto, USB/Bluetooth | Aktif |
+| Kasir | Open Bill, split payment, diskon, loyalty, tax/service, serial selection | Aktif |
 | Pembayaran | Tunai, QRIS, e-wallet, transfer, kartu, tempo, split | Aktif |
-| Pembelian | Order/receive, hutang, pembayaran, retur, faktur, konversi satuan | Aktif |
-| Pelanggan | Member, piutang, kredit, proyek, poin, reward | Aktif |
-| Shift | Modal awal, kas masuk/keluar, expected cash, selisih, stale-shift alert | Aktif |
-| Laporan | Omzet, HPP neto refund/restock, laba, pembayaran, stok, hutang/piutang | Aktif |
-| Multi-cabang | Scope data, pilihan login, QRIS cabang, branch switch Owner | Aktif |
-| Role | Owner, Store Manager satu cabang, Kasir dan permission khusus | Aktif |
-| Offline | IndexedDB, persistent cache, PIN offline, durable mutation queue | Aktif setelah pairing |
-| Auto-sync | Realtime, manual sync, retry bertahap, queue status | Aktif |
-| Konflik | Delta/array merge, targeted rebase, idempotency receipt | Aktif |
-| Migrasi | Normalisasi cache/backup v4.x/v5.x tanpa data demo baru | Aktif |
-| Cloud gratis | Firebase Auth + Firestore Spark, tanpa Functions/Storage/Blaze | Aktif |
-| Keamanan | PBKDF2 PIN, AES-GCM credential vault, role/branch rules, approval | Aktif |
-| Karyawan | Tambah/edit/nonaktif/hapus di Pengaturan, secondary Auth, roster login per cabang | Aktif |
-| Nota | 58/80 mm, logo, pesan, WhatsApp, gambar, nota online | Aktif |
-| Android | Kamera, biometrik, permission Bluetooth, signed APK/AAB | Siap build |
-| Web/PWA | Cloudflare Pages, SPA, security headers, installable PWA | Siap deploy |
-| Windows PC | Installer EXE/MSI dari GitHub Actions, local renderer + Firebase Spark | Siap build |
-| Backup | Export JSON dan restore cloud Owner dengan migrasi bentuk v5 | Aktif |
+| Piutang/Hutang | Cicilan, jatuh tempo, payment history, laporan | Aktif |
+| Shift | Modal awal, cash movement, expected cash, closing | Aktif |
+| Multi-cabang | Scope branch, Owner switch, Manager satu cabang | Aktif |
+| Offline | IndexedDB, local snapshot, PIN offline, durable mutation queue | Aktif |
+| Auto-sync | Realtime listener, retry, conflict rebase, idempotent receipt | Aktif |
+| Cloud gratis | Firebase Auth + Firestore Spark; tanpa Functions/Storage/Blaze | Aktif |
+| Backup | Export JSON, preview/validation, Owner PIN restore | Aktif |
+| Android | Capacitor APK/AAB | Workflow siap |
+| Windows | Electron EXE/MSI | Workflow siap |
+| Web/PWA | Cloudflare Pages, service worker, installable PWA | Aktif |

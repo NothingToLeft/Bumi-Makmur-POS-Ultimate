@@ -109,7 +109,8 @@ export default function POSScreen() {
       basePrice: Math.round(price), modifierAmount: 0, price: Math.round(price), modalPrice: Number(product.modalPrice || 0) * factor,
       itemDiscount: 0, note: '', variant: options.variant || product.variants?.[0]?.name || '', variantName: product.variantName || '',
       variantGroupId: product.variantGroupId || '', sharedBarcode: product.sharedBarcode || '', parentName: product.parentName || '',
-      modifiers: [], bundleItems: product.bundleItems || []
+      modifiers: [], bundleItems: product.bundleItems || [],
+      serialTracking: product.serialTracking === true, warrantyMonths: Number(product.warrantyMonths || 0), serialIds: []
     };
     setCart(previous => {
       const existing = previous.find(item => item.productId === line.productId && item.unit === line.unit && item.variant === line.variant && !item.note && !item.itemDiscount);
@@ -211,7 +212,7 @@ export default function POSScreen() {
     if (line.lineId !== lineId) return line;
     const step = Number(line.quantityStep || 1);
     const qty = Math.max(0, Math.round((Number(line.qty || 0) + direction * step) * 1000) / 1000);
-    return { ...line, qty, baseQty: Math.max(0, Math.round(qty * Number(line.factor || 1) * 1000) / 1000) };
+    const baseQty = Math.max(0, Math.round(qty * Number(line.factor || 1) * 1000) / 1000); const serialIds = line.serialTracking ? (line.serialIds || []).slice(0, Math.max(0, Math.round(baseQty))) : (line.serialIds || []); return { ...line, qty, baseQty, serialIds };
   }).filter(line => line.qty > 0));
   const clear = () => { setCart([]); setGlobalDiscount(0); setPointsRedeemed(0); setNotes(''); setHeldSaleId(null); };
 
@@ -228,9 +229,12 @@ export default function POSScreen() {
       const step = Math.max(0.001, Number(line.quantityStep || 1));
       const requestedQty = Math.min(Number(selections[line.lineId] || 0), Number(line.qty));
       const splitQty = Math.round(requestedQty / step) * step;
-      if (splitQty > 0) splitItems.push({ ...line, qty: splitQty, baseQty: (line.baseQty / line.qty) * splitQty });
+      const splitBaseQty = (line.baseQty / line.qty) * splitQty;
+      const splitSerialCount = line.serialTracking ? Math.max(0, Math.round(splitBaseQty)) : 0;
+      const allSerialIds = line.serialIds || [];
+      if (splitQty > 0) splitItems.push({ ...line, qty: splitQty, baseQty: splitBaseQty, serialIds: line.serialTracking ? allSerialIds.slice(0, splitSerialCount) : allSerialIds });
       const remainQty = Math.round((line.qty - splitQty) * 1000) / 1000;
-      if (remainQty > 0) remaining.push({ ...line, qty: remainQty, baseQty: (line.baseQty / line.qty) * remainQty });
+      if (remainQty > 0) remaining.push({ ...line, qty: remainQty, baseQty: (line.baseQty / line.qty) * remainQty, serialIds: line.serialTracking ? allSerialIds.slice(splitSerialCount) : allSerialIds });
     }
     if (!splitItems.length) throw new Error('Pilih minimal satu item untuk dipisah.');
     holdSale({ name, customerId, customerName: customer?.name || 'Umum', saleType, globalDiscount: 0, pointsRedeemed: 0, note: `Hasil split dari ${heldSaleId || 'keranjang'}`, items: splitItems });
@@ -242,13 +246,15 @@ export default function POSScreen() {
     const credit = payments.find(item => item.type === 'credit');
     if (paid < totals.total) throw new Error('Jumlah pembayaran belum mencukupi.');
     if (credit && !credit.dueDate) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
+    const incompleteSerial = cart.find(line => line.serialTracking && (line.serialIds || []).length !== Math.round(Number(line.baseQty || 0)));
+    if (incompleteSerial) throw new Error(`Pilih ${Math.round(Number(incompleteSerial.baseQty || 0))} nomor serial untuk ${incompleteSerial.name} melalui tombol Atur Item.`);
     const sale = completeSale({
       items: cart.map(line => ({ ...line, netUnitPrice: Math.max(0, line.price - Number(line.itemDiscount || 0) / Math.max(0.001, Number(line.qty) || 1)) })),
       customerId: customer?.id, customerName: customer?.name || 'Umum', customerPhone: customer?.phone || '', cashierName: currentUser?.name || 'Kasir', saleType, notes, globalDiscount: Number(globalDiscount || 0),
       promoDiscount: 0, appliedPromos: [],
       loyaltyDiscount: totals.loyaltyDiscount, subtotal: Math.round(totals.subtotal), tax: totals.tax, service: totals.service, rounding: totals.rounding, total: totals.total,
       payments, change: Math.max(0, paid - totals.total), heldSaleId, pointsRedeemed: Number(pointsRedeemed || 0),
-      approvedBy: approval?.user?.id || '', approvedByName: approval?.user?.name || '', approvalToken: approval?.approvalToken || ''
+      approvedBy: approval?.user?.id || '', approvedByName: approval?.user?.name || '', approvalToken: approval?.approvalToken || '', approvalPurpose: approval?.purpose || ''
     });
     setReceipt(sale); setPaymentOpen(false); setDiscountApproval(null); setMobileCart(false); clear();
   };
@@ -257,9 +263,21 @@ export default function POSScreen() {
     const totalDiscount = cart.reduce((sum, line) => sum + Number(line.itemDiscount || 0), 0) + Number(globalDiscount || 0);
     const discountPercent = totals.subtotal > 0 ? (totalDiscount / totals.subtotal) * 100 : 0;
     const limit = currentUser?.role === 'kasir' ? Number(db.configs.cashierMaxDiscountPercent ?? 5) : Number(db.configs.managerMaxDiscountPercent ?? 20);
-    if (currentUser?.role !== 'owner' && discountPercent > limit) {
+    const estimatedCost = cart.reduce((sum, line) => sum + Math.max(0, Number(line.modalPrice || 0)) * Math.max(0, Number(line.qty || 0)), 0);
+    const belowCostLines = cart.filter(line => Math.max(0, Number(line.price || 0) * Number(line.qty || 0) - Number(line.itemDiscount || 0)) + 0.000001 < Math.max(0, Number(line.modalPrice || 0)) * Math.max(0, Number(line.qty || 0)));
+    const belowCost = belowCostLines.length > 0 || totals.afterDiscount + 0.000001 < estimatedCost;
+    const excessiveDiscount = currentUser?.role !== 'owner' && discountPercent > limit;
+    if (belowCost || excessiveDiscount) {
       setPaymentOpen(false);
-      setDiscountApproval({ payments, discountPercent, limit, amount: totalDiscount });
+      setDiscountApproval({
+        payments, discountPercent, limit, amount: totalDiscount,
+        purpose: belowCost ? 'SALE_BELOW_COST' : 'SALE_DISCOUNT',
+        title: belowCost ? 'Persetujuan Jual di Bawah Modal' : 'Persetujuan Diskon',
+        message: belowCost
+          ? `${belowCostLines.length ? `${belowCostLines.length} item` : 'Total transaksi'} berada di bawah harga modal. Tindakan ini wajib disetujui Owner/Store Manager.`
+          : `Diskon ${discountPercent.toFixed(1)}% melebihi batas akun ${limit}%.`,
+        estimatedCost
+      });
       return;
     }
     await finalizePayment(payments);
@@ -273,7 +291,7 @@ export default function POSScreen() {
         {db.configs.loyaltyEnabled && customer && customer.name !== 'Umum (Non-Member)' && <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-yellow-50 border border-yellow-100 text-xs"><span className="font-bold text-yellow-800">Poin tersedia: {customer.points || 0}</span><div className="flex items-center gap-1"><span>Tukar</span><Input type="number" min="0" max={customer.points || 0} value={pointsRedeemed} onChange={event => setPointsRedeemed(Math.min(Number(customer.points || 0), Math.max(0, Number(event.target.value || 0))))} className="w-20 min-h-[36px] py-1 text-right"/></div></div>}
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-        {cart.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-gray-400"><ShoppingCart size={48} className="mb-3 opacity-40"/><p className="font-bold">Keranjang kosong</p><p className="text-xs mt-1">Pilih produk untuk mulai transaksi</p></div> : cart.map(line => <Card key={line.lineId} className="p-3 bg-gray-50 input-element"><div className="flex justify-between gap-2"><div className="min-w-0"><p className="font-bold text-xs text-gray-800 line-clamp-2">{line.name}</p><p className="text-[10px] text-gray-500">{line.variant ? `${line.variant} · ` : ''}{line.unit} · {formatRp(line.price)}</p>{line.note && <p className="text-[10px] text-blue-600 mt-1">Catatan: {line.note}</p>}</div><p className="font-bold text-xs shrink-0">{formatRp(line.price * line.qty - line.itemDiscount)}</p></div><div className="flex items-center justify-between mt-3"><div className="flex gap-1"><button onClick={() => setEditingLine(line)} className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><SlidersHorizontal size={16}/></button><button onClick={() => setCart(previous => previous.filter(item => item.lineId !== line.lineId))} className="w-10 h-10 bg-red-50 text-red-600 rounded-lg flex items-center justify-center"><Trash2 size={16}/></button></div><div className="flex items-center gap-2 bg-white border rounded-xl p-1"><button onClick={() => changeQty(line.lineId,-1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center"><Minus size={14}/></button><span className="min-w-10 text-center font-bold text-sm">{formatQuantity(line.qty)}</span><button onClick={() => changeQty(line.lineId,1)} className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center"><Plus size={14}/></button></div></div></Card>)}
+        {cart.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-gray-400"><ShoppingCart size={48} className="mb-3 opacity-40"/><p className="font-bold">Keranjang kosong</p><p className="text-xs mt-1">Pilih produk untuk mulai transaksi</p></div> : cart.map(line => <Card key={line.lineId} className="p-3 bg-gray-50 input-element"><div className="flex justify-between gap-2"><div className="min-w-0"><p className="font-bold text-xs text-gray-800 line-clamp-2">{line.name}</p><p className="text-[10px] text-gray-500">{line.variant ? `${line.variant} · ` : ''}{line.unit} · {formatRp(line.price)}</p>{line.note && <p className="text-[10px] text-blue-600 mt-1">Catatan: {line.note}</p>}{line.serialTracking && <p className={`text-[10px] font-bold mt-1 ${(line.serialIds || []).length === Math.round(Number(line.baseQty || 0)) ? 'text-violet-700' : 'text-red-600'}`}>Serial {(line.serialIds || []).length}/{Math.round(Number(line.baseQty || 0))} dipilih</p>}</div><p className="font-bold text-xs shrink-0">{formatRp(line.price * line.qty - line.itemDiscount)}</p></div><div className="flex items-center justify-between mt-3"><div className="flex gap-1"><button onClick={() => setEditingLine(line)} className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><SlidersHorizontal size={16}/></button><button onClick={() => setCart(previous => previous.filter(item => item.lineId !== line.lineId))} className="w-10 h-10 bg-red-50 text-red-600 rounded-lg flex items-center justify-center"><Trash2 size={16}/></button></div><div className="flex items-center gap-2 bg-white border rounded-xl p-1"><button onClick={() => changeQty(line.lineId,-1)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center"><Minus size={14}/></button><span className="min-w-10 text-center font-bold text-sm">{formatQuantity(line.qty)}</span><button onClick={() => changeQty(line.lineId,1)} className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center"><Plus size={14}/></button></div></div></Card>)}
       </div>
       <div className="p-4 border-t border-gray-100 shadow-[0_-4px_15px_rgba(0,0,0,.04)] space-y-2 pb-safe">
         <div className="flex justify-between text-sm"><span>Subtotal</span><b>{formatRp(totals.subtotal)}</b></div>
@@ -320,9 +338,9 @@ export default function POSScreen() {
       {mobileCart && <div className="md:hidden absolute inset-0 z-40 bg-white flex flex-col"><div className="p-3 border-b flex items-center justify-between"><Button variant="ghost" onClick={() => setMobileCart(false)}>← Produk</Button><b>Keranjang</b><span/></div><div className="flex-1 min-h-0">{cartPanel}</div></div>}
 
       {choosingProduct && <ProductChoiceModal product={choosingProduct} saleType={saleType} onClose={() => setChoosingProduct(null)} onAdd={options => { addProduct(choosingProduct, options); setChoosingProduct(null); }}/>}      
-      {editingLine && <LineEditModal line={editingLine} product={scoped.products.find(item => item.id === editingLine.productId)} saleType={saleType} onClose={() => setEditingLine(null)} onSave={line => { updateLine(line); setEditingLine(null); }}/>}      
+      {editingLine && <LineEditModal line={editingLine} product={scoped.products.find(item => item.id === editingLine.productId)} serialNumbers={scoped.serialNumbers || []} saleType={saleType} onClose={() => setEditingLine(null)} onSave={line => { updateLine(line); setEditingLine(null); }}/>}      
       {paymentOpen && <PaymentModal total={totals.total} methods={activePaymentMethods} configs={paymentDisplayConfig} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
-      {discountApproval && <DiscountApprovalModal approval={discountApproval} onClose={() => setDiscountApproval(null)} onApprove={async pin => { const approval = await authorizeManagerPin(pin, 'SALE_DISCOUNT'); await finalizePayment(discountApproval.payments, approval); }}/>}      
+      {discountApproval && <DiscountApprovalModal approval={discountApproval} onClose={() => setDiscountApproval(null)} onApprove={async pin => { const approval = await authorizeManagerPin(pin, discountApproval.purpose || 'SALE_DISCOUNT'); await finalizePayment(discountApproval.payments, approval); }}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
       {scannerOpen && <BarcodeScannerModal title="Scan Barcode Kasir" allowContinuous onClose={() => setScannerOpen(false)} onDetected={addCodeToCart} helperText="Kamera mendukung pemilihan lensa depan/belakang, flash, zoom, dan scan dari foto. Untuk kasir cepat, aktifkan Mode Scan Cepat agar kamera tetap terbuka setelah barang masuk."/>}      
@@ -334,6 +352,19 @@ export default function POSScreen() {
 }
 
 
+
+function HoldModal({ defaultName = '', onClose, onSave }) {
+  const [name, setName] = useState(defaultName ? `Bill ${defaultName}` : `Open Bill ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+  const submit = () => {
+    const value = String(name || '').trim();
+    if (!value) return;
+    onSave(value.slice(0, 80));
+  };
+  return <Modal title="Simpan sebagai Open Bill" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit} disabled={!String(name || '').trim()}><Save size={16}/> Simpan Bill</Button></>}>
+    <div className="space-y-3"><Card className="p-3 bg-blue-50 border-blue-100"><p className="text-sm font-bold text-blue-900">Keranjang disimpan tanpa mengurangi stok.</p><p className="text-xs text-blue-700 mt-1">Buka lagi dari menu Open Bill untuk melanjutkan, mengubah, atau membayar transaksi.</p></Card><Field label="Nama / Penanda Bill"><Input value={name} onChange={event => setName(event.target.value)} maxLength={80} autoFocus onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } }}/></Field></div>
+  </Modal>;
+}
+
 function DiscountApprovalModal({ approval, onClose, onApprove }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
@@ -344,8 +375,8 @@ function DiscountApprovalModal({ approval, onClose, onApprove }) {
     catch (approvalError) { setError(approvalError.message || 'Approval gagal.'); }
     finally { setBusy(false); }
   };
-  return <Modal title="Persetujuan Diskon" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit} disabled={busy || pin.length !== 4}>{busy ? 'Memeriksa...' : 'Setujui Diskon'}</Button></>}>
-    <div className="space-y-4"><Card className="p-4 bg-orange-50 border-orange-200"><p className="font-black text-orange-900">Diskon {approval.discountPercent.toFixed(1)}%</p><p className="text-sm text-orange-800 mt-1">Batas akun ini {approval.limit}%. Nilai diskon {formatRp(approval.amount)} memerlukan PIN Owner atau Store Manager.</p></Card><Field label="PIN Owner / Store Manager"><Input type="password" inputMode="numeric" maxLength="4" value={pin} onChange={event => setPin(event.target.value.replace(/\D/g,'').slice(0,4))} placeholder="••••" autoFocus/></Field>{error&&<p className="text-sm font-bold text-red-600">{error}</p>}</div>
+  return <Modal title={approval.title || 'Persetujuan Transaksi'} onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit} disabled={busy || pin.length !== 4}>{busy ? 'Memeriksa...' : 'Setujui Diskon'}</Button></>}>
+    <div className="space-y-4"><Card className="p-4 bg-orange-50 border-orange-200"><p className="font-black text-orange-900">{approval.purpose === 'SALE_BELOW_COST' ? 'Proteksi Margin' : `Diskon ${approval.discountPercent.toFixed(1)}%`}</p><p className="text-sm text-orange-800 mt-1">{approval.message || `Nilai diskon ${formatRp(approval.amount)} memerlukan PIN Owner atau Store Manager.`}</p>{approval.purpose === 'SALE_BELOW_COST' && <p className="text-xs text-orange-700 mt-2">Estimasi modal transaksi: {formatRp(approval.estimatedCost || 0)}</p>}</Card><Field label="PIN Owner / Store Manager"><Input type="password" inputMode="numeric" maxLength="4" value={pin} onChange={event => setPin(event.target.value.replace(/\D/g,'').slice(0,4))} placeholder="••••" autoFocus/></Field>{error&&<p className="text-sm font-bold text-red-600">{error}</p>}</div>
   </Modal>;
 }
 
@@ -384,21 +415,76 @@ function ProductChoiceModal({ product, saleType, onClose, onAdd }) {
   return <Modal title="Pilih Jumlah & Satuan" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit} disabled={safeQty <= 0}>Tambah</Button></>}><div className="space-y-3"><div><p className="font-bold text-gray-800">{product.name}</p><p className="text-xs text-gray-500">Stok {formatQuantity(product.stock)} {product.baseUnit}</p></div>{product.variants?.length > 0 && <Field label="Varian"><Select value={variant} onChange={event => setVariant(event.target.value)}>{product.variants.map(item => <option key={item.id || item.name} value={item.name}>{item.name}</option>)}</Select></Field>}<Field label="Satuan Jual"><Select value={unit} onChange={event => { const nextUnit = event.target.value; const nextStep = nextUnit === product.baseUnit && product.allowFractional ? normalizeQuantityStep(product.quantityStep, true) : 1; setUnit(nextUnit); setQty(nextStep); }}>{units.map(item => <option key={item.unit} value={item.unit}>{item.unit} · {item.factor === 1 ? `1 ${product.baseUnit}` : `${formatQuantity(item.factor)} ${product.baseUnit}`} · {formatRp(item.price)}</option>)}</Select></Field><Field label={`Jumlah (${unit})`} hint={step < 1 ? `${quantityStepLabel(step, unit)}. Jumlah yang diketik otomatis disesuaikan ke kelipatan ini.` : 'Gunakan jumlah satuan utuh.'}><Input type="number" inputMode="decimal" min={step} step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(safeQty)}/></Field>{step < 1 && <div><p className="text-[11px] font-bold text-gray-500 mb-2">Pilihan cepat</p><div className="grid grid-cols-3 gap-2">{quickOptions.map(value => <button key={value} type="button" onClick={() => setQty(value)} className={`min-h-[42px] rounded-xl border text-sm font-black ${Number(safeQty) === Number(value) ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-gray-200 text-gray-700'}`}>{formatQuantity(value)} {unit}</button>)}</div></div>}<Card className="p-3 bg-emerald-50 text-center"><p className="text-xs text-emerald-700">{formatQuantity(safeQty)} {unit} = {formatQuantity(baseQty)} {product.baseUnit}</p><p className="text-xl font-black text-emerald-800">{formatRp(price * safeQty)}</p><p className="text-[11px] text-emerald-700">Harga per {unit}: {formatRp(price)}</p></Card></div></Modal>;
 }
 
-function LineEditModal({ line, product, saleType, onClose, onSave }) {
-  const [form, setForm] = useState({ ...line, basePrice: line.basePrice ?? (line.price - Number(line.modifierAmount || 0)), modifierAmount: Number(line.modifierAmount || 0), modifierName: line.modifiers?.[0]?.name || '' });
+function LineEditModal({ line, product, serialNumbers = [], saleType, onClose, onSave }) {
+  const [form, setForm] = useState({
+    ...line,
+    basePrice: line.basePrice ?? (line.price - Number(line.modifierAmount || 0)),
+    modifierAmount: Number(line.modifierAmount || 0),
+    modifierName: line.modifiers?.[0]?.name || '',
+    serialIds: line.serialIds || []
+  });
+  const eligibleSerials = useMemo(() => serialNumbers.filter(item => item.productId === product?.id && (item.status === 'IN_STOCK' || form.serialIds.includes(item.id))), [serialNumbers, product?.id, form.serialIds]);
+  const requiredSerialCount = product?.serialTracking ? Math.max(0, Math.round(Number(form.baseQty || Number(form.qty || 0) * Number(form.factor || 1)))) : 0;
+
   const changeUnit = unit => {
     const units = saleUnitOptions(product, saleType);
     const selectedUnit = units.find(item => item.unit === unit) || units[0];
     const factor = Number(selectedUnit?.factor || 1);
     const oldFactor = Number(form.factor || 1);
-    setForm(previous => { const basePrice = Number(selectedUnit?.price || priceForSaleUnit(product, unit, saleType)); const quantityStep = unit === product?.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true) : 1; const qty = normalizeQuantity(previous.qty, { allowFractional: quantityStep < 1, step: quantityStep, min: quantityStep }); return { ...previous, unit, factor, qty, quantityStep, allowFractional: unit === product?.baseUnit && product?.allowFractional === true, baseQty: qty * factor, basePrice, price: basePrice + Number(previous.modifierAmount || 0), modalPrice: Math.round(previous.modalPrice / oldFactor * factor) }; });
+    setForm(previous => {
+      const basePrice = Number(selectedUnit?.price || priceForSaleUnit(product, unit, saleType));
+      const quantityStep = unit === product?.baseUnit ? normalizeQuantityStep(product?.quantityStep, product?.allowFractional === true) : 1;
+      const qty = normalizeQuantity(previous.qty, { allowFractional: quantityStep < 1, step: quantityStep, min: quantityStep });
+      const baseQty = qty * factor;
+      return {
+        ...previous, unit, factor, qty, quantityStep,
+        allowFractional: unit === product?.baseUnit && product?.allowFractional === true,
+        baseQty, basePrice, price: basePrice + Number(previous.modifierAmount || 0),
+        modalPrice: Math.round(previous.modalPrice / oldFactor * factor),
+        serialIds: product?.serialTracking ? (previous.serialIds || []).slice(0, Math.max(0, Math.round(baseQty))) : (previous.serialIds || [])
+      };
+    });
   };
+
+  const toggleSerial = id => setForm(previous => {
+    const selected = previous.serialIds || [];
+    if (selected.includes(id)) return { ...previous, serialIds: selected.filter(value => value !== id) };
+    const limit = Math.max(0, Math.round(Number(previous.baseQty || Number(previous.qty || 0) * Number(previous.factor || 1))));
+    if (selected.length >= limit) return previous;
+    return { ...previous, serialIds: [...selected, id] };
+  });
+
   const save = () => {
     const step = Number(form.quantityStep || 1);
     const qty = normalizeQuantity(form.qty, { allowFractional: step < 1, step, min: step });
-    onSave({ ...form, qty, baseQty: qty * Number(form.factor || 1) });
+    const baseQty = qty * Number(form.factor || 1);
+    if (product?.serialTracking) {
+      const required = Math.round(baseQty);
+      if (Math.abs(required - baseQty) > 0.000001) return alert('Barang berserial harus dijual dalam jumlah unit bulat.');
+      if ((form.serialIds || []).length !== required) return alert(`Pilih tepat ${required} nomor serial sebelum menyimpan item.`);
+    }
+    onSave({ ...form, qty, baseQty });
   };
-  return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={save}>Simpan</Button></>}><div className="space-y-4"><div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>{(product?.conversions?.length || 0) > 0 && <Field label="Satuan Jual"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}>{saleUnitOptions(product, saleType).map(item => <option key={item.unit} value={item.unit}>{item.unit} · {formatQuantity(item.factor)} {product.baseUnit} · {formatRp(item.price)}</option>)}</Select></Field>}<div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Jumlah" hint={Number(form.quantityStep || 1) < 1 ? quantityStepLabel(form.quantityStep, form.unit) : ''}><Input type="number" inputMode="decimal" min={form.quantityStep || 1} step={form.quantityStep || 1} value={form.qty} onChange={event => setForm(previous => ({...previous, qty:event.target.value}))} onBlur={() => setForm(previous => { const qty = normalizeQuantity(previous.qty, { allowFractional: Number(previous.quantityStep || 1) < 1, step: previous.quantityStep || 1, min: previous.quantityStep || 1 }); return { ...previous, qty, baseQty: qty * Number(previous.factor || 1) }; })}/></Field><Field label="Harga per Satuan"><MoneyInput value={form.price} onValueChange={value => setForm(previous => ({...previous, price:value}))}/></Field></div><Field label="Diskon Item (Rp)"><MoneyInput max={Math.max(0, form.price * Number(form.qty || 0))} value={form.itemDiscount} onValueChange={value => setForm(previous => ({...previous,itemDiscount:value}))}/></Field><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><MoneyInput value={form.modifierAmount || 0} onValueChange={amount => setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]}))}/></Field></div><Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field></div></Modal>;
+
+  return <Modal title="Atur Item" onClose={onClose} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={save}>Simpan</Button></>}>
+    <div className="space-y-4">
+      <div><p className="font-bold text-gray-800">{line.name}</p><p className="text-xs text-gray-500">{line.sku}</p></div>
+      {(product?.conversions?.length || 0) > 0 && <Field label="Satuan Jual"><Select value={form.unit} onChange={event => changeUnit(event.target.value)}>{saleUnitOptions(product, saleType).map(item => <option key={item.unit} value={item.unit}>{item.unit} · {formatQuantity(item.factor)} {product.baseUnit} · {formatRp(item.price)}</option>)}</Select></Field>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Jumlah" hint={Number(form.quantityStep || 1) < 1 ? quantityStepLabel(form.quantityStep, form.unit) : ''}><Input type="number" inputMode="decimal" min={form.quantityStep || 1} step={form.quantityStep || 1} value={form.qty} onChange={event => setForm(previous => ({...previous, qty:event.target.value, baseQty:Number(event.target.value || 0) * Number(previous.factor || 1)}))} onBlur={() => setForm(previous => { const qty = normalizeQuantity(previous.qty, { allowFractional: Number(previous.quantityStep || 1) < 1, step: previous.quantityStep || 1, min: previous.quantityStep || 1 }); const baseQty = qty * Number(previous.factor || 1); return { ...previous, qty, baseQty, serialIds: product?.serialTracking ? (previous.serialIds || []).slice(0, Math.max(0, Math.round(baseQty))) : previous.serialIds }; })}/></Field>
+        <Field label="Harga per Satuan"><MoneyInput value={form.price} onValueChange={value => setForm(previous => ({...previous, price:value}))}/></Field>
+      </div>
+      {product?.serialTracking && <Card className="p-4 border-violet-200 bg-violet-50/40">
+        <div className="flex justify-between gap-3"><div><p className="font-black text-violet-900">Nomor Serial</p><p className="text-xs text-violet-700 mt-1">Pilih {requiredSerialCount} serial unit yang benar-benar diberikan kepada pelanggan.</p></div><Badge tone={(form.serialIds || []).length === requiredSerialCount ? 'green' : 'red'}>{(form.serialIds || []).length}/{requiredSerialCount}</Badge></div>
+        <div className="mt-3 max-h-44 overflow-y-auto space-y-2 custom-scrollbar">
+          {eligibleSerials.length === 0 ? <p className="text-xs text-red-700 font-bold">Tidak ada serial berstatus IN_STOCK. Daftarkan serial dari menu Garansi & Serial setelah barang diterima.</p> : eligibleSerials.map(serial => <label key={serial.id} className={`flex items-center gap-3 p-3 rounded-xl border bg-white ${(form.serialIds || []).includes(serial.id) ? 'border-violet-400 ring-1 ring-violet-200' : 'border-gray-200'}`}><input type="checkbox" checked={(form.serialIds || []).includes(serial.id)} onChange={() => toggleSerial(serial.id)}/><div className="min-w-0"><p className="font-black text-sm break-all">{serial.serial}</p><p className="text-[11px] text-gray-500">Garansi {serial.warrantyMonths || product.warrantyMonths || 0} bulan</p></div></label>)}
+        </div>
+      </Card>}
+      <Field label="Diskon Item (Rp)"><MoneyInput max={Math.max(0, form.price * Number(form.qty || 0))} value={form.itemDiscount} onValueChange={value => setForm(previous => ({...previous,itemDiscount:value}))}/></Field>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Modifier/Tambahan"><Input value={form.modifierName || ''} onChange={event => setForm(previous => ({...previous,modifierName:event.target.value,modifiers:event.target.value?[{name:event.target.value,amount:Number(previous.modifierAmount||0)}]:[]}))} placeholder="Contoh: Potong kabel"/></Field><Field label="Biaya Tambahan"><MoneyInput value={form.modifierAmount || 0} onValueChange={amount => setForm(previous => ({...previous,modifierAmount:amount,price:Number(previous.basePrice||0)+amount,modifiers:previous.modifierName?[{name:previous.modifierName,amount}]:[]}))}/></Field></div>
+      <Field label="Catatan Item"><Textarea value={form.note} onChange={event => setForm(previous => ({...previous,note:event.target.value}))} placeholder="Contoh: potong 2 meter, warna putih..."/></Field>
+    </div>
+  </Modal>;
 }
 
 function PaymentModal({ total, methods, configs, onClose, onConfirm }) {

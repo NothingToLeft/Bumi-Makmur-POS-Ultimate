@@ -29,7 +29,7 @@ service cloud.firestore {
         || (data.permissions is list && data.permissions.hasOnly([
           'pos.use', 'transactions.view', 'products.view', 'customers.view',
           'customers.manage', 'shifts.view', 'shifts.manage', 'openBills.view',
-          'orders.view', 'display.view'
+          'orders.view', 'display.view', 'quotations.view', 'quotations.manage', 'warranty.view'
         ]));
     }
     function validEmployeeDirectory(data) {
@@ -78,6 +78,16 @@ service cloud.firestore {
         && exists(userPath(storeId, request.resource.data.approvedBy))
         && get(userPath(storeId, request.resource.data.approvedBy)).data.active == true
         && get(userPath(storeId, request.resource.data.approvedBy)).data.role in ['owner', 'manager'];
+    }
+    function approvedRefundByCashier(storeId, refundId, saleId) {
+      let refundPath = /databases/$(database)/documents/stores/$(storeId)/refunds/$(refundId);
+      let refund = getAfter(refundPath).data;
+      return refund.saleId == saleId
+        && refund.createdBy == request.auth.uid
+        && refund.approvedBy is string
+        && exists(userPath(storeId, refund.approvedBy))
+        && get(userPath(storeId, refund.approvedBy)).data.active == true
+        && get(userPath(storeId, refund.approvedBy)).data.role in ['owner', 'manager'];
     }
 
     // Direktori login hanya dapat diambil berdasarkan ID hash cabang + nama.
@@ -470,6 +480,67 @@ service cloud.firestore {
     // Purchase Order menggunakan pembatasan cabang yang sama dengan pembelian.
     match /stores/{storeId}/purchaseOrders/{id} {
       allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    // Riwayat harga pemasok juga append-only. Hanya Owner/Manager yang dapat
+    // membaca dan menulis agar harga modal pemasok tidak terekspos ke kasir.
+    match /stores/{storeId}/supplierPriceHistory/{id} {
+      allow read: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+      allow create: if ownerOrManager(storeId) && incomingBranchAllowed(storeId)
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Penawaran dapat dibuat oleh anggota aktif pada cabangnya. Ini mendukung
+    // kasir membuat quotation tanpa membuka akses pembelian atau harga modal.
+    match /stores/{storeId}/quotations/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create, update: if activeMember(storeId) && incomingBranchAllowed(storeId);
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    // Serial dapat dibaca kasir untuk pemilihan unit di POS. Master serial tetap
+    // Owner/Manager, tetapi kasir boleh melakukan transisi IN_STOCK -> SOLD
+    // sebagai bagian transaksi penjualan miliknya sendiri. getAfter() memastikan
+    // sale tujuan sudah ada di transaction/batch Firestore yang sama atau sudah
+    // berhasil disinkronkan oleh chunk sebelumnya.
+    match /stores/{storeId}/serialNumbers/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
+      allow create: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
+      allow update: if (ownerOrManager(storeId) && incomingBranchAllowed(storeId))
+        || (cashier(storeId)
+          && existingBranchAllowed(storeId)
+          && incomingBranchAllowed(storeId)
+          && (
+            (resource.data.status == 'IN_STOCK'
+              && request.resource.data.status == 'SOLD'
+              && request.resource.data.saleId is string
+              && request.resource.data.saleId.size() > 0
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'status', 'saleId', 'customerId', 'customerName', 'soldAt',
+                'warrantyStartAt', 'warrantyEndsAt', 'updatedAt'
+              ])
+              && getAfter(/databases/$(database)/documents/stores/$(storeId)/sales/$(request.resource.data.saleId)).data.createdBy == request.auth.uid
+              && getAfter(/databases/$(database)/documents/stores/$(storeId)/sales/$(request.resource.data.saleId)).data.branchId == request.resource.data.branchId)
+            ||
+            (resource.data.status == 'SOLD'
+              && request.resource.data.status in ['IN_STOCK', 'RETURNED']
+              && request.resource.data.lastRefundId is string
+              && request.resource.data.lastRefundId.size() > 0
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'status', 'saleId', 'customerId', 'customerName', 'soldAt',
+                'warrantyStartAt', 'warrantyEndsAt', 'returnedAt', 'previousSaleId',
+                'lastRefundId', 'lastRefundAt', 'updatedAt'
+              ])
+              && approvedRefundByCashier(storeId, request.resource.data.lastRefundId, resource.data.saleId))
+          ));
+      allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
+    }
+
+    match /stores/{storeId}/warrantyClaims/{id} {
+      allow read: if activeMember(storeId) && existingBranchAllowed(storeId);
       allow create, update: if ownerOrManager(storeId) && incomingBranchAllowed(storeId);
       allow delete: if ownerOrManager(storeId) && existingBranchAllowed(storeId);
     }

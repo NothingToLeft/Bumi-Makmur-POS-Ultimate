@@ -1,31 +1,33 @@
 import {
   LayoutDashboard, ShoppingCart, ReceiptText, Package, Truck, ContactRound,
   Users, Clock3, WalletCards, BarChart3, ShoppingBag, Store, Printer,
-  MonitorSmartphone, Settings, ListChecks, Gauge
+  MonitorSmartphone, Settings, ListChecks, Gauge, FileText, ShieldCheck
 } from 'lucide-react';
 
-export const APP_VERSION = '5.7.0';
+export const APP_VERSION = '5.8.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
 export const MODULES = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
-  { id: 'controlCenter', label: 'Pusat Kontrol', icon: Gauge, permission: 'control.view' },
-  { id: 'pos', label: 'Kasir', icon: ShoppingCart, permission: 'pos.use' },
-  { id: 'openBills', label: 'Open Bill', icon: ListChecks, permission: 'pos.use' },
-  { id: 'transactions', label: 'Transaksi', icon: ReceiptText, permission: 'transactions.view' },
-  { id: 'products', label: 'Produk & Stok', icon: Package, permission: 'products.view' },
-  { id: 'purchases', label: 'Pembelian', icon: Truck, permission: 'purchases.view' },
-  { id: 'suppliers', label: 'Pemasok', icon: ContactRound, permission: 'suppliers.view' },
-  { id: 'customers', label: 'Pelanggan', icon: Users, permission: 'customers.view' },
-  { id: 'shifts', label: 'Shift & Kas', icon: Clock3, permission: 'shifts.view' },
-  { id: 'finance', label: 'Keuangan', icon: WalletCards, permission: 'finance.view' },
-  { id: 'reports', label: 'Laporan', icon: BarChart3, permission: 'reports.view' },
-  { id: 'orders', label: 'Pesanan Online', icon: ShoppingBag, permission: 'orders.view' },
-  { id: 'branches', label: 'Cabang', icon: Store, permission: 'branches.view' },
-  { id: 'devices', label: 'Printer & Perangkat', icon: Printer, permission: 'devices.view' },
-  { id: 'customerDisplay', label: 'Layar Pelanggan', icon: MonitorSmartphone, permission: 'display.view' },
-  { id: 'settings', label: 'Pengaturan', icon: Settings, permission: 'settings.view' }
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view', group: 'Ringkasan' },
+  { id: 'controlCenter', label: 'Pusat Kontrol', icon: Gauge, permission: 'control.view', group: 'Ringkasan' },
+  { id: 'pos', label: 'Kasir', icon: ShoppingCart, permission: 'pos.use', group: 'Penjualan' },
+  { id: 'openBills', label: 'Open Bill', icon: ListChecks, permission: 'pos.use', group: 'Penjualan' },
+  { id: 'transactions', label: 'Transaksi', icon: ReceiptText, permission: 'transactions.view', group: 'Penjualan' },
+  { id: 'quotations', label: 'Penawaran', icon: FileText, permission: 'quotations.view', group: 'Penjualan' },
+  { id: 'customers', label: 'Pelanggan', icon: Users, permission: 'customers.view', group: 'Penjualan' },
+  { id: 'products', label: 'Produk & Stok', icon: Package, permission: 'products.view', group: 'Persediaan' },
+  { id: 'purchases', label: 'Pembelian & PO', icon: Truck, permission: 'purchases.view', group: 'Persediaan' },
+  { id: 'suppliers', label: 'Pemasok', icon: ContactRound, permission: 'suppliers.view', group: 'Persediaan' },
+  { id: 'warranty', label: 'Garansi & Serial', icon: ShieldCheck, permission: 'warranty.view', group: 'Persediaan' },
+  { id: 'shifts', label: 'Shift & Kas', icon: Clock3, permission: 'shifts.view', group: 'Keuangan & Laporan' },
+  { id: 'finance', label: 'Keuangan', icon: WalletCards, permission: 'finance.view', group: 'Keuangan & Laporan' },
+  { id: 'reports', label: 'Laporan', icon: BarChart3, permission: 'reports.view', group: 'Keuangan & Laporan' },
+  { id: 'orders', label: 'Pesanan Online', icon: ShoppingBag, permission: 'orders.view', group: 'Operasional' },
+  { id: 'branches', label: 'Cabang', icon: Store, permission: 'branches.view', group: 'Operasional' },
+  { id: 'devices', label: 'Printer & Perangkat', icon: Printer, permission: 'devices.view', group: 'Operasional' },
+  { id: 'customerDisplay', label: 'Layar Pelanggan', icon: MonitorSmartphone, permission: 'display.view', group: 'Operasional' },
+  { id: 'settings', label: 'Pengaturan', icon: Settings, permission: 'settings.view', group: 'Sistem' }
 ];
 
 export const ROLE_PERMISSIONS = {
@@ -36,11 +38,11 @@ export const ROLE_PERMISSIONS = {
     'purchases.manage', 'suppliers.view', 'suppliers.manage', 'customers.view', 'customers.manage',
     'shifts.view', 'shifts.manage', 'finance.view', 'finance.manage', 'reports.view', 'orders.view',
     'orders.manage', 'approvals.manage', 'devices.view', 'devices.manage', 'display.view', 'display.manage',
-    'settings.view', 'employees.view', 'employees.manage'
+    'settings.view', 'employees.view', 'employees.manage', 'quotations.view', 'quotations.manage', 'warranty.view', 'warranty.manage'
   ],
   kasir: [
     'pos.use', 'transactions.view', 'products.view', 'inventory.view', 'customers.view', 'customers.manage',
-    'shifts.view', 'shifts.manage', 'openBills.view', 'orders.view', 'display.view'
+    'shifts.view', 'shifts.manage', 'openBills.view', 'orders.view', 'display.view', 'quotations.view', 'quotations.manage', 'warranty.view'
   ]
 };
 
@@ -189,7 +191,7 @@ export const createSeedDb = () => ({
     { id: 'CUS-001', branchId: MAIN_BRANCH_ID, name: 'Pak Budi Tukang', phone: '081111111111', email: '', type: 'Tukang', priceTier: 'wholesale', creditLimit: 3000000, points: 120, address: 'Surabaya', project: 'Renovasi Rumah', notes: '', active: true }
   ],
   sales: [], heldSales: [], purchases: [], purchaseOrders: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [],
-  productPriceHistory: [], approvalRequests: [], deviceSessions: [],
+  productPriceHistory: [], supplierPriceHistory: [], quotations: [], serialNumbers: [], warrantyClaims: [], approvalRequests: [], deviceSessions: [],
   branchPaymentProfiles: [{ id: MAIN_BRANCH_ID, branchId: MAIN_BRANCH_ID, merchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.', qrisAssetMeta: null, enabled: true, updatedAt: now, updatedBy: 'SYSTEM' }],
   expenses: [], receivables: [], payables: [], refunds: [], shifts: [
     { id: 'SHIFT-DEMO', branchId: MAIN_BRANCH_ID, userId: 'USR-KASIR', userName: 'Kasir Satu', startAt: now, endAt: null, startingCash: 500000, actualEndingCash: null, expectedEndingCash: null, difference: null, status: 'OPEN', notes: 'Shift demo awal' }

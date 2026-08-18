@@ -57,7 +57,7 @@ test('seluruh alur stok pecahan menormalisasi jumlah dan tetap responsif', async
   assert.match(products, /normalizeSignedQuantity/);
   assert.match(products, /normalizeCount/);
   assert.match(products, /Maksimal \$\{formatQuantity\(maxQty\)\}/);
-  assert.match(purchases, /qtyReturn: Math\.min\(item\.returnableQty, normalizeQuantity/);
+  assert.match(purchases, /const qty = Math\.min\(row\.returnableQty, normalizeQuantity/);
   assert.match(purchases, /sm:grid-cols-\[minmax\(0,1fr\)_140px\]/);
   assert.match(transactions, /sm:grid-cols-\[minmax\(0,1fr\)_120px\]/);
 });

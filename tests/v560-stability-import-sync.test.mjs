@@ -100,7 +100,8 @@ test('diskon besar memakai approval PIN dan PO/restok mempunyai alur terpisah', 
     source('src/screens/POSScreen.jsx'), source('src/store/PosContext.jsx'), source('src/screens/PurchasesScreen.jsx')
   ]);
   assert.match(pos, /Persetujuan Diskon/);
-  assert.match(pos, /authorizeManagerPin\(pin, 'SALE_DISCOUNT'\)/);
+  assert.match(pos, /authorizeManagerPin\(pin, discountApproval\.purpose \|\| 'SALE_DISCOUNT'\)/);
+  assert.match(pos, /SALE_BELOW_COST/);
   assert.match(context, /cashierMaxDiscountPercent/);
   assert.match(context, /approvalRequests\.unshift/);
   assert.match(purchases, /Buat PO/);
@@ -116,12 +117,12 @@ test('Firestore Rules membatasi riwayat harga, approval, PO, dan sesi perangkat'
   assert.match(rules, /deviceSessions/);
 });
 
-test('closing harian dapat dicetak dan workflow rilis memakai versi 5.7.0', async () => {
+test('closing harian dapat dicetak dan workflow rilis memakai versi 5.8.0', async () => {
   const [shift, android, windows] = await Promise.all([
     source('src/screens/ShiftFinanceScreens.jsx'), source('.github/workflows/build-android.yml'), source('.github/workflows/build-windows.yml')
   ]);
   assert.match(shift, /LAPORAN CLOSING SHIFT/);
   assert.match(shift, /Cetak laporan closing/);
-  assert.match(android, /5\.7\.0/);
-  assert.match(windows, /5\.7\.0/);
+  assert.match(android, /5\.8\.0/);
+  assert.match(windows, /5\.8\.0/);
 });

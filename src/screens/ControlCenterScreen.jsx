@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle, BadgeDollarSign, Boxes, CheckCircle2, CircleDollarSign,
-  ClipboardList, Clock3, Download, Gauge, PackageX, Printer, RefreshCw,
+  ClipboardList, Clock3, Download, Gauge, PackageX, Printer, RefreshCw, Plus,
   ScanSearch, ShieldAlert, TrendingUp
 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
-import { Badge, Button, Card, EmptyState, PageHeader } from '../components/ui.jsx';
+import { Badge, Button, Card, EmptyState, Modal, PageHeader } from '../components/ui.jsx';
 import { buildOperationalHealth, buildReorderCsv } from '../utils/operationsHealth.js';
+import { buildSmartRestock, buildSuggestedPurchaseOrders } from '../utils/businessInsights.js';
 import { downloadFile, formatRp, localDateKey, printHtmlDocument } from '../utils/helpers.js';
 
 const escapeHtml = value => String(value ?? '')
@@ -20,10 +21,14 @@ const scoreTone = score => score >= 85 ? 'green' : score >= 65 ? 'orange' : 'red
 const metricToneClass = tone => ({ emerald: 'bg-emerald-50 text-emerald-700', red: 'bg-red-50 text-red-700', orange: 'bg-orange-50 text-orange-700', blue: 'bg-blue-50 text-blue-700' }[tone] || 'bg-gray-50 text-gray-700');
 
 export default function ControlCenterScreen() {
-  const { db, branchId, branch, syncNow, online, cloudReady, pendingSyncCount } = usePos();
+  const { db, scoped, branchId, branch, syncNow, online, cloudReady, pendingSyncCount, savePurchaseOrder, hasPermission } = usePos();
   const [tab, setTab] = useState('overview');
   const [refreshing, setRefreshing] = useState(false);
+  const [poPlanOpen, setPoPlanOpen] = useState(false);
   const health = useMemo(() => buildOperationalHealth(db, branchId), [db, branchId]);
+  const smartRestock = useMemo(() => buildSmartRestock({ products: scoped.products, sales: scoped.sales, purchaseOrders: scoped.purchaseOrders, supplierPrices: scoped.supplierPriceHistory, leadTimeDays: 7, safetyDays: 7 }), [scoped.products, scoped.sales, scoped.purchaseOrders, scoped.supplierPriceHistory]);
+  const suggestedOrders = useMemo(() => buildSuggestedPurchaseOrders(smartRestock, scoped.suppliers), [smartRestock, scoped.suppliers]);
+  const canCreatePo = hasPermission('purchases.manage');
 
   const refresh = async () => {
     setRefreshing(true);
@@ -31,11 +36,11 @@ export default function ControlCenterScreen() {
   };
 
   const exportReorder = () => {
-    downloadFile(`Saran-Restock-${branch?.name || branchId}-${localDateKey()}.csv`, buildReorderCsv(health.lowStock), 'text/csv;charset=utf-8');
+    downloadFile(`Saran-Restock-${branch?.name || branchId}-${localDateKey()}.csv`, buildReorderCsv(smartRestock), 'text/csv;charset=utf-8');
   };
 
   const printReorder = () => {
-    const rows = health.lowStock.map((row, index) => `<tr><td>${index + 1}</td><td><b>${escapeHtml(row.name)}</b><br><small>${escapeHtml(row.sku || '-')} · Rak ${escapeHtml(row.rack || '-')}</small></td><td>${row.stock} ${escapeHtml(row.baseUnit || '')}</td><td>${row.minStock}</td><td><b>${row.suggestedQty} ${escapeHtml(row.baseUnit || '')}</b></td></tr>`).join('');
+    const rows = smartRestock.map((row, index) => `<tr><td>${index + 1}</td><td><b>${escapeHtml(row.name)}</b><br><small>${escapeHtml(row.sku || '-')} · Rak ${escapeHtml(row.rack || '-')}</small></td><td>${row.stock} ${escapeHtml(row.baseUnit || '')}</td><td>${row.minStock}</td><td><b>${row.suggestedQty} ${escapeHtml(row.baseUnit || '')}</b></td></tr>`).join('');
     printHtmlDocument(
       `Saran Restock ${branch?.name || db.configs.companyName || 'BUMI MAKMUR'}`,
       `<div class="center"><h2>${escapeHtml(branch?.name||db.configs.companyName||'BUMI MAKMUR')}</h2><p class="bold">SARAN RESTOCK</p><p>${escapeHtml(db.configs.companyName || '')}</p><p>${new Date().toLocaleString('id-ID')}</p></div><div class="line"></div><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th>No</th><th>Produk</th><th>Stok</th><th>Min</th><th>Saran</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Tidak ada stok rendah.</td></tr>'}</tbody></table>`,
@@ -45,7 +50,7 @@ export default function ControlCenterScreen() {
 
   const tabs = [
     ['overview', 'Ringkasan'],
-    ['restock', `Restock (${health.lowStock.length})`],
+    ['restock', `Smart Restock (${smartRestock.length})`],
     ['quality', `Kualitas Data (${health.marginRisk.length + health.duplicateCodes.length})`],
     ['finance', `Peringatan Keuangan (${health.overdueReceivables.length + health.overduePayables.length})`]
   ];
@@ -66,10 +71,11 @@ export default function ControlCenterScreen() {
       </Card>
 
       {tab === 'overview' && <Overview health={health}/>} 
-      {tab === 'restock' && <Restock health={health} onExport={exportReorder} onPrint={printReorder}/>} 
+      {tab === 'restock' && <Restock rows={smartRestock} onExport={exportReorder} onPrint={printReorder} onCreatePo={canCreatePo ? () => setPoPlanOpen(true) : null} assignedCount={suggestedOrders.groups.reduce((sum, group) => sum + group.items.length, 0)} unassignedCount={suggestedOrders.unassigned.length}/>} 
       {tab === 'quality' && <Quality health={health}/>} 
       {tab === 'finance' && <FinanceAlerts health={health}/>} 
     </div>
+    {poPlanOpen && <SuggestedPoModal plan={suggestedOrders} onClose={() => setPoPlanOpen(false)} onConfirm={() => { try { for (const group of suggestedOrders.groups) savePurchaseOrder({ supplierId: group.supplierId, supplierName: group.supplierName, status: 'DRAFT', orderNo: `PO-SMART-${localDateKey()}-${Date.now().toString().slice(-6)}-${group.supplierId.slice(-4)}`, items: group.items, notes: 'Draft otomatis dari Smart Restock. Periksa jumlah dan harga sebelum dikirim ke pemasok.' }); setPoPlanOpen(false); alert(`${suggestedOrders.groups.length} Draft PO berhasil dibuat.`); } catch (error) { alert(error.message); } }}/>}
   </div>;
 }
 
@@ -103,12 +109,22 @@ function IssueSummary({ title, icon: Icon, items }) {
   return <Card className="p-5"><p className="font-black flex items-center gap-2"><Icon size={19} className="text-emerald-700"/>{title}</p><div className="mt-4 space-y-3">{items.map(item => <div key={item} className="flex gap-3 text-sm text-gray-600"><CheckCircle2 size={17} className="text-emerald-600 shrink-0 mt-0.5"/><span>{item}</span></div>)}</div></Card>;
 }
 
-function Restock({ health, onExport, onPrint }) {
+function Restock({ rows, onExport, onPrint, onCreatePo, assignedCount = 0, unassignedCount = 0 }) {
   return <div className="space-y-4">
-    <Card className="p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between"><div><p className="font-black">Saran Pesanan Otomatis</p><p className="text-xs text-gray-500 mt-1">Saran = target 2× stok minimum dikurangi stok saat ini. Tetap periksa kebutuhan proyek dan lead time pemasok.</p></div><div className="flex gap-2"><Button variant="secondary" onClick={onPrint}><Printer size={17}/> Cetak</Button><Button onClick={onExport}><Download size={17}/> CSV</Button></div></Card>
-    {health.lowStock.length === 0 ? <EmptyState icon={CheckCircle2} title="Stok aman" description="Tidak ada produk yang berada di bawah stok minimum."/> : <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">{health.lowStock.map(row => <Card key={row.id} className={`p-4 ${row.stock <= 0 ? 'border-red-200' : 'border-orange-200'}`}><div className="flex gap-3"><div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${row.stock <= 0 ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700'}`}><PackageX/></div><div className="flex-1 min-w-0"><div className="flex gap-2 items-start"><p className="font-bold text-gray-900 flex-1">{row.name}</p><Badge tone={row.stock <= 0 ? 'red' : 'orange'}>{row.stock <= 0 ? 'Habis' : 'Menipis'}</Badge></div><p className="text-xs text-gray-500 mt-1">{row.sku || '-'} · Rak {row.rack || '-'} · Modal {formatRp(row.modalPrice)}</p><div className="grid grid-cols-3 gap-2 mt-3 text-center"><div className="rounded-xl bg-gray-50 p-2"><p className="text-[10px] text-gray-500">Stok</p><b>{row.stock} {row.baseUnit}</b></div><div className="rounded-xl bg-gray-50 p-2"><p className="text-[10px] text-gray-500">Minimum</p><b>{row.minStock}</b></div><div className="rounded-xl bg-emerald-50 p-2 text-emerald-800"><p className="text-[10px]">Saran pesan</p><b>{row.suggestedQty} {row.baseUnit}</b></div></div></div></div></Card>)}</div>}
+    <Card className="p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between"><div><p className="font-black">Smart Restock</p><p className="text-xs text-gray-500 mt-1">Menggabungkan stok minimum, kecepatan penjualan 30 hari, lead time + safety stock, PO yang sudah dipesan, Draft PO, dan histori harga pemasok.</p></div><div className="flex flex-wrap gap-2">{onCreatePo && <Button variant="secondary" onClick={onCreatePo} disabled={!assignedCount}><Plus size={17}/> Draft PO ({assignedCount})</Button>}<Button variant="secondary" onClick={onPrint}><Printer size={17}/> Cetak</Button><Button onClick={onExport}><Download size={17}/> CSV</Button></div></Card>{unassignedCount > 0 && <Card className="p-3 bg-amber-50 border-amber-200 text-sm text-amber-800"><b>{unassignedCount} produk</b> belum punya histori harga pemasok aktif, jadi belum dapat dimasukkan otomatis ke Draft PO. Produk tersebut tetap muncul pada daftar restock.</Card>}
+    {rows.length === 0 ? <EmptyState icon={CheckCircle2} title="Stok aman" description="Tidak ada produk yang membutuhkan restock berdasarkan stok dan kecepatan penjualan saat ini."/> : <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">{rows.map(row => <Card key={row.id} className={`p-4 ${row.stock <= 0 ? 'border-red-200' : 'border-orange-200'}`}><div className="flex gap-3"><div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${row.stock <= 0 ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700'}`}><PackageX/></div><div className="flex-1 min-w-0"><div className="flex gap-2 items-start"><p className="font-bold text-gray-900 flex-1">{row.name}</p><Badge tone={row.stock <= 0 ? 'red' : 'orange'}>{row.stock <= 0 ? 'Habis' : 'Perlu restock'}</Badge></div><p className="text-xs text-gray-500 mt-1">{row.sku || '-'} · Rak {row.rack || '-'} · terjual ±{row.dailyVelocity.toFixed(2)} {row.baseUnit}/hari</p><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-center"><div className="rounded-xl bg-gray-50 p-2"><p className="text-[10px] text-gray-500">Stok</p><b>{formatQuantitySafe(row.stock)} {row.baseUnit}</b></div><div className="rounded-xl bg-blue-50 p-2 text-blue-800"><p className="text-[10px]">Dipesan</p><b>{formatQuantitySafe(row.incoming)}</b>{Number(row.plannedDraft || 0) > 0 && <p className="text-[9px] mt-0.5">Draft {formatQuantitySafe(row.plannedDraft)}</p>}</div><div className="rounded-xl bg-gray-50 p-2"><p className="text-[10px] text-gray-500">Target</p><b>{formatQuantitySafe(row.targetStock)}</b></div><div className="rounded-xl bg-emerald-50 p-2 text-emerald-800"><p className="text-[10px]">Saran pesan</p><b>{formatQuantitySafe(row.suggestedQty)}</b></div></div>{row.coverageDays !== null && <p className="text-xs text-gray-500 mt-2">Perkiraan stok cukup {row.coverageDays.toFixed(1)} hari.</p>}{row.bestSupplier && <p className="text-xs font-bold text-emerald-700 mt-1">Harga terbaik terakhir: {row.bestSupplier.supplierName || 'Pemasok'} · {formatRp(row.bestSupplier.unitCost)} / {row.baseUnit}</p>}</div></div></Card>)}</div>}
   </div>;
 }
+
+
+function SuggestedPoModal({ plan, onClose, onConfirm }) {
+  const count = plan.groups.reduce((sum, group) => sum + group.items.length, 0);
+  return <Modal title="Buat Draft PO dari Smart Restock" size="lg" onClose={onClose} footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={onConfirm} disabled={!plan.groups.length}><Plus size={17}/> Buat {plan.groups.length} Draft PO</Button></>}>
+    <div className="space-y-3"><Card className="p-4 bg-emerald-50 border-emerald-200"><p className="font-black text-emerald-900">{count} barang · {plan.groups.length} pemasok</p><p className="text-xs text-emerald-700 mt-1">Sistem membuat status DRAFT agar jumlah, harga, dan tanggal kirim masih dapat diperiksa sebelum PO benar-benar dipesan.</p></Card>{plan.groups.map(group => <Card key={group.supplierId} className="p-4"><div className="flex justify-between gap-3"><div><p className="font-black">{group.supplierName}</p><p className="text-xs text-gray-500">{group.items.length} barang</p></div><b className="text-emerald-700">± {formatRp(group.estimatedTotal)}</b></div><div className="mt-3 space-y-1">{group.items.slice(0, 6).map(item => <div key={item.productId} className="flex justify-between gap-3 text-xs"><span className="truncate">{item.name}</span><b>{formatQuantitySafe(item.qty)} {item.unit}</b></div>)}{group.items.length > 6 && <p className="text-xs text-gray-500">+{group.items.length - 6} barang lainnya</p>}</div></Card>)}{plan.unassigned.length > 0 && <p className="text-xs text-amber-700">{plan.unassigned.length} barang tanpa pemasok tidak dibuatkan PO otomatis.</p>}</div>
+  </Modal>;
+}
+
+const formatQuantitySafe = value => Number(value || 0).toLocaleString('id-ID', { maximumFractionDigits: 3 });
 
 function Quality({ health }) {
   return <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

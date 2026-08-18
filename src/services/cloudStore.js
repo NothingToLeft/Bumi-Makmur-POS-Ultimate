@@ -49,13 +49,18 @@ const GLOBAL_COLLECTIONS = new Set(['printerProfiles', 'campaigns']);
 const OPTIONAL_SYNC_COLLECTIONS = new Set([
   'purchaseOrders',
   'productPriceHistory',
+  'supplierPriceHistory',
+  'quotations',
+  'serialNumbers',
+  'warrantyClaims',
   'approvalRequests',
   'deviceSessions'
 ]);
 const CASHIER_COLLECTIONS = new Set([
   'branches', 'products', 'promotions', 'customers', 'sales', 'heldSales',
   'stockMovements', 'receivables', 'refunds', 'shifts', 'cashMovements',
-  'onlineOrders', 'printerProfiles', 'campaigns', 'branchPaymentProfiles', 'approvalRequests'
+  'onlineOrders', 'printerProfiles', 'campaigns', 'branchPaymentProfiles', 'approvalRequests',
+  'quotations', 'serialNumbers', 'warrantyClaims'
 ]);
 const MANAGER_COLLECTIONS = new Set(CLOUD_ENTITY_COLLECTIONS);
 const clone = value => value == null

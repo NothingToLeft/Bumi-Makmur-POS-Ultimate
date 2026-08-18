@@ -1,5 +1,5 @@
 const requiredArrays = ['branches', 'users', 'products', 'sales', 'purchases', 'stockMovements'];
-const optionalArrays = ['customers', 'suppliers', 'refunds', 'stockTransfers', 'auditLogs', 'productPriceHistory'];
+const optionalArrays = ['customers', 'suppliers', 'refunds', 'stockTransfers', 'auditLogs', 'productPriceHistory', 'purchaseOrders', 'supplierPriceHistory', 'quotations', 'serialNumbers', 'warrantyClaims', 'approvalRequests', 'deviceSessions'];
 
 export function validateBackupPayload(payload) {
   const errors = [];

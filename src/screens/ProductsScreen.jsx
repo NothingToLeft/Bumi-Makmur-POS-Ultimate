@@ -28,6 +28,7 @@ import ProductPicker from '../components/ProductPicker.jsx';
 import InventoryImportModal from '../components/InventoryImportModal.jsx';
 import BulkBarcodeLabelsModal from '../components/BulkBarcodeLabelsModal.jsx';
 import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
+import { findProductByCode } from '../utils/barcode.js';
 
 const DEFAULT_MARKUPS = { retail: 30, wholesale: 20, project: 15 };
 const PRICE_TIERS = [
@@ -44,11 +45,12 @@ const TABS = [
 ];
 
 const blank = {
-  name: '', category: 'Listrik', sku: '', barcode: '', baseUnit: 'pcs', stock: 0,
+  name: '', brand: '', specifications: '', category: 'Listrik', sku: '', barcode: '', baseUnit: 'pcs', stock: 0,
   minStock: 5, rack: '-', modalPrice: 0,
   prices: { retail: 0, wholesale: 0, project: 0 }, markups: DEFAULT_MARKUPS,
   variants: [], conversions: [], bundleItems: [], favorite: false,
-  available: true, active: true, trackStock: true, allowFractional: false, quantityStep: 1
+  available: true, active: true, trackStock: true, allowFractional: false, quantityStep: 1,
+  serialTracking: false, warrantyMonths: 0
 };
 
 const createVariantRow = (parentName = '', variantName = '', products = [], source = {}) => {
@@ -80,8 +82,8 @@ const csvCell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
 
 export default function ProductsScreen() {
   const {
-    db, scoped, branch, hasPermission, saveProduct, archiveProduct, restoreProduct, deleteProduct, zeroProductStock, toggleProduct,
-    adjustStock, stockOpname, transferStock, saveCategory, deleteCategory, importInventoryRows
+    db, scoped, branch, currentUser, hasPermission, saveProduct, archiveProduct, restoreProduct, deleteProduct, zeroProductStock, toggleProduct,
+    adjustStock, stockOpname, transferStock, saveCategory, deleteCategory, importInventoryRows, authorizeManagerPin
   } = usePos();
   const [tab, setTab] = useState('catalog');
   const [search, setSearch] = useState('');
@@ -95,6 +97,7 @@ export default function ProductsScreen() {
   const [lifecycleProduct, setLifecycleProduct] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [bulkLabelsOpen, setBulkLabelsOpen] = useState(false);
+  const [sensitiveAction, setSensitiveAction] = useState(null);
 
   const canManageProducts = hasPermission('products.manage');
   const canManageStock = hasPermission('inventory.manage');
@@ -169,7 +172,7 @@ export default function ProductsScreen() {
     );
   };
 
-  const save = data => {
+  const persistProduct = data => {
     try {
       saveProduct(data);
       setEditing(null);
@@ -178,7 +181,31 @@ export default function ProductsScreen() {
     }
   };
 
+  const productPriceNeedsApproval = data => {
+    const belowCost = (modalPrice, prices = {}) => PRICE_TIERS.some(tier => Number(prices?.[tier.id] || 0) < Number(modalPrice || 0));
+    if (data.variantMode && Array.isArray(data.variantRows)) {
+      return data.variantRows.some(row => {
+        const existing = row.id ? scoped.products.find(product => product.id === row.id) : null;
+        const modalChanged = existing && Number(existing.modalPrice || 0) !== Number(row.modalPrice || 0);
+        return modalChanged || belowCost(row.modalPrice, row.prices);
+      });
+    }
+    const existing = data.id ? scoped.products.find(product => product.id === data.id) : null;
+    const modalChanged = existing && Number(existing.modalPrice || 0) !== Number(data.modalPrice || 0);
+    return modalChanged || belowCost(data.modalPrice, data.prices);
+  };
+
+  const save = data => {
+    if (productPriceNeedsApproval(data)) {
+      requireSensitivePin('Konfirmasi Harga Modal / Harga di Bawah Modal', 'PRODUCT_COST_OVERRIDE', () => persistProduct(data));
+      return;
+    }
+    persistProduct(data);
+  };
+
   const newProduct = () => setEditing({ ...blank, prices: { ...blank.prices }, markups: { ...DEFAULT_MARKUPS }, conversions: [], variants: [], bundleItems: [], variantMode: false, variantRows: [] });
+
+  const requireSensitivePin = (title, action, callback) => setSensitiveAction({ title, action, callback });
 
   return (
     <div className="h-full flex flex-col bg-gray-50 generic-bg">
@@ -250,8 +277,8 @@ export default function ProductsScreen() {
       {importOpen && canImportInventory && <InventoryImportModal products={scoped.products} categories={db.categories} branchId={branch?.id || db.configs.activeBranchId} onClose={() => setImportOpen(false)} onImport={(rows, options) => importInventoryRows(rows, options)}/>}
       {bulkLabelsOpen && <BulkBarcodeLabelsModal products={activeProducts} onClose={() => setBulkLabelsOpen(false)}/>}
       {editing && <ProductForm product={editing} categories={sortCategories(db.categories)} units={db.units} products={scoped.products} onAddCategory={canManageCategories ? (name => saveCategory({ name })) : null} onClose={() => setEditing(null)} onSave={save}/>} 
-      {adjusting && <AdjustModal product={adjusting} products={activeProducts} onClose={() => setAdjusting(null)} onSelect={setAdjusting} onSave={data => { try { adjustStock(data); setAdjusting(null); } catch (error) { alert(error.message); } }}/>} 
-      {opnameOpen && <OpnameModal products={activeProducts} onClose={() => setOpnameOpen(false)} onSave={data => { try { stockOpname(data); setOpnameOpen(false); } catch (error) { alert(error.message); } }}/>} 
+      {adjusting && <AdjustModal product={adjusting} products={activeProducts} onClose={() => setAdjusting(null)} onSelect={setAdjusting} onSave={data => requireSensitivePin('Konfirmasi Penyesuaian Stok', 'STOCK_ADJUST', () => { adjustStock(data); setAdjusting(null); })}/>} 
+      {opnameOpen && <OpnameModal products={activeProducts} onClose={() => setOpnameOpen(false)} onSave={data => requireSensitivePin('Konfirmasi Stok Opname', 'STOCK_OPNAME', () => { stockOpname(data); setOpnameOpen(false); })}/>} 
       {categoryOpen && canManageCategories && <CategoryManagerModal categories={sortCategories(db.categories)} products={db.products} onClose={() => setCategoryOpen(false)} onSave={saveCategory} onDelete={deleteCategory}/>}
       {lifecycleProduct && (canManageProducts || canManageStock || canDeleteProducts) && <ProductLifecycleModal
         product={lifecycleProduct}
@@ -262,10 +289,11 @@ export default function ProductsScreen() {
         onClose={() => setLifecycleProduct(null)}
         onArchive={ids => { ids.forEach(id => archiveProduct(id)); setLifecycleProduct(null); }}
         onRestore={ids => { ids.forEach(id => restoreProduct(id)); setLifecycleProduct(null); }}
-        onZeroStock={(ids, reason) => { zeroProductStock(ids, reason); setLifecycleProduct(null); }}
-        onDelete={ids => { deleteProduct(ids); setLifecycleProduct(null); }}
+        onZeroStock={(ids, reason) => requireSensitivePin('Kosongkan Stok Produk', 'STOCK_RESET', () => { zeroProductStock(ids, reason); setLifecycleProduct(null); })}
+        onDelete={ids => requireSensitivePin('Hapus Produk Permanen', 'PRODUCT_DELETE', () => { deleteProduct(ids); setLifecycleProduct(null); })}
       />}
       {transferOpen && <TransferModal products={activeProducts} branches={db.branches} activeBranchId={branch?.id || db.configs.activeBranchId} onClose={() => setTransferOpen(false)} onSave={data => { try { transferStock(data); setTransferOpen(false); } catch (error) { alert(error.message); } }}/>} 
+      {sensitiveAction && <SensitivePinModal title={sensitiveAction.title} userName={currentUser?.name} onClose={() => setSensitiveAction(null)} onConfirm={async pin => { try { const approval = await authorizeManagerPin(pin, sensitiveAction.action); if (!approval) throw new Error('PIN Owner/Manager tidak valid.'); sensitiveAction.callback(); setSensitiveAction(null); } catch (error) { alert(error.message); } }}/>}
     </div>
   );
 }
@@ -678,10 +706,6 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
     if (Number(form.modalPrice) < 0) return alert('Harga modal tidak valid.');
     if (!form.id && Number(form.stock || 0) < 0) return alert('Stok awal tidak boleh negatif.');
     if (products.some(item => item.id !== form.id && item.active !== false && String(item.barcode || '') && String(item.barcode || '') === String(form.barcode || ''))) return alert('Barcode ini sudah dipakai barang lain.');
-    if (PRICE_TIERS.some(tier => Number(form.prices[tier.id]) < Number(form.modalPrice))) {
-      const proceed = window.confirm('Ada harga jual di bawah harga modal. Tetap simpan?');
-      if (!proceed) return;
-    }
     const variants = variantText.split(',').map(value => value.trim()).filter(Boolean)
       .map((name, index) => {
         const previous = (form.variants || []).find(item => String(item.name || '').trim().toLowerCase() === name.toLowerCase());
@@ -737,6 +761,8 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {!form.id && <Card className="md:col-span-2 p-4 bg-blue-50 border-blue-100"><p className="font-black text-blue-900">Mudah untuk pengguna baru</p><p className="text-sm text-blue-700 mt-1">Isi identitas barang dan stok yang sudah ada sekarang. Barang langsung tersimpan sekaligus muncul di kasir dan laporan stok.</p></Card>}
         <Field label="Nama Barang" className="md:col-span-2"><Input value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} autoFocus/></Field>
+        <Field label="Merek"><Input value={form.brand || ''} onChange={event => setForm({ ...form, brand: event.target.value })} placeholder="Contoh: Philips, Supreme, Broco"/></Field>
+        <Field label="Spesifikasi Singkat" hint="Gunakan untuk watt, ampere, ukuran, warna cahaya, diameter, atau spesifikasi teknis lain."><Input value={form.specifications || ''} onChange={event => setForm({ ...form, specifications: event.target.value })} placeholder="Contoh: 10W · 6500K · E27"/></Field>
         <Card className="md:col-span-2 p-4 border-emerald-200 bg-emerald-50/60">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div className="flex gap-3"><Layers3 className="text-emerald-700 shrink-0"/><div><p className="font-black text-gray-900">Produk memiliki beberapa varian?</p><p className="text-xs text-gray-600 mt-1">Gunakan untuk Philips LED 6W, 10W, 12W, 15W. Setiap varian memiliki SKU, harga, stok, dan barcode internal sendiri; barcode kemasan boleh sama.</p></div></div><Button type="button" onClick={enableVariantMode} variant="secondary" className="shrink-0"><Layers3 size={17}/> Aktifkan Varian</Button></div>
         </Card>
@@ -753,7 +779,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
 
         <Card className="md:col-span-2 p-4 border-blue-200 bg-blue-50/50">
           <div className="flex items-start gap-3"><Ruler className="text-blue-700 shrink-0"/><div><p className="font-black text-gray-800">Penjualan Eceran / Pecahan</p><p className="text-xs text-gray-500 mt-1">Contoh kabel: satuan dasar meter, 1 roll = 50 meter, lalu kasir dapat menjual 2 atau 3,5 meter.</p></div></div>
-          <label className="mt-4 flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={form.allowFractional} onChange={event => toggleFractional(event.target.checked)}/><div><p className="font-bold text-sm">Boleh dijual eceran / potongan</p><p className="text-xs text-gray-500">Aktifkan untuk kabel per meter, pipa potongan, kilogram, liter, atau barang lain yang tidak selalu dijual utuh.</p></div></label>
+          <label className="mt-4 flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={form.allowFractional} disabled={form.serialTracking} onChange={event => toggleFractional(event.target.checked)}/><div><p className="font-bold text-sm">Boleh dijual eceran / potongan</p><p className="text-xs text-gray-500">Aktifkan untuk kabel per meter, pipa potongan, kilogram, liter, atau barang lain yang tidak selalu dijual utuh.</p></div></label>
           {form.allowFractional && <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label={`Kelipatan penjualan (${form.baseUnit})`} hint={form.baseUnit === 'meter' ? 'Untuk kabel, pilih 0,5 meter agar kasir hanya dapat menjual 0,5; 1; 1,5; 2; 2,5; dan seterusnya.' : 'Pilih kelipatan yang benar-benar digunakan toko. Nilai aneh seperti 0,499 tidak diperbolehkan.'}>
               <Select value={String(form.quantityStep)} onChange={event => setForm({ ...form, quantityStep: Number(event.target.value) })}>
@@ -796,6 +822,14 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
           {form.bundleItems.length > 0 && <div className="mt-2 space-y-2">{form.bundleItems.map((item, index) => { const component = products.find(row => row.id === item.productId); return <div key={`${item.productId}-${index}`} className="flex justify-between p-2 rounded-xl bg-gray-50"><span className="text-sm">{item.qty} × {component?.name || item.productId}</span><button type="button" onClick={() => setForm({ ...form, bundleItems: form.bundleItems.filter((_, itemIndex) => itemIndex !== index) })} className="text-red-600 font-bold">Hapus</button></div>; })}</div>}
         </div>
 
+        <Card className="md:col-span-2 p-4 border-violet-200 bg-violet-50/40">
+          <div className="flex items-start gap-3"><Barcode className="text-violet-700 shrink-0"/><div><p className="font-black text-gray-800">Serial Number & Garansi</p><p className="text-xs text-gray-500 mt-1">Aktifkan hanya untuk unit yang memang perlu dilacak satu per satu, seperti pompa, stabilizer, alat listrik, inverter, atau produk bergaransi.</p></div></div>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+            <label className="min-h-[48px] flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={Boolean(form.serialTracking)} onChange={event => setForm({ ...form, serialTracking: event.target.checked, allowFractional: event.target.checked ? false : form.allowFractional, quantityStep: event.target.checked ? 1 : form.quantityStep })}/><span className="font-bold text-sm">Lacak nomor serial per unit</span></label>
+            <Field label="Garansi Default (bulan)" hint="Akan otomatis dipakai saat serial didaftarkan."><Input type="number" min="0" max="120" step="1" disabled={!form.serialTracking} value={form.warrantyMonths || ''} onChange={event => setForm({ ...form, warrantyMonths: Math.max(0, Number(event.target.value || 0)) })} placeholder="12"/></Field>
+          </div>
+        </Card>
+
         <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
           <label className="flex gap-2 items-center"><input type="checkbox" checked={form.favorite} onChange={event => setForm({ ...form, favorite: event.target.checked })}/> Favorit</label>
           <label className="flex gap-2 items-center"><input type="checkbox" checked={form.available} onChange={event => setForm({ ...form, available: event.target.checked })}/> Tersedia di kasir</label>
@@ -827,6 +861,7 @@ function VariantGroupFormModal({
   const [lifecycleProduct, setLifecycleProduct] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [bulkLabelsOpen, setBulkLabelsOpen] = useState(false);
+  const [sensitiveAction, setSensitiveAction] = useState(null);
   const [categoryName, setCategoryName] = useState('');
   const addCategory = () => {
     try {
@@ -855,12 +890,21 @@ function VariantGroupFormModal({
       <Card className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <Field label="Nama Produk Induk" className="md:col-span-2"><Input value={form.name} onChange={event => setForm(previous => ({ ...previous, name: event.target.value }))} placeholder="Contoh: Philips LED" autoFocus/></Field>
+          <Field label="Merek"><Input value={form.brand || ''} onChange={event => setForm(previous => ({ ...previous, brand: event.target.value }))} placeholder="Philips, Supreme, Broco"/></Field>
+          <Field label="Spesifikasi Induk"><Input value={form.specifications || ''} onChange={event => setForm(previous => ({ ...previous, specifications: event.target.value }))} placeholder="Contoh: LED E27 · 6500K"/></Field>
           <Field label="Kategori"><div className="flex gap-2"><Select value={form.category} onChange={event => setForm(previous => ({ ...previous, category: event.target.value }))}>{sortCategories(categories).map(category => <option key={category}>{category}</option>)}</Select>{onAddCategory&&<Button type="button" variant="secondary" className="shrink-0" onClick={()=>setCategoryOpen(true)}><FolderPlus size={17}/> Baru</Button>}</div></Field>
           <Field label="Satuan Dasar"><Select value={form.baseUnit} onChange={event => changeBaseUnit(event.target.value)}>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</Select></Field>
           <Field label="Barcode Kemasan Bersama" hint="Barcode pabrik yang sama pada semua watt/ukuran. Boleh kosong bila setiap varian memiliki barcode berbeda." className="md:col-span-2">
             <div className="flex gap-2"><Input value={form.sharedBarcode || ''} onChange={event => setForm(previous => ({ ...previous, sharedBarcode: event.target.value.trim() }))} placeholder="Scan barcode kemasan Philips"/><Button type="button" variant="secondary" onClick={scanSharedBarcode}><ScanLine size={17}/> Scan</Button></div>
           </Field>
           <Field label="Kelompok Varian" hint="ID internal otomatis; tidak perlu diubah." className="md:col-span-2"><Input value={form.variantGroupId || ''} disabled placeholder="Dibuat otomatis saat disimpan"/></Field>
+        </div>
+      </Card>
+
+      <Card className="p-4 border-violet-200 bg-violet-50/40">
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-end">
+          <label className="min-h-[48px] flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={Boolean(form.serialTracking)} onChange={event => setForm(previous => ({ ...previous, serialTracking: event.target.checked, allowFractional: event.target.checked ? false : previous.allowFractional, quantityStep: event.target.checked ? 1 : previous.quantityStep }))}/><div><p className="font-bold text-sm">Lacak serial untuk semua varian</p><p className="text-xs text-gray-500">Serial tetap unik per unit/SKU.</p></div></label>
+          <Field label="Garansi Default (bulan)"><Input type="number" min="0" max="120" step="1" disabled={!form.serialTracking} value={form.warrantyMonths || ''} onChange={event => setForm(previous => ({ ...previous, warrantyMonths: Math.max(0, Number(event.target.value || 0)) }))}/></Field>
         </div>
       </Card>
 
@@ -899,7 +943,7 @@ function VariantGroupFormModal({
 
       <Card className="p-4 border-blue-200 bg-blue-50/50">
         <div className="flex items-start gap-3"><Ruler className="text-blue-700 shrink-0"/><div><p className="font-black text-gray-800">Satuan, Eceran, dan Kemasan Berlaku untuk Semua Varian</p><p className="text-xs text-gray-500 mt-1">Contoh varian kabel ukuran berbeda dapat tetap memakai meter dan kelipatan 0,5 meter. Untuk lampu, gunakan pcs.</p></div></div>
-        <label className="mt-4 flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={form.allowFractional} onChange={event => toggleFractional(event.target.checked)}/><div><p className="font-bold text-sm">Boleh dijual eceran / pecahan</p><p className="text-xs text-gray-500">Aktifkan hanya bila seluruh varian memang dapat dijual pecahan.</p></div></label>
+        <label className="mt-4 flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={form.allowFractional} disabled={form.serialTracking} onChange={event => toggleFractional(event.target.checked)}/><div><p className="font-bold text-sm">Boleh dijual eceran / pecahan</p><p className="text-xs text-gray-500">Aktifkan hanya bila seluruh varian memang dapat dijual pecahan.</p></div></label>
         {form.allowFractional && <Field label={`Kelipatan Penjualan (${form.baseUnit})`} className="mt-3"><Select value={String(form.quantityStep)} onChange={event => setForm(previous => ({ ...previous, quantityStep: Number(event.target.value) }))}>{QUANTITY_STEP_PRESETS.map(step => <option key={step} value={step}>{quantityStepLabel(step, form.baseUnit)} ({formatQuantity(step)} {form.baseUnit})</option>)}</Select></Field>}
         <div className="mt-3"><PackagingUnitsEditor baseUnit={form.baseUnit} basePrices={variantRows[0]?.prices || { retail: 0, wholesale: 0, project: 0 }} rows={conversionRows} onChange={setConversionRows} onPreset={applyConversionPreset} sharedAcrossVariants/></div>
       </Card>
@@ -952,25 +996,68 @@ function OpnameModal({ products, onClose, onSave }) {
     productId: product.id,
     name: product.name,
     unit: product.baseUnit,
+    barcode: product.barcode || product.sku || '',
     step: normalizeQuantityStep(product.quantityStep, product.allowFractional === true, recommendedQuantityStep(product.baseUnit, product.category)),
     system: Number(product.stock || 0),
-    actual: Number(product.stock || 0)
+    actual: Number(product.stock || 0),
+    reason: ''
   })));
   const [notes, setNotes] = useState('Stok opname berkala');
-  const normalizeCount = (index, value) => setCounts(previous => previous.map((row, itemIndex) => itemIndex === index
+  const [search, setSearch] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [onlyDifferences, setOnlyDifferences] = useState(false);
+  const [scanNotice, setScanNotice] = useState('');
+  const reasons = ['Salah hitung sebelumnya', 'Barang rusak', 'Barang hilang', 'Dipakai internal', 'Bonus pemasok', 'Salah input transaksi', 'Koreksi stok fisik', 'Lainnya'];
+  const normalizeCount = (productId, value) => setCounts(previous => previous.map(row => row.productId === productId
     ? { ...row, actual: normalizeQuantity(value, { allowFractional: row.step < 1, step: row.step, min: 0 }) }
     : row));
-  return <Modal title="Stok Opname" onClose={onClose} size="xl" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave({ counts, notes })}>Selesaikan Opname</Button></>}>
-    <Field label="Catatan"><Input value={notes} onChange={event => setNotes(event.target.value)}/></Field>
-    <div className="mt-4 space-y-2 max-h-[58vh] overflow-y-auto">{counts.map((item, index) => {
-      const difference = Number(item.actual || 0) - Number(item.system || 0);
-      return <Card key={item.productId} className="p-3 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_140px_100px] gap-2 items-center">
-        <div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Sistem: {formatQuantity(item.system)} {item.unit} · {quantityStepLabel(item.step, item.unit)}</p></div>
-        <Input type="number" inputMode="decimal" min="0" step={item.step} value={item.actual} onChange={event => setCounts(previous => previous.map((row, itemIndex) => itemIndex === index ? { ...row, actual: event.target.value } : row))} onBlur={event => normalizeCount(index, event.target.value)}/>
-        <p className={`sm:text-right font-bold ${difference === 0 ? 'text-gray-500' : difference > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{difference > 0 ? '+' : ''}{formatQuantity(difference)}</p>
-      </Card>;
-    })}</div>
+  const visible = counts.filter(row => {
+    const term = search.trim().toLowerCase();
+    const difference = Number(row.actual || 0) - Number(row.system || 0);
+    return (!onlyDifferences || Math.abs(difference) > 0.000001) && (!term || `${row.name} ${row.barcode}`.toLowerCase().includes(term));
+  });
+  const changed = counts.filter(row => Math.abs(Number(row.actual || 0) - Number(row.system || 0)) > 0.000001);
+  const handleScan = code => {
+    const result = findProductByCode(products, code);
+    if (!result || result.ambiguous || !result.product) return `Barcode/SKU "${String(code || '').trim()}" tidak ditemukan atau ambigu.`;
+    const target = counts.find(row => row.productId === result.product.id);
+    if (!target) return 'Barang hasil scan tidak tersedia di daftar opname.';
+    setSearch(target.name);
+    setScanNotice(`${target.name} ditemukan. Masukkan jumlah fisik yang Anda hitung.`);
+    return { ok: true, close: true, message: `${target.name} dipilih.` };
+  };
+  const submit = () => {
+    const missingReason = changed.find(row => !String(row.reason || '').trim());
+    if (missingReason) return alert(`Pilih alasan selisih untuk ${missingReason.name}.`);
+    onSave({ counts, notes });
+  };
+  return <Modal title="Stok Opname Scanner" onClose={onClose} size="xl" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit}>Selesaikan Opname ({changed.length} selisih)</Button></>}>
+    <div className="space-y-3">
+      <Card className="p-4 bg-blue-50 border-blue-100"><p className="font-black text-blue-900 flex items-center gap-2"><ScanLine size={18}/> Opname scanner-first</p><p className="text-xs text-blue-700 mt-1">Scan barang saat berkeliling toko, lalu masukkan stok fisik. Selisih tidak bisa disimpan tanpa alasan agar audit stok tetap jelas.</p></Card>
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-2"><SearchBox value={search} onChange={setSearch} placeholder="Cari nama, SKU, barcode..."/><Button variant="secondary" onClick={() => setScannerOpen(true)}><ScanLine size={18}/> Scan Barang</Button></div>
+      {scanNotice && <p className="text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl p-3">{scanNotice}</p>}
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end"><Field label="Catatan Opname"><Input value={notes} onChange={event => setNotes(event.target.value)}/></Field><label className="min-h-[48px] px-3 rounded-xl bg-gray-50 border flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={onlyDifferences} onChange={e => setOnlyDifferences(e.target.checked)}/> Hanya yang selisih</label></div>
+      <div className="space-y-2 max-h-[55vh] overflow-y-auto custom-scrollbar pr-1">{visible.map(item => {
+        const difference = Number(item.actual || 0) - Number(item.system || 0);
+        return <Card key={item.productId} className={`p-3 ${Math.abs(difference) > 0.000001 ? 'border-orange-200 bg-orange-50/30' : ''}`}>
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_140px_110px_220px] gap-2 items-center">
+            <div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Sistem {formatQuantity(item.system)} {item.unit} · {quantityStepLabel(item.step, item.unit)}</p></div>
+            <Input type="number" inputMode="decimal" min="0" step={item.step} value={item.actual} onChange={event => setCounts(previous => previous.map(row => row.productId === item.productId ? { ...row, actual: event.target.value } : row))} onBlur={event => normalizeCount(item.productId, event.target.value)}/>
+            <p className={`lg:text-right font-black ${difference === 0 ? 'text-gray-500' : difference > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{difference > 0 ? '+' : ''}{formatQuantity(difference)}</p>
+            {Math.abs(difference) > 0.000001 ? <Select value={item.reason} onChange={event => setCounts(previous => previous.map(row => row.productId === item.productId ? { ...row, reason: event.target.value } : row))}><option value="">Pilih alasan selisih...</option>{reasons.map(reason => <option key={reason}>{reason}</option>)}</Select> : <span className="text-xs text-gray-400">Stok sesuai</span>}
+          </div>
+        </Card>;
+      })}{!visible.length && <EmptyState icon={ClipboardCheck} title="Tidak ada barang pada filter ini"/>}</div>
+    </div>
+    {scannerOpen && <BarcodeScannerModal title="Scan Barang untuk Opname" onClose={() => setScannerOpen(false)} onDetected={handleScan} helperText="Scan barcode/SKU. Setelah barang ditemukan, masukkan jumlah fisik yang benar."/>}
   </Modal>;
+}
+
+function SensitivePinModal({ title, userName, onClose, onConfirm }) {
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => { if (pin.length !== 4 || busy) return; setBusy(true); try { await onConfirm(pin); } finally { setBusy(false); } };
+  return <Modal title={title} onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit} disabled={pin.length !== 4 || busy}>{busy ? 'Memeriksa...' : 'Konfirmasi'}</Button></>}><Card className="p-4 bg-amber-50 border-amber-200"><p className="font-black text-amber-900">Tindakan sensitif</p><p className="text-xs text-amber-700 mt-1">Masukkan PIN 4 digit Owner/Store Manager sebelum perubahan stok permanen dilakukan. Aktivitas tetap dicatat pada audit log.</p></Card><Field label={`PIN persetujuan${userName ? ` · ${userName}` : ''}`} className="mt-4"><Input type="password" inputMode="numeric" maxLength="4" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} onKeyDown={e => { if (e.key === 'Enter') void submit(); }} autoFocus/></Field></Modal>;
 }
 
 function TransferModal({ products, branches, activeBranchId, onClose, onSave }) {

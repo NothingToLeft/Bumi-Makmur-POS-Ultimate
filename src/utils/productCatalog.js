@@ -30,6 +30,8 @@ export function productSearchText(product = {}) {
     product.parentName,
     product.variantName,
     product.category,
+    product.brand,
+    product.specifications,
     product.sku,
     product.barcode,
     product.sharedBarcode,

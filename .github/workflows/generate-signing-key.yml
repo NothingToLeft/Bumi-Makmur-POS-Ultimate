@@ -68,4 +68,4 @@ jobs:
           name: Bumi-Makmur-POS-signing-key-KEEP-SAFE
           path: signing-key-keep-safe
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7

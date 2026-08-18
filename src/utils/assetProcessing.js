@@ -135,7 +135,72 @@ function canvasToBlob(canvas, mimeType, quality) {
 }
 
 function fullBounds(width, height) {
-  return { x: 0, y: 0, width, height, cropped: false };
+  return { x: 0, y: 0, width, height, cropped: false, cropStrategy: 'full-image' };
+}
+
+function normalizeQrBounds(rect, sourceWidth, sourceHeight, strategy = 'qr-detector') {
+  if (!rect || !sourceWidth || !sourceHeight) return null;
+  const rawWidth = Math.max(0, Number(rect.width || 0));
+  const rawHeight = Math.max(0, Number(rect.height || 0));
+  if (rawWidth < 32 || rawHeight < 32) return null;
+  const ratio = rawWidth / Math.max(1, rawHeight);
+  if (ratio < 0.72 || ratio > 1.38) return null;
+  const centerX = Number(rect.x || 0) + (rawWidth / 2);
+  const centerY = Number(rect.y || 0) + (rawHeight / 2);
+  const square = Math.max(rawWidth, rawHeight);
+  const left = Math.max(0, Math.floor(centerX - (square / 2)));
+  const top = Math.max(0, Math.floor(centerY - (square / 2)));
+  const right = Math.min(sourceWidth, Math.ceil(centerX + (square / 2)));
+  const bottom = Math.min(sourceHeight, Math.ceil(centerY + (square / 2)));
+  const width = Math.max(1, right - left);
+  const height = Math.max(1, bottom - top);
+  if (Math.min(width, height) < 160) return null;
+  return { x: left, y: top, width, height, cropped: true, cropStrategy: strategy };
+}
+
+async function detectQrBounds(image, profile) {
+  const sourceWidth = Number(image.naturalWidth || image.width || 0);
+  const sourceHeight = Number(image.naturalHeight || image.height || 0);
+  if (!sourceWidth || !sourceHeight) return fullBounds(sourceWidth, sourceHeight);
+
+  // Chromium/Android can expose BarcodeDetector. Its boundingBox is the most
+  // accurate way to retain only the QR symbol while the output renderer adds
+  // a fresh white quiet-zone around it.
+  try {
+    if (typeof globalThis.BarcodeDetector === 'function') {
+      const detector = new globalThis.BarcodeDetector({ formats: ['qr_code'] });
+      const detections = await detector.detect(image);
+      const candidate = detections?.find(row => row?.boundingBox);
+      const bounds = normalizeQrBounds(candidate?.boundingBox, sourceWidth, sourceHeight, 'barcode-detector');
+      if (bounds) return bounds;
+    }
+  } catch {}
+
+  // Fallback to the bundled ZXing QR reader. Result points are finder-pattern
+  // centres, so expand their square before adding the final quiet-zone.
+  try {
+    const { BrowserQRCodeReader } = await import('@zxing/browser');
+    const reader = new BrowserQRCodeReader();
+    const result = await reader.decodeFromImageElement(image);
+    const points = result?.getResultPoints?.() || result?.resultPoints || [];
+    if (points.length >= 3) {
+      const xs = points.map(point => Number(point?.getX?.() ?? point?.x)).filter(Number.isFinite);
+      const ys = points.map(point => Number(point?.getY?.() ?? point?.y)).filter(Number.isFinite);
+      if (xs.length >= 3 && ys.length >= 3) {
+        const minX = Math.min(...xs); const maxX = Math.max(...xs);
+        const minY = Math.min(...ys); const maxY = Math.max(...ys);
+        const pointSpan = Math.max(maxX - minX, maxY - minY);
+        const expandedSize = pointSpan * 1.28;
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        const bounds = normalizeQrBounds({ x: centerX - expandedSize / 2, y: centerY - expandedSize / 2, width: expandedSize, height: expandedSize }, sourceWidth, sourceHeight, 'zxing-qr-points');
+        if (bounds) return bounds;
+      }
+    }
+  } catch {}
+
+  const fallback = detectContentBounds(image, profile);
+  return { ...fallback, cropStrategy: fallback.cropped ? 'content-fallback' : 'full-image-fallback' };
 }
 
 function detectContentBounds(image, profile) {
@@ -200,7 +265,8 @@ function detectContentBounds(image, profile) {
     y: Math.max(0, Math.floor(top / scale)),
     width: Math.min(sourceWidth, Math.ceil((right - left + 1) / scale)),
     height: Math.min(sourceHeight, Math.ceil((bottom - top + 1) / scale)),
-    cropped: true
+    cropped: true,
+    cropStrategy: 'content-bounds'
   };
   mapped.width = Math.min(mapped.width, sourceWidth - mapped.x);
   mapped.height = Math.min(mapped.height, sourceHeight - mapped.y);
@@ -271,6 +337,7 @@ async function finalizeCandidate(candidate, file, kind, image, bounds, profile, 
       optimizedAt: new Date().toISOString(),
       pipeline: candidate.mode === 'monochrome' ? 'high-contrast-fallback' : 'adaptive-color',
       cropped: Boolean(bounds?.cropped),
+      cropStrategy: String(bounds?.cropStrategy || (bounds?.cropped ? 'content-bounds' : 'full-image')),
       quietZone: candidate.quietZone || 0,
       nearLimit: Boolean(nearLimit),
       targetBytes: profile.targetBytes
@@ -288,7 +355,7 @@ export async function processStoreAsset(file, kind = 'logo') {
     throw new Error(`Resolusi QRIS terlalu kecil. Gunakan gambar minimal ${profile.minimumSide} × ${profile.minimumSide} piksel agar tetap mudah dipindai.`);
   }
 
-  const bounds = detectContentBounds(image, profile);
+  const bounds = kind === 'qris' ? await detectQrBounds(image, profile) : detectContentBounds(image, profile);
   const plan = buildCompressionPlan(kind, bounds.width, bounds.height);
   let smallest = null;
   for (const attempt of plan) {
