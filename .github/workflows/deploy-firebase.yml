@@ -39,6 +39,16 @@ jobs:
           npm run test:core
           npm run audit:static
 
+      - name: Verify Firestore ruleset version
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'BUMI_MAKMUR_RULESET_VERSION=6.0.3' firestore.rules || {
+            echo "::error::firestore.rules bukan ruleset v6.0.3 yang diharapkan."
+            exit 1
+          }
+          echo "Firestore Rules v6.0.3 tervalidasi sebelum deploy."
+
       - name: Authenticate Google Cloud
         uses: google-github-actions/auth@v3
         with:

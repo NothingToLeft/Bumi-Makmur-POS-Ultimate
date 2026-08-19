@@ -31,7 +31,7 @@ test('koleksi tambahan tidak mematikan sinkronisasi inti dan diagnostik membawa 
   assert.match(context, /collection: context\.collectionName/);
 });
 
-test('status tersinkron mengalahkan error lama dan diagnostik identik digabung', () => {
+test('error cloud aktif mengalahkan status semu tersinkron dan diagnostik identik digabung', () => {
   const status = buildSyncStatus({
     online: true,
     cloudReady: true,
@@ -39,7 +39,8 @@ test('status tersinkron mengalahkan error lama dan diagnostik identik digabung',
     pendingCount: 0,
     lastSuccessAt: '2026-07-29T03:55:15.528Z'
   });
-  assert.equal(status.code, 'synced');
+  assert.equal(status.code, 'degraded');
+  assert.equal(status.healthy, false);
 
   const entry = {
     id: 'A', at: '2026-07-29T00:00:00.000Z', category: 'permission',

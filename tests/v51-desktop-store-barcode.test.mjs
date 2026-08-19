@@ -9,7 +9,7 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   const main = await read('electron/main.cjs');
   const preload = await read('electron/preload.cjs');
   const workflow = await read('.github/workflows/build-windows.yml');
-  assert.equal(pkg.version, '6.0.2');
+  assert.equal(pkg.version, '6.0.3');
   assert.equal(pkg.main, 'electron/main.cjs');
   assert.ok(pkg.devDependencies.electron);
   assert.ok(pkg.devDependencies['electron-builder']);
@@ -66,13 +66,15 @@ test('input produk baru mendukung Smart Scanner kamera dan scanner USB Bluetooth
 
 test('kasir desktop memiliki shortcut dan layar pelanggan kedua', async () => {
   const pos = await read('src/screens/POSScreen.jsx');
-  const context = await read('src/store/PosContext.jsx');
+  const bridge = await read('src/services/customerDisplayBridge.js');
   const settings = await read('src/screens/DeviceSettingsScreens.jsx');
   assert.match(pos, /event\.key === 'F2'/);
   assert.match(pos, /event\.key === 'F4'/);
   assert.match(pos, /event\.key === 'F8'/);
   assert.match(pos, /event\.key === 'F9'/);
-  assert.match(context, /BroadcastChannel/);
+  assert.match(bridge, /BroadcastChannel/);
+  assert.match(bridge, /publishCustomerDisplay/);
+  assert.match(bridge, /popup-blocked/);
   assert.match(settings, /Buka Layar 2/);
 });
 

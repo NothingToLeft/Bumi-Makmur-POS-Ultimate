@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v6.0.2
+# Bumi Makmur POS FreeSync v6.0.3
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.0.2 mempertahankan major release v6.0.0 untuk operasional toko listrik/material dengan **AI Product Capture**, **Smart Receiving**, dan **Tutup Harian PDF → WhatsApp**, di atas Business Suite v5.8.x. Seluruh Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Smart Barcode Scanner, dan FreeSync tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.0.3 mempertahankan major release v6.0.0 untuk operasional toko listrik/material dengan **AI Product Capture**, **Smart Receiving**, dan **Tutup Harian PDF → WhatsApp**, di atas Business Suite v5.8.x. Seluruh Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Smart Barcode Scanner, dan FreeSync tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -10,6 +10,19 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.0
 - **Cloud:** Firebase Authentication + Firestore pada Spark/free tier.
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
+
+
+## Cloud & Customer Display Stability v6.0.3
+
+- Memperbaiki **false healthy state**: `permission-denied` sekarang tidak lagi tertutup oleh status antrean/sinkronisasi. Jika rules cloud belum cocok, status tampil `PERLU CEK` sampai benar-benar pulih.
+- Diagnostik `permission-denied` memberi arahan spesifik untuk menjalankan **Actions → Deploy Firebase Spark Rules**. Antrean lokal tidak dibuang dan akan dikirim setelah rules aktif.
+- Firestore ruleset diberi marker `BUMI_MAKMUR_RULESET_VERSION=6.0.3` dan mencakup `shifts`, `supplierPriceHistory`, `quotations`, `serialNumbers`, `warrantyClaims`, serta koleksi Business Suite lainnya.
+- Layar Pelanggan memakai bridge berlapis: **localStorage + BroadcastChannel + polling fallback + Electron IPC**, sehingga Web/Windows tidak bergantung pada satu mekanisme komunikasi saja.
+- Antrean offline sekarang **user-scoped**: mutasi Karyawan tidak pernah dikirim ulang memakai sesi Auth Owner (atau sebaliknya). Antrean akun lain tetap aman dan otomatis dilanjutkan saat akun pembuat login kembali.
+- Timestamp “sinkron terakhir berhasil” hanya diperbarui jika queue akun aktif kosong dan tidak ada permission/rules issue aktif.
+- Browser popup yang diblokir sekarang terdeteksi dan menampilkan instruksi, bukan pesan sukses palsu.
+- Customer Display Desktop diperbarui dengan identitas merah-hitam Bumi Makmur 2, status koneksi/stale, total besar, item yang wrap aman, dan layout responsif.
+- Seluruh fitur v6.0.2 Professional Receipt, AI Product Capture, Smart Receiving, Daily Closing PDF/WhatsApp, serta Business Suite tetap dipertahankan.
 
 ## Professional Receipt & Cash Change Safety v6.0.2
 
@@ -220,13 +233,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v6.0.2.
+2. Ekstrak ZIP v6.0.3.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v6.0.2 Brand Identity Refresh
+Bumi Makmur POS v6.0.3 Cloud and Customer Display Stability
 ```
 
 6. Klik **Push origin**.
@@ -237,7 +250,7 @@ Bumi Makmur POS v6.0.2 Brand Identity Refresh
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.0.2
+→ Build Bumi Makmur POS v6.0.3
 → test-only
 ```
 
@@ -245,13 +258,13 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Firestore Rules
 
-Jika rules Business Suite v5.8.x sudah aktif, v6.0.0 **tidak memerlukan koleksi cloud baru** untuk AI key atau PDF. Field closing summary ikut dokumen shift yang sudah ada. Deploy ulang Rules hanya diperlukan bila repository produksi masih memakai rules sebelum v5.8. Tetap Firebase Spark, tanpa Blaze.
+**Wajib untuk release v6.0.3:** jalankan `Actions → Deploy Firebase Spark Rules` sampai hijau. Workflow memverifikasi marker `BUMI_MAKMUR_RULESET_VERSION=6.0.3` sebelum deploy. Ini tetap hanya Firestore Rules + Indexes pada Firebase Spark, tanpa Functions, Storage, atau Blaze.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.0.2
+→ Build Bumi Makmur POS v6.0.3
 → android-release
 ```
 
@@ -261,11 +274,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v6.0.2
+→ Build Bumi Makmur POS Desktop v6.0.3
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.0.2**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.0.3**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -282,24 +295,25 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.0.2
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v6.0.2
+## Release acceptance v6.0.3
 
 Full-pass source audit final pada 19 Agustus 2026 menghasilkan:
 
-- **174/174 automated core/regression tests PASS**.
+- **196/196 automated core/regression tests PASS**.
 - Static project audit **PASS**.
-- Parser JS/JSX seluruh `src` **PASS**.
 - Electron/Android helper Node syntax **PASS**.
 - GitHub Actions YAML dan JSON konfigurasi **PASS**.
 - Firebase Spark-only guard **PASS**.
 
 Acceptance flow produksi yang disarankan setelah push:
 
-1. Backup JSON dan pastikan Antrean Offline = 0.
-2. Deploy Firestore Rules v5.8 sekali.
-3. Jalankan Android workflow `test-only` sampai hijau.
-4. Jalankan `android-release`; APK/AAB dipublikasikan ke GitHub Releases.
-5. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
-6. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
+1. Backup JSON. **Jangan hapus antrean offline yang masih ada.**
+2. Jalankan **Deploy Firebase Spark Rules** dan pastikan ruleset v6.0.3 berhasil dipublikasikan.
+3. Login dengan akun yang membuat mutation tertunda dan tekan **Sinkronkan Sekarang** sampai antrean akun tersebut 0.
+4. Jalankan Android workflow `test-only` sampai hijau.
+5. Deploy Web, lalu uji Owner ↔ Karyawan dan `Layar Pelanggan → Buka Layar 2`.
+6. Jalankan `android-release`; APK/AAB dipublikasikan ke GitHub Releases.
+7. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
+8. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v6.0.2.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.
+Lihat `QA-REPORT-Bumi-Makmur-POS-v6.0.3.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.

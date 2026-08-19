@@ -1,5 +1,15 @@
 # Changelog
 
+## v6.0.3 — Cloud & Customer Display Stability
+
+- Memperbaiki queue offline lintas akun: mutation Karyawan tidak lagi dicoba memakai Auth Owner dan sebaliknya; queue akun lain tetap aman sampai pemiliknya login kembali.
+- Memperbaiki status cloud hijau palsu saat Firestore mengembalikan `permission-denied`; timestamp sinkron sukses hanya diperbarui untuk queue akun aktif yang benar-benar bersih.
+- Menambahkan marker Firestore Rules v6.0.3 dan gate workflow Spark-only untuk memastikan rules terbaru dipublikasikan sebelum release.
+- Memperkuat Customer Display dengan localStorage, BroadcastChannel, polling fallback, dan IPC Electron, termasuk deteksi popup blocker.
+- Snapshot Customer Display sekarang langsung mengikuti pergantian akun/cabang aktif; nama brand dan nama cabang tidak tertukar.
+- Menyamakan preview Customer Display dengan identitas resmi Bumi Makmur 2 merah-hitam.
+- Seluruh data dan queue v6.0.2 tetap kompatibel tanpa migrasi destruktif.
+
 ## v6.0.2 — Professional Receipt & Cash Change Safety
 
 - Memperbaiki bug kembalian tunai dan memastikan total Rp39.000 dibayar Rp50.000 menampilkan KEMBALIAN Rp11.000 pada seluruh kanal nota.

@@ -16,6 +16,6 @@ if not exist node_modules (
     exit /b 1
   )
 )
-echo Menjalankan Bumi Makmur POS Desktop v6.0.2 dalam mode pengembangan...
+echo Menjalankan Bumi Makmur POS Desktop v6.0.3 dalam mode pengembangan...
 call npm run desktop:dev
 endlocal

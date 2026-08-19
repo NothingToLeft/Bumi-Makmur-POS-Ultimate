@@ -374,12 +374,38 @@ export async function clearOfflineIdentity(storeCode) {
   ]);
 }
 
-export function getOfflineQueueStats(storeCode) {
+export function pendingMutationBelongsToUser(mutation, userId = '') {
+  const ownerId = String(mutation?.userId || '').trim();
+  const activeUserId = String(userId || '').trim();
+  // Queue lama sebelum ownership metadata dianggap legacy dan boleh dicoba oleh
+  // sesi aktif. Queue baru selalu membawa userId sehingga tidak dapat tertukar.
+  return !ownerId || !activeUserId || ownerId === activeUserId;
+}
+
+export function getOfflineQueueOwnershipStats(storeCode, userId = '') {
   const rows = readPendingMutations(storeCode);
+  const activeUserRows = userId ? rows.filter(item => pendingMutationBelongsToUser(item, userId)) : rows;
+  const otherUserRows = userId ? rows.filter(item => !pendingMutationBelongsToUser(item, userId)) : [];
+  const operationCount = list => list.reduce((sum, item) => sum + (Array.isArray(item?.operations) ? item.operations.length : 0), 0);
   return {
-    count: rows.length,
+    totalCount: rows.length,
+    currentUserCount: activeUserRows.length,
+    otherUserCount: otherUserRows.length,
+    totalOperations: operationCount(rows),
+    currentUserOperations: operationCount(activeUserRows),
+    otherUserOperations: operationCount(otherUserRows),
+    otherUserIds: [...new Set(otherUserRows.map(item => String(item?.userId || '').trim()).filter(Boolean))],
     oldestAt: rows[0]?.createdAt || null,
     newestAt: rows.at(-1)?.createdAt || null
+  };
+}
+
+export function getOfflineQueueStats(storeCode) {
+  const ownership = getOfflineQueueOwnershipStats(storeCode);
+  return {
+    count: ownership.totalCount,
+    oldestAt: ownership.oldestAt,
+    newestAt: ownership.newestAt
   };
 }
 

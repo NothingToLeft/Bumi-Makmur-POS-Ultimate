@@ -1,3 +1,4 @@
+// BUMI_MAKMUR_RULESET_VERSION=6.0.3
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {

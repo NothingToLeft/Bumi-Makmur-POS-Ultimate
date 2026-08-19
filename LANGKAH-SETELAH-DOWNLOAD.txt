@@ -1,16 +1,19 @@
-BUMI MAKMUR POS v6.0.2 — AI PRODUCT CAPTURE & DAILY AUTOMATION
+BUMI MAKMUR POS v6.0.3 — CLOUD & CUSTOMER DISPLAY STABILITY
 
-1. Backup JSON dari aplikasi dan pastikan Antrean Offline = 0.
-2. Ekstrak ZIP v6.0.2 dan copy SELURUH ISINYA ke root repository Bumi-Makmur-POS-Ultimate (Replace files).
-3. Commit: Bumi Makmur POS v6.0.2 AI Product Capture and Daily Automation
-4. Push ke main.
-5. Actions > Build Bumi Makmur POS v6.0.2 > test-only.
-6. Jika Firestore Rules v5.8.x sudah aktif, v6 tidak perlu deploy Rules ulang khusus AI/closing.
-7. Setelah test-only hijau: jalankan android-release.
-8. Windows: Build Bumi Makmur POS Desktop v6.0.2 > windows-release.
-9. Uji https://bumi-makmur.my.id.
-10. Pada Android: Pengaturan > AI & Otomasi > masukkan Gemini API key hanya bila ingin analisis Gemini. Tanpa key, POS tetap berfungsi dan OCR/barcode lokal Android tetap tersedia.
-11. Uji Foto Produk AI dengan label nyata, Smart Receiving, lalu Tutup Shift > Kirim PDF ke WhatsApp.
+1. Backup repository/branch produksi sebelum replace source.
+2. Ekstrak ZIP v6.0.3 dan copy SELURUH ISINYA ke root repository Bumi-Makmur-POS-Ultimate (Replace files).
+3. Commit: Bumi Makmur POS v6.0.3 Cloud and Customer Display Stability
+4. Push ke branch main.
+5. WAJIB: Actions > Deploy Firebase Spark Rules > Run workflow. Tunggu sampai hijau.
+6. Actions > Build Bumi Makmur POS v6.0.3 > test-only.
+7. Jika test hijau, deploy Web/Cloudflare Pages seperti biasa.
+8. Buka aplikasi > Pengaturan > Cloud & Backup > Sinkronkan Sekarang. Jika ada “pembaruan milik akun lain”, login dengan akun pembuat (mis. karyawan yang tadi membuka shift/transaksi) sampai queue akun tersebut 0.
+9. Uji pergantian Owner ↔ Karyawan, Kasir, Shift, Penawaran, Garansi/Serial, dan Layar Pelanggan.
+10. Android: Build Bumi Makmur POS v6.0.3 > android-release setelah web/cloud sehat.
+11. Windows: Build Bumi Makmur POS Desktop v6.0.3 > windows-release.
 
-JANGAN uninstall APK produksi sebelum update bila ingin mempertahankan cache/sesi lokal.
-JANGAN commit API key Gemini atau keystore ke repository.
+CATATAN PENTING
+- Jangan hapus antrean offline ketika muncul permission-denied. Data lokal tetap aman.
+- Queue v6.0.3 mengikuti identitas pembuat. Owner tidak boleh dipakai untuk memaksa sinkron mutation Karyawan; login kembali dengan akun pembuat.
+- Error permission pada shifts/warrantyClaims/quotations/serialNumbers/supplierPriceHistory berarti rules produksi belum cocok dengan source terbaru.
+- v6.0.3 tetap Firebase Spark-only. Tidak ada Cloud Functions, Firebase Storage, atau Blaze Plan.

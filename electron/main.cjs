@@ -9,6 +9,7 @@ const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
 const DIST_DIR = path.resolve(__dirname, '..', 'dist');
 let mainWindow = null;
 let customerDisplayWindow = null;
+let latestCustomerDisplaySnapshot = null;
 
 protocol.registerSchemesAsPrivileged([{
   scheme: APP_SCHEME,
@@ -111,6 +112,11 @@ function openCustomerDisplay() {
   }));
   hardenWindow(customerDisplayWindow);
   void loadLocalApp(customerDisplayWindow, '?desktopDisplay=1');
+  customerDisplayWindow.webContents.once('did-finish-load', () => {
+    if (latestCustomerDisplaySnapshot && customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+      customerDisplayWindow.webContents.send('bm-desktop:customer-display-update', latestCustomerDisplaySnapshot);
+    }
+  });
   customerDisplayWindow.once('ready-to-show', () => customerDisplayWindow.show());
   customerDisplayWindow.on('closed', () => { customerDisplayWindow = null; });
   return { opened: true, reused: false, externalMonitor: target.id !== screen.getPrimaryDisplay().id };
@@ -144,7 +150,21 @@ else {
       appVersion: app.getVersion(),
       electronVersion: process.versions.electron
     }));
-    ipcMain.handle('bm-desktop:open-customer-display', () => openCustomerDisplay());
+    ipcMain.handle('bm-desktop:open-customer-display', (_event, snapshot) => {
+      if (snapshot && typeof snapshot === 'object') latestCustomerDisplaySnapshot = snapshot;
+      const result = openCustomerDisplay();
+      if (latestCustomerDisplaySnapshot && customerDisplayWindow && !customerDisplayWindow.isDestroyed() && !customerDisplayWindow.webContents.isDestroyed()) {
+        customerDisplayWindow.webContents.send('bm-desktop:customer-display-update', latestCustomerDisplaySnapshot);
+      }
+      return result;
+    });
+    ipcMain.on('bm-desktop:customer-display-update', (_event, snapshot) => {
+      if (!snapshot || typeof snapshot !== 'object') return;
+      latestCustomerDisplaySnapshot = snapshot;
+      if (customerDisplayWindow && !customerDisplayWindow.isDestroyed() && !customerDisplayWindow.webContents.isDestroyed()) {
+        customerDisplayWindow.webContents.send('bm-desktop:customer-display-update', snapshot);
+      }
+    });
     ipcMain.handle('bm-desktop:close-customer-display', () => {
       if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) customerDisplayWindow.close();
       return { closed: true };

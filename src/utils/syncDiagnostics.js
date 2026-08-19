@@ -5,6 +5,7 @@ const safeDate = value => {
 };
 
 export const SYNC_DIAGNOSTIC_LIMIT = 80;
+export const FIRESTORE_RULESET_VERSION = '6.0.3';
 
 export function classifySyncError(error, context = {}) {
   const code = text(error?.code || context.code || 'unknown').replace(/^firestore\//, '');
@@ -14,7 +15,7 @@ export function classifySyncError(error, context = {}) {
   let permanent = false;
   let action = 'Coba kembali saat koneksi stabil.';
   if (/permission-denied|insufficient permission|akses cloud ditolak|missing or insufficient/.test(lower)) {
-    category = 'permission'; permanent = true; action = 'Masuk ulang memakai akun yang benar dan pastikan Firestore Rules terbaru sudah dipublikasikan.';
+    category = 'permission'; permanent = true; action = `Publikasikan Firestore Rules v${FIRESTORE_RULESET_VERSION} melalui workflow "Deploy Firebase Spark Rules". Jika masih ditolak, login ulang dengan akun pembuat mutation agar sesi/profil cocok. Data lokal tetap aman.`;
   } else if (/unauthenticated|auth\/|sesi|credential|kredensial/.test(lower)) {
     category = 'session'; permanent = true; action = 'Keluar lalu masuk kembali agar sesi cloud cocok dengan pengguna aktif.';
   } else if (/aborted|conflict|telah berubah|menggabungkan/.test(lower)) {
@@ -84,6 +85,12 @@ export function buildSyncStatus({
     code: 'session-mismatch', tone: 'red', title: 'Sesi cloud perlu dihubungkan ulang',
     detail: 'Akun Firebase tidak cocok dengan pengguna POS yang aktif.', healthy: false, retryable: false, lastSuccessAt, lastAttemptAt
   };
+  // Error cloud aktif harus menang atas status "sedang sinkron" atau antrean.
+  // Sebelumnya permission-denied dapat terlihat sehat hanya karena masih ada queue.
+  if (cloudError) return {
+    code: 'degraded', tone: 'orange', title: 'Cloud perlu perhatian',
+    detail: cloudError, healthy: false, retryable: true, lastSuccessAt, lastAttemptAt
+  };
   if (cloudSaving) return {
     code: 'syncing', tone: 'blue', title: 'Menyinkronkan perubahan',
     detail: pending ? `${pending} pembaruan sedang diproses.` : 'Memeriksa data terbaru dari cloud.', healthy: true, retryable: false, lastSuccessAt, lastAttemptAt
@@ -96,10 +103,6 @@ export function buildSyncStatus({
     code: 'synced', tone: 'green', title: 'Tersinkron',
     detail: lastSuccessAt ? `Cloud terakhir berhasil ${new Date(lastSuccessAt).toLocaleString('id-ID')}.` : 'Firebase dan cache lokal aktif.',
     healthy: true, retryable: false, lastSuccessAt, lastAttemptAt
-  };
-  if (cloudError) return {
-    code: 'degraded', tone: 'orange', title: 'Cloud perlu perhatian',
-    detail: cloudError, healthy: false, retryable: true, lastSuccessAt, lastAttemptAt
   };
   return {
     code: 'local-only', tone: 'gray', title: 'Data lokal aktif',
@@ -128,12 +131,20 @@ export function appendSyncDiagnostic(current = [], entry) {
   return next.slice(0, SYNC_DIAGNOSTIC_LIMIT);
 }
 
-export function buildSyncDiagnosticsExport({ status, queue, diagnostics, profile, deviceId, appVersion }) {
+export function buildSyncDiagnosticsExport({ status, queue, queueOwnership, diagnostics, profile, deviceId, appVersion }) {
   return {
     exportedAt: new Date().toISOString(),
     appVersion,
     status,
     queue,
+    queueOwnership: queueOwnership ? {
+      totalCount: Number(queueOwnership.totalCount || 0),
+      currentUserCount: Number(queueOwnership.currentUserCount || 0),
+      otherUserCount: Number(queueOwnership.otherUserCount || 0),
+      totalOperations: Number(queueOwnership.totalOperations || 0),
+      currentUserOperations: Number(queueOwnership.currentUserOperations || 0),
+      otherUserOperations: Number(queueOwnership.otherUserOperations || 0)
+    } : null,
     profile: profile ? { id: profile.id, name: profile.name, role: profile.role, branchId: profile.branchId, storeId: profile.storeId } : null,
     deviceId: text(deviceId),
     diagnostics: diagnostics || []

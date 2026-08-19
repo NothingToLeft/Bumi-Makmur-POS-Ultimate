@@ -27,8 +27,10 @@ import {
   enqueuePendingMutations,
   getCachedOfflineProfile,
   getOfflineQueueStats,
+  getOfflineQueueOwnershipStats,
   loadCachedDb,
   readPendingMutations,
+  pendingMutationBelongsToUser,
   recoverPendingMutations,
   removeOfflineCredential,
   removePendingMutation,
@@ -43,8 +45,9 @@ import { normalizeDbShape } from '../utils/dbShape.js';
 import { buildClosingSummary } from '../services/dailyClosingReport.js';
 import { buildProductLifecycleSummary } from '../utils/productLifecycle.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
-import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, classifySyncError, summarizePendingMutations } from '../utils/syncDiagnostics.js';
+import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, classifySyncError, FIRESTORE_RULESET_VERSION, summarizePendingMutations } from '../utils/syncDiagnostics.js';
 import { validateBackupPayload } from '../utils/backupValidation.js';
+import { publishCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
 import {
   baseUnitCost as calculateBaseUnitCost, conversionFactor, formatQuantity,
   normalizeQuantityStep, recommendedQuantityStep
@@ -54,8 +57,6 @@ const PosContext = createContext(null);
 const DEVICE_SETTINGS_KEY = 'bm_pos_device_security_v1';
 const LOGIN_DIRECTORY_KEY = 'bm_pos_public_login_directory_v1';
 const LOGIN_EMPLOYEES_KEY = 'bm_pos_public_employee_directory_v1';
-const CUSTOMER_DISPLAY_KEY = 'bm_pos_customer_display_v1';
-const CUSTOMER_DISPLAY_CHANNEL = 'bm-pos-customer-display';
 const SYNC_DIAGNOSTICS_KEY = 'bm_pos_sync_diagnostics_v1';
 const SYNC_SUCCESS_KEY = 'bm_pos_last_sync_success_v1';
 const clone = value => typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
@@ -185,6 +186,7 @@ export function PosProvider({ children }) {
   const activeSubscriptionKeyRef = useRef('');
   const initialLoadFinishedRef = useRef(false);
   const employeeDirectoryPublishSignatureRef = useRef('');
+  const persistentCloudIssueRef = useRef('');
 
   const recordSyncDiagnostic = useCallback((errorOrEntry, context = {}) => {
     const entry = errorOrEntry?.category && errorOrEntry?.at
@@ -195,19 +197,34 @@ export function PosProvider({ children }) {
       localStorage.setItem(SYNC_DIAGNOSTICS_KEY, JSON.stringify(next));
       return next;
     });
+    if (entry.category === 'permission') {
+      const collectionLabel = entry.collection ? ` (${entry.collection})` : '';
+      const message = `Akses Firestore ditolak${collectionLabel}. Pastikan Firestore Rules v${FIRESTORE_RULESET_VERSION} sudah dipublikasikan dan sesi/profil akun sesuai, lalu tekan Sinkronkan Sekarang.`;
+      persistentCloudIssueRef.current = message;
+      setCloudError(message);
+    }
     return entry;
   }, [deviceSettings.deviceId]);
 
   const markSyncSuccess = useCallback(() => {
+    const persistentIssue = persistentCloudIssueRef.current;
+    const pending = getOfflineQueueOwnershipStats(storeCode, currentUserRef.current?.id).currentUserCount;
+    // Catat "sinkron terakhir berhasil" hanya bila seluruh queue sudah kosong
+    // dan tidak ada permission/rules issue aktif. Ini mencegah timestamp sukses palsu
+    // ketika hanya sebagian koleksi Firestore yang berhasil dimuat.
+    if (persistentIssue || pending > 0) {
+      setCloudError(persistentIssue || '');
+      return '';
+    }
     const value = nowISO();
     setLastSyncSuccessAt(value);
     setCloudError('');
     localStorage.setItem(SYNC_SUCCESS_KEY, value);
     return value;
-  }, []);
+  }, [storeCode]);
 
   useEffect(() => {
-    const onOnline = () => { setOnline(true); setCloudError(''); };
+    const onOnline = () => { setOnline(true); setCloudError(persistentCloudIssueRef.current || ''); };
     const onOffline = () => { setOnline(false); setCloudError(''); };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
@@ -225,23 +242,18 @@ export function PosProvider({ children }) {
     const activeCampaign = db.campaigns.find(item => item.active !== false);
     const snapshot = {
       ...customerDisplay,
-      companyName: activeBranch?.name || db.configs.companyName || 'BUMI MAKMUR',
-      branchName: db.configs.companyName || '',
+      companyName: db.configs.companyName || 'BUMI MAKMUR',
+      branchName: activeBranch?.name || '',
       message: customerDisplay.message || activeCampaign?.message || '',
       online,
       updatedAt: nowISO()
     };
     try {
-      localStorage.setItem(CUSTOMER_DISPLAY_KEY, JSON.stringify(snapshot));
-      if (typeof BroadcastChannel !== 'undefined') {
-        const channel = new BroadcastChannel(CUSTOMER_DISPLAY_CHANNEL);
-        channel.postMessage(snapshot);
-        channel.close();
-      }
+      publishCustomerDisplaySnapshot(snapshot);
     } catch (error) {
       console.warn('Layar pelanggan tidak dapat diperbarui pada perangkat ini.', error);
     }
-  }, [customerDisplay, db.configs.companyName, db.configs.activeBranchId, db.branches, db.campaigns, deviceSettings.activeBranchId, online]);
+  }, [customerDisplay, currentUser?.id, currentUser?.role, currentUser?.branchId, db.configs.companyName, db.configs.activeBranchId, db.branches, db.campaigns, deviceSettings.activeBranchId, online]);
 
   useEffect(() => {
     localStorage.setItem(DEVICE_SETTINGS_KEY, JSON.stringify(deviceSettings));
@@ -427,14 +439,20 @@ export function PosProvider({ children }) {
         throw new Error('Sesi Firebase tidak cocok dengan pengguna aktif. Hubungkan ulang akun cloud sebelum sinkronisasi.');
       }
       const queue = readPendingMutations(storeCode);
-      if (!queue.length) return { synced: 0, pending: 0, conflicts: 0 };
+      if (!queue.length) return { synced: 0, pending: 0, totalPending: 0, deferredUserCount: 0, conflicts: 0 };
+      const eligibleQueue = queue.filter(mutation => pendingMutationBelongsToUser(mutation, profile.id));
+      const deferredUserCount = queue.length - eligibleQueue.length;
+      if (!eligibleQueue.length) {
+        setPendingSyncCount(queue.length);
+        return { synced: 0, pending: 0, totalPending: queue.length, deferredUserCount, conflicts: 0 };
+      }
       setCloudSaving(true);
       setLastSyncAttemptAt(nowISO());
       let synced = 0;
       let conflicts = 0;
       let deferredConflict = false;
       try {
-        for (const queued of queue) {
+        for (const queued of eligibleQueue) {
           let mutation = clone(queued);
           let completed = false;
           let mutationConflicted = false;
@@ -491,16 +509,19 @@ export function PosProvider({ children }) {
           if (deferredConflict) break;
         }
         setSyncConflictCount(previous => previous + conflicts);
-        const pending = getOfflineQueueStats(storeCode).count;
-        setPendingSyncCount(pending);
+        const ownership = getOfflineQueueOwnershipStats(storeCode, profile.id);
+        const pending = ownership.currentUserCount;
+        setPendingSyncCount(ownership.totalCount);
         if (pending === 0) markSyncSuccess();
-        // Konflik lintas perangkat bukan error pengguna. Antrean tetap aman dan akan dicoba lagi di latar belakang.
-        setCloudError('');
-        return { synced, pending, conflicts, deferredConflict };
+        // Konflik lintas perangkat bukan error pengguna; queue tetap aman.
+        // Mutasi milik akun lain tidak pernah dikirim menggunakan sesi Auth saat ini.
+        // Mutasi tersebut tetap aman dan akan dilanjutkan ketika pemiliknya login lagi.
+        setCloudError(persistentCloudIssueRef.current || '');
+        return { synced, pending, totalPending: ownership.totalCount, deferredUserCount: ownership.otherUserCount, conflicts, deferredConflict };
       } catch (error) {
         console.error('Sinkronisasi antrean offline gagal.', error);
         setPendingSyncCount(getOfflineQueueStats(storeCode).count);
-        const queued = readPendingMutations(storeCode)[0];
+        const queued = readPendingMutations(storeCode).find(item => pendingMutationBelongsToUser(item, profile?.id));
         const operation = queued?.operations?.[0] || {};
         const diagnostic = recordSyncDiagnostic(error, {
           mutationId: queued?.id, mutationAction: queued?.action,
@@ -508,7 +529,7 @@ export function PosProvider({ children }) {
           branchId: queued?.branchId || profile?.branchId || ''
         });
         if (!isConflictError(error) && diagnostic.permanent) {
-          setCloudError(friendlyCloudError(error, 'Pembaruan lokal belum berhasil dikirim. Aplikasi tetap dapat digunakan.'));
+          setCloudError(persistentCloudIssueRef.current || friendlyCloudError(error, 'Pembaruan lokal belum berhasil dikirim. Aplikasi tetap dapat digunakan.'));
         }
         throw error;
       } finally {
@@ -555,6 +576,7 @@ export function PosProvider({ children }) {
 
       if (initial && !hasLocal && !initialLoadFinishedRef.current) setInitializingApp(true);
       setCloudLoading(true);
+      persistentCloudIssueRef.current = '';
       setCloudError('');
       cloudUnsubscribeRef.current?.();
       cloudUnsubscribeRef.current = null;
@@ -604,8 +626,9 @@ export function PosProvider({ children }) {
             setLocalReady(true);
             setCloudReady(true);
             setCloudLoading(false);
-            if (getOfflineQueueStats(storeCode).count === 0) markSyncSuccess();
-            setPendingSyncCount(getOfflineQueueStats(storeCode).count);
+            const queueOwnership = getOfflineQueueOwnershipStats(storeCode, profile.id);
+            if (queueOwnership.currentUserCount === 0) markSyncSuccess();
+            setPendingSyncCount(queueOwnership.totalCount);
             void saveCachedDb(storeCode, merged, profile).catch(error => console.warn('Snapshot realtime gagal disimpan lokal.', error));
           },
           (error, context = {}) => {
@@ -618,9 +641,10 @@ export function PosProvider({ children }) {
             if (context.optional) {
               setCloudReady(true);
               setCloudLoading(false);
+              if (diagnostic.category === 'permission') setCloudError(persistentCloudIssueRef.current || diagnostic.action);
               return;
             }
-            if (diagnostic.permanent) setCloudError(friendlyCloudError(error, 'Realtime cloud terputus; data lokal tetap aktif.'));
+            if (diagnostic.permanent) setCloudError(persistentCloudIssueRef.current || friendlyCloudError(error, 'Realtime cloud terputus; data lokal tetap aktif.'));
             setCloudReady(false);
             setCloudLoading(false);
           },
@@ -630,7 +654,7 @@ export function PosProvider({ children }) {
       } catch (error) {
         console.error('Cloud load/sync failed.', error);
         const diagnostic = recordSyncDiagnostic(error, { mutationAction: 'CLOUD_BOOTSTRAP', branchId: profile.branchId || '' });
-        if (diagnostic.permanent) setCloudError(friendlyCloudError(error, 'Cloud belum dapat dijangkau; aplikasi memakai data lokal.'));
+        if (diagnostic.permanent) setCloudError(persistentCloudIssueRef.current || friendlyCloudError(error, 'Cloud belum dapat dijangkau; aplikasi memakai data lokal.'));
         setCloudReady(false);
         return false;
       } finally {
@@ -914,9 +938,10 @@ export function PosProvider({ children }) {
     setDeviceSettingsState(previous => ({ ...previous, ...patch }));
   }, []);
 
-  const clearCloudError = useCallback(() => setCloudError(''), []);
+  const clearCloudError = useCallback(() => setCloudError(persistentCloudIssueRef.current || ''), []);
 
   const logout = () => {
+    persistentCloudIssueRef.current = '';
     cloudUnsubscribeRef.current?.();
     cloudUnsubscribeRef.current = null;
     setCurrentUser(null);
@@ -2733,7 +2758,7 @@ export function PosProvider({ children }) {
     if (!navigator.onLine) throw new Error(`Perangkat sedang offline. ${getOfflineQueueStats(storeCode).count} pembaruan tetap aman di perangkat.`);
     const result = await flushPendingMutations(currentUser);
     await startCloudSubscription(currentUser, { initial: false, force: true });
-    return { id: 'HYBRID_SYNC', count: result.synced || 0, pending: result.pending || 0, conflicts: result.conflicts || 0 };
+    return { id: 'HYBRID_SYNC', count: result.synced || 0, pending: result.pending || 0, totalPending: result.totalPending ?? getOfflineQueueStats(storeCode).count, deferredUserCount: result.deferredUserCount || 0, conflicts: result.conflicts || 0 };
   };
 
   const resetDemo = async () => {
@@ -2786,18 +2811,21 @@ export function PosProvider({ children }) {
   }), [db, branchId]);
 
   const queueSummary = useMemo(() => summarizePendingMutations(readPendingMutations(storeCode)), [pendingSyncCount, storeCode]);
+  const queueOwnership = useMemo(() => getOfflineQueueOwnershipStats(storeCode, currentUser?.id || ''), [pendingSyncCount, storeCode, currentUser?.id]);
+  const activePendingSyncCount = currentUser ? queueOwnership.currentUserCount : pendingSyncCount;
+  const otherUserPendingSyncCount = currentUser ? queueOwnership.otherUserCount : 0;
   const authMatched = !currentUser || !firebaseConfigured || Boolean(auth?.currentUser && auth.currentUser.uid === currentUser.id);
   const syncStatus = useMemo(() => buildSyncStatus({
-    online, cloudReady, cloudSaving, pendingCount: pendingSyncCount, cloudError,
+    online, cloudReady, cloudSaving, pendingCount: activePendingSyncCount, cloudError,
     authMatched, lastSuccessAt: lastSyncSuccessAt, lastAttemptAt: lastSyncAttemptAt
-  }), [online, cloudReady, cloudSaving, pendingSyncCount, cloudError, authMatched, lastSyncSuccessAt, lastSyncAttemptAt]);
+  }), [online, cloudReady, cloudSaving, activePendingSyncCount, cloudError, authMatched, lastSyncSuccessAt, lastSyncAttemptAt]);
   const clearSyncDiagnostics = () => {
     setSyncDiagnostics([]);
     localStorage.removeItem(SYNC_DIAGNOSTICS_KEY);
   };
   const exportSyncDiagnostics = () => {
     const payload = buildSyncDiagnosticsExport({
-      status: syncStatus, queue: queueSummary, diagnostics: syncDiagnostics,
+      status: syncStatus, queue: queueSummary, queueOwnership, diagnostics: syncDiagnostics,
       profile: currentUserRef.current, deviceId: deviceSettings.deviceId, appVersion: APP_VERSION
     });
     downloadFile(`Bumi-Makmur-POS-diagnostik-${localDateKey()}.json`, JSON.stringify(payload, null, 2));
@@ -2806,7 +2834,7 @@ export function PosProvider({ children }) {
 
   const value = {
     db, scoped, currentUser, online, cloudConfigured, localReady, dataReady: localReady || cloudReady,
-    cloudReady, cloudLoading, initializingApp, cloudSaving, cloudError, clearCloudError, pendingSyncCount, syncConflictCount, lastSyncAttemptAt, lastSyncSuccessAt, syncStatus, syncDiagnostics, queueSummary, clearSyncDiagnostics, exportSyncDiagnostics,
+    cloudReady, cloudLoading, initializingApp, cloudSaving, cloudError, clearCloudError, pendingSyncCount, activePendingSyncCount, otherUserPendingSyncCount, syncConflictCount, lastSyncAttemptAt, lastSyncSuccessAt, syncStatus, syncDiagnostics, queueSummary, clearSyncDiagnostics, exportSyncDiagnostics,
     branchId, branch, customerDisplay, setCustomerDisplay,
     deviceSettings, updateDeviceSettings, login, loginEmployee, connectAccount, loginWithBiometric, logout, signOutAccount, bootstrapStore,
     loginDirectory, loginDirectoryLoading, refreshLoginDirectory,

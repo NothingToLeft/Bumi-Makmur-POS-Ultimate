@@ -1,16 +1,22 @@
-# Firebase Spark — Setup Gratis Bumi Makmur POS v6.0.2
+# Firebase Spark — Setup Gratis Bumi Makmur POS v6.0.3
 
-Project tetap memakai **Firebase Spark/free tier**. Jangan upgrade Blaze dan jangan aktifkan billing.
+Project tetap memakai **Firebase Spark/free tier**. Jangan upgrade Blaze dan jangan aktifkan layanan berbayar.
 
 ## 1. Authentication
 
 Firebase Console → Authentication → Sign-in method → Email/Password → Enable.
 
-Owner dan setiap karyawan memiliki akun Auth internal. Pembuatan karyawan dilakukan dari `Pengaturan → Karyawan` melalui secondary Auth agar sesi Owner/Manager tidak keluar. Karyawan tetap login harian memakai cabang + nama + PIN.
+Owner dan setiap karyawan memiliki akun Firebase Auth internal. Pembuatan karyawan dilakukan dari `Pengaturan → Karyawan` melalui secondary Auth agar sesi Owner/Manager tidak terputus. Karyawan tetap login harian memakai cabang + nama login + PIN.
 
 ## 2. Firestore
 
-Firebase Console → Firestore Database → Create database → Production mode. Jangan membuat koleksi manual. Aplikasi dan workflow memakai `firestore.rules` dan `firestore.indexes.json` dari source.
+Firebase Console → Firestore Database → Create database → Production mode. Jangan membuat koleksi manual. Source memiliki `firestore.rules` dan `firestore.indexes.json` sebagai satu-satunya ruleset produksi.
+
+Ruleset release ini memiliki marker:
+
+```text
+BUMI_MAKMUR_RULESET_VERSION=6.0.3
+```
 
 ## 3. GitHub Secrets
 
@@ -26,40 +32,42 @@ VITE_PUBLIC_APP_URL=https://bumi-makmur.my.id
 FIREBASE_SERVICE_ACCOUNT_JSON
 ```
 
-Secret service account hanya untuk workflow deploy rules. Jangan masukkan ke Cloudflare, aplikasi, atau source.
+Secret service account hanya digunakan GitHub Actions untuk deploy Firestore Rules/Indexes. Jangan dimasukkan ke aplikasi, Cloudflare client bundle, APK, atau source Git.
 
 ## 4. IAM service account workflow
 
-Service account pada `FIREBASE_SERVICE_ACCOUNT_JSON` memerlukan:
+`FIREBASE_SERVICE_ACCOUNT_JSON` memerlukan role minimum yang dapat menerbitkan Firestore Rules dan indexes, misalnya:
 
 - Firebase Rules Admin
 - Cloud Datastore Index Admin
 
-Tidak perlu role Owner dan tidak perlu billing.
+Tidak perlu Firebase Functions, Storage, Hosting, atau billing Blaze.
 
-## 5. Deploy Rules Business Suite — tidak berubah pada v6.0.2
+## 5. Deploy Rules — WAJIB setelah upload v6.0.3
 
 ```text
-Actions → Deploy Firebase Spark Rules → Run workflow
+GitHub → Actions → Deploy Firebase Spark Rules → Run workflow
 ```
 
-Rules v5.8 mencakup:
+Tunggu workflow hijau **sebelum** menganggap cloud sehat. v6.0.3 menampilkan peringatan khusus bila aplikasi menerima `permission-denied`, sehingga status tidak lagi terlihat hijau palsu ketika antrean gagal dikirim.
 
-- bootstrap Owner, user profile, dan direktori login aman;
-- batas role/cabang Owner, Manager, Kasir;
-- `branchPaymentProfiles` QRIS per cabang;
-- `purchaseOrders`, price history, approval, device session;
-- `supplierPriceHistory` append-only;
-- `quotations` scoped per branch;
+Rules mencakup:
+
+- bootstrap Owner dan profil user;
+- Owner / Store Manager / Kasir per cabang;
+- `shifts` dan `cashMovements`;
+- `purchaseOrders` dan histori harga;
+- `supplierPriceHistory`;
+- `quotations`;
 - `serialNumbers` dan `warrantyClaims`;
-- transisi serial Kasir `IN_STOCK → SOLD` hanya ketika terikat sale miliknya;
-- audit mutation dan mutation receipt untuk sinkronisasi idempotent.
+- `approvalRequests` dan `deviceSessions`;
+- QRIS per cabang;
+- public receipt tersanitasi;
+- mutation receipt dan audit log untuk sinkronisasi idempotent.
 
-Workflow hanya men-deploy Firestore Rules dan indexes. Tidak ada Functions, Storage, atau Firebase Hosting.
+Workflow **hanya** men-deploy `firestore:rules,firestore:indexes`.
 
-**v6.0.2 tidak menambah koleksi Firestore untuk AI ataupun file laporan.** Gemini API key hanya disimpan lokal pada perangkat. PDF closing dibuat client-side dan dibagikan/download tanpa Firebase Storage.
-
-## 6. Authorized domain
+## 6. Authorized domains
 
 Firebase → Authentication → Settings → Authorized domains:
 
@@ -68,10 +76,14 @@ bumi-makmur.my.id
 bumi-makmur-pos-ultimate.pages.dev
 ```
 
-## 7. Saat muncul masalah izin
+## 7. Jika muncul `Missing or insufficient permissions`
 
-- Pastikan workflow Rules v5.8.0 atau lebih baru sudah hijau. v6.0.2 tidak menambah kebutuhan rules untuk AI Product Capture atau closing PDF.
-- Logout/login ulang melalui role yang benar.
-- Pastikan `VITE_FIREBASE_STORE_ID` dan `VITE_FIREBASE_STORE_CODE` tidak berubah dari toko produksi.
-- Buka `Pengaturan → Cloud & Backup`; periksa nama koleksi pada Diagnostik Sinkronisasi.
-- Jangan menghapus antrean offline secara manual. Sinkronkan sampai antrean 0.
+1. Jangan hapus antrean offline.
+2. Pastikan repository sudah berisi source v6.0.3.
+3. Jalankan workflow **Deploy Firebase Spark Rules** sampai hijau.
+4. Keluar dan login lagi hanya bila diagnostik menyebut sesi/credential, bukan sekadar rules.
+5. Buka `Pengaturan → Cloud & Backup → Sinkronkan Sekarang`.
+6. Periksa pembagian antrean `akun aktif` dan `akun lain`. Queue milik akun lain hanya disinkronkan saat pemilik mutation login.
+7. Pastikan antrean akun aktif turun ke 0 dan status cloud sehat. Total queue perangkat menjadi 0 setelah seluruh akun yang memiliki perubahan tertunda sempat login dan sinkron.
+
+Jika rules sudah hijau tetapi permission masih muncul, ekspor Diagnostik Sinkronisasi dan periksa `storeId`, `branchId`, role, serta nama koleksi yang ditolak.

@@ -117,12 +117,12 @@ test('Firestore Rules membatasi riwayat harga, approval, PO, dan sesi perangkat'
   assert.match(rules, /deviceSessions/);
 });
 
-test('closing harian dapat dicetak dan workflow rilis memakai versi 6.0.2', async () => {
+test('closing harian dapat dicetak dan workflow rilis memakai versi 6.0.3', async () => {
   const [shift, android, windows] = await Promise.all([
     source('src/screens/ShiftFinanceScreens.jsx'), source('.github/workflows/build-android.yml'), source('.github/workflows/build-windows.yml')
   ]);
   assert.match(shift, /LAPORAN CLOSING SHIFT/);
   assert.match(shift, /Cetak laporan closing/);
-  assert.match(android, /6\.0\.2/);
-  assert.match(windows, /6\.0\.2/);
+  assert.match(android, /6\.0\.3/);
+  assert.match(windows, /6\.0\.3/);
 });
