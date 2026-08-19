@@ -85,3 +85,32 @@ export async function authenticateBiometric({ title, subtitle } = {}) {
     return { success: false, error: error?.message || String(error) };
   }
 }
+
+const fileToBase64 = async file => {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunk) binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+  return btoa(binary);
+};
+
+export async function recognizeTextFromImage(dataUrl) {
+  if (!isNativeAndroid()) return { success: false, text: '', status: 'not-native' };
+  try {
+    const result = await NativeDevice.recognizeText({ dataUrl: String(dataUrl || '') });
+    return { success: Boolean(result?.success), text: String(result?.text || ''), status: result?.status || 'ok' };
+  } catch (error) {
+    return { success: false, text: '', status: 'error', error: error?.message || String(error) };
+  }
+}
+
+export async function shareNativePdf(file, { title = 'Bagikan PDF', text = '', preferWhatsApp = false } = {}) {
+  if (!isNativeAndroid()) return { shared: false, status: 'not-native' };
+  try {
+    const base64 = await fileToBase64(file);
+    return await NativeDevice.sharePdf({ filename: file.name || 'laporan.pdf', base64, title, text, preferWhatsApp: Boolean(preferWhatsApp) });
+  } catch (error) {
+    return { shared: false, status: 'error', error: error?.message || String(error) };
+  }
+}

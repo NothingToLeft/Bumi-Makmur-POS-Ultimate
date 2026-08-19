@@ -1,5 +1,18 @@
 # Changelog
 
+## v6.0.0 — AI Product Capture & Daily Automation
+
+- Menambahkan AI Foto Produk dengan barcode/OCR lokal, parser produk, Gemini opsional, preview wajib, dan pencegahan duplikasi katalog.
+- Menambahkan Smart Receiving: foto/scan barang masuk mencocokkan katalog, satuan kemasan, jumlah, dan harga beli sebelum ditambahkan ke pembelian.
+- Menambahkan laporan Tutup Shift profesional: PDF client-side, rincian pembayaran, refund/void, HPP bersih, laba kotor estimasi, kas, selisih, pengeluaran, dan piutang baru.
+- Android dapat membagikan PDF melalui WhatsApp/WhatsApp Business dengan fallback Android share sheet; Web/Windows memakai Web Share atau download.
+- Menambahkan snapshot HPP per baris transaksi agar laporan historis tidak berubah ketika HPP produk diperbarui kemudian.
+- Menambahkan OCR native Android berbasis ML Kit serta fallback image processing untuk browser yang tidak menyediakan `createImageBitmap`.
+- Gemini API key hanya disimpan lokal pada perangkat; AI bersifat opsional dan tidak menjadi dependency POS.
+- Stok awal dari AI default 0 agar tidak membuat stok fiktif; harga dan stok tidak pernah ditebak AI.
+- Memperbaiki Smart Receiving agar pencocokan conversion factor memakai hasil analisis terbaru, bukan state UI yang stale.
+- Seluruh fitur v5.8.1 tetap dipertahankan; Firebase tetap Auth + Firestore Spark tanpa Functions/Storage/Blaze.
+
 ## v5.8.1 — Numeric Input & Variant Pricing Stability
 
 - Memperbaiki field Markup Eceran varian yang sebelumnya terkunci saat modal masih 0.

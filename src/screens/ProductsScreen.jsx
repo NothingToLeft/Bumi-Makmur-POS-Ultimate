@@ -28,6 +28,7 @@ import ProductPicker from '../components/ProductPicker.jsx';
 import InventoryImportModal from '../components/InventoryImportModal.jsx';
 import BulkBarcodeLabelsModal from '../components/BulkBarcodeLabelsModal.jsx';
 import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
+import AIProductCaptureModal from '../components/AIProductCaptureModal.jsx';
 import { findProductByCode } from '../utils/barcode.js';
 
 const DEFAULT_MARKUPS = { retail: 30, wholesale: 20, project: 15 };
@@ -111,6 +112,7 @@ export default function ProductsScreen() {
   const [importOpen, setImportOpen] = useState(false);
   const [bulkLabelsOpen, setBulkLabelsOpen] = useState(false);
   const [sensitiveAction, setSensitiveAction] = useState(null);
+  const [aiCaptureOpen, setAiCaptureOpen] = useState(false);
 
   const canManageProducts = hasPermission('products.manage');
   const canManageStock = hasPermission('inventory.manage');
@@ -218,6 +220,53 @@ export default function ProductsScreen() {
 
   const newProduct = () => setEditing({ ...blank, prices: { ...blank.prices }, markups: { ...DEFAULT_MARKUPS }, conversions: [], variants: [], bundleItems: [], variantMode: false, variantRows: [] });
 
+  const applyAiProductDraft = ({ analysis, packCost = 0, retailPack = 0, retailUnit = 0, initialPacks = 0, rack = '-' }) => {
+    const packQty = Math.max(0, Number(analysis.packQty || 0));
+    const baseUnit = analysis.baseUnit || 'pcs';
+    const baseStock = packQty > 0 ? Number(initialPacks || 0) * packQty : Number(initialPacks || 0);
+    const modalPrice = packQty > 0 && Number(packCost) > 0 ? Number(packCost) / packQty : Number(packCost || 0);
+    const conversions = packQty > 1 && analysis.packUnit ? [{
+      unit: analysis.packUnit,
+      factor: packQty,
+      prices: { retail: Number(retailPack || 0), wholesale: 0, project: 0 }
+    }] : [];
+    const common = {
+      ...blank,
+      name: String(analysis.productName || '').trim(),
+      brand: String(analysis.brand || '').trim(),
+      specifications: String(analysis.specifications || '').trim(),
+      category: analysis.category || db.categories[0] || 'Material',
+      baseUnit,
+      barcode: String(analysis.barcode || '').trim(),
+      sharedBarcode: String(analysis.barcode || '').trim(),
+      stock: baseStock,
+      minStock: packQty > 1 ? packQty * 3 : Math.max(1, Number(blank.minStock || 5)),
+      rack,
+      modalPrice,
+      prices: { retail: Number(retailUnit || 0), wholesale: 0, project: 0 },
+      markups: { ...DEFAULT_MARKUPS },
+      conversions,
+      variants: [], bundleItems: [], serialTracking: false, warrantyMonths: 0,
+      aiCapture: { source: analysis.source || 'unknown', confidence: Number(analysis.confidence || 0), capturedAt: new Date().toISOString(), model: analysis.model || '' }
+    };
+    const useVariant = Boolean(analysis.suggestedVariantMode && String(analysis.variantName || '').trim());
+    if (useVariant) {
+      setEditing({
+        ...common,
+        variantMode: true,
+        variantRows: [{
+          variantName: String(analysis.variantName).trim(),
+          sku: '', internalBarcode: '', stock: baseStock,
+          minStock: packQty > 1 ? packQty * 3 : Math.max(1, Number(blank.minStock || 5)),
+          rack, modalPrice,
+          prices: { retail: Number(retailUnit || 0), wholesale: 0, project: 0 },
+          markups: { ...DEFAULT_MARKUPS }, active: true, available: true, favorite: false
+        }]
+      });
+    } else setEditing({ ...common, variantMode: false, variantRows: [] });
+    setAiCaptureOpen(false);
+  };
+
   const requireSensitivePin = (title, action, callback) => setSensitiveAction({ title, action, callback });
 
   return (
@@ -231,6 +280,7 @@ export default function ProductsScreen() {
           <Button variant="outline" onClick={() => setBulkLabelsOpen(true)}><Barcode size={17}/> Label Massal</Button>
           {canImportInventory && <Button variant="outline" onClick={() => setImportOpen(true)}><Upload size={17}/> Impor Excel/CSV</Button>}
           {canManageCategories && <Button variant="outline" onClick={() => setCategoryOpen(true)}><Tags size={17}/> Kategori</Button>}
+          {canManageProducts && <Button variant="outline" onClick={() => setAiCaptureOpen(true)}><WandSparkles size={18}/> Foto Produk AI</Button>}
           {canManageProducts && <Button onClick={newProduct}><PackagePlus size={18}/> Tambah Barang & Stok</Button>}
         </>}
       />
@@ -287,6 +337,7 @@ export default function ProductsScreen() {
         {tab === 'transfer' && <HistoryActionTab title="Transfer Antar-Cabang" description="Pindahkan persediaan dari cabang aktif ke cabang lain tanpa membuat ulang produk." icon={ArrowLeftRight} disabled={!canManageStock || db.branches.length < 2 || activeProducts.length === 0} button="Transfer Stok" onClick={() => setTransferOpen(true)} rows={scoped.transfers}/>} 
       </div>
 
+      {aiCaptureOpen && canManageProducts && <AIProductCaptureModal mode="create" products={scoped.products} categories={sortCategories(db.categories)} onClose={() => setAiCaptureOpen(false)} onApply={applyAiProductDraft}/>}
       {importOpen && canImportInventory && <InventoryImportModal products={scoped.products} categories={db.categories} branchId={branch?.id || db.configs.activeBranchId} onClose={() => setImportOpen(false)} onImport={(rows, options) => importInventoryRows(rows, options)}/>}
       {bulkLabelsOpen && <BulkBarcodeLabelsModal products={activeProducts} onClose={() => setBulkLabelsOpen(false)}/>}
       {editing && <ProductForm product={editing} categories={sortCategories(db.categories)} units={db.units} products={scoped.products} onAddCategory={canManageCategories ? (name => saveCategory({ name })) : null} onClose={() => setEditing(null)} onSave={save}/>} 

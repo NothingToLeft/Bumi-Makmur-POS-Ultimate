@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.8.1
+# Bumi Makmur POS FreeSync v6.0.0
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.8.1 adalah hotfix stabilitas input angka di atas Business Suite v5.8.0 untuk operasional toko listrik/material: Smart Restock, PO dengan penerimaan parsial, riwayat harga pemasok, quotation, serial & garansi, stock opname scanner, inventory aging, proteksi harga modal, serta perapihan navigasi; Smart Barcode Scanner dan seluruh fitur v5.7 tetap dipertahankan. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.0.0 adalah major release untuk operasional toko listrik/material dengan **AI Product Capture**, **Smart Receiving**, dan **Tutup Harian PDF → WhatsApp**, di atas Business Suite v5.8.x. Seluruh Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Smart Barcode Scanner, dan FreeSync tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,13 +11,36 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rili
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Perbaikan utama v5.8.1
+## Pembaruan besar v6.0.0
 
-- Markup Eceran pada varian dapat diketik/dihapus walaupun harga modal masih 0.
-- Markup retail/grosir/proyek disimpan per varian dan tetap sinkron dengan harga jual.
-- Input angka controlled yang berisiko terkunci diperbaiki pada produk, pajak/service, loyalty, split bill, PO receiving, garansi, bundle, dan pelanggan.
-- Tidak ada perubahan skema cloud; rules v5.8.0 tetap kompatibel.
-- Seluruh fitur Business Suite v5.8.0 tetap ada.
+### AI Product Capture
+
+- Tombol **Foto Produk AI** tersedia pada Produk & Stok. Foto label/kemasan dapat mengisi nama keluarga produk, merek, model, ukuran/varian, spesifikasi, kategori, isi pack, satuan dasar, dan barcode untuk ditinjau sebelum masuk ke form produk.
+- Android memakai OCR lokal ML Kit dan barcode scanner; Gemini bersifat opsional untuk menyempurnakan struktur data saat online.
+- Harga modal, harga jual, stok, supplier, dan garansi **tidak pernah ditebak AI**. Pengguna tetap mengisi data bisnis tersebut dan harus mengonfirmasi sebelum simpan.
+- Barcode hasil decoder lokal diprioritaskan dibanding angka yang dibaca model vision.
+- Produk yang kemungkinan sudah ada diberi peringatan agar stok baru tidak membuat katalog duplikat.
+- Gemini API key disimpan hanya pada perangkat dan tidak masuk Firestore, FreeSync, atau backup cloud. Tanpa API key, fitur inti POS tetap berjalan; APK Android masih dapat memakai OCR/barcode lokal.
+
+### Smart Receiving
+
+- Menu Pembelian → Terima Langsung memiliki **Foto Barang Masuk**.
+- Barcode exact diprioritaskan; jika tidak ada, sistem mencocokkan nama, merek, model, dan varian ke katalog.
+- Setelah produk cocok, jumlah kemasan dan harga beli dapat langsung dimasukkan ke baris penerimaan. Konversi pack/box/roll tetap memakai satu stok dasar yang sama.
+
+### Tutup Harian PDF → WhatsApp
+
+- Menutup shift membuat snapshot laporan harian yang dapat dibuat ulang dari Riwayat Shift.
+- Ringkasan mencakup transaksi, void, refund, item bersih, omzet kotor/bersih, HPP bersih, estimasi laba kotor, metode pembayaran bersih, pengeluaran, piutang baru, kas seharusnya, kas fisik, dan selisih.
+- HPP disnapshot pada setiap baris penjualan agar laporan historis tidak berubah ketika modal produk diperbarui di masa depan.
+- Android mencoba membuka WhatsApp/WhatsApp Business langsung dengan PDF terlampir, lalu fallback ke share sheet. Web/Windows memakai Web Share bila tersedia atau download PDF sebagai fallback.
+- Tidak ada WhatsApp Business token di APK dan tidak ada layanan server berbayar yang diwajibkan.
+
+### Stabilitas major release
+
+- Perbaikan Numeric Input & Variant Pricing v5.8.1 tetap dipertahankan.
+- Arsitektur data lama tetap kompatibel; field v6 bersifat additive sehingga database v5.8.x dapat dibuka tanpa migrasi destruktif.
+- Firebase tetap **Authentication + Firestore Spark**, tanpa Cloud Functions, Firebase Storage, atau kewajiban Blaze.
 
 ## Fitur utama v5.8.0
 
@@ -189,13 +212,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v5.8.1.
+2. Ekstrak ZIP v6.0.0.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v5.8.1 Numeric Input and Variant Pricing Stability
+Bumi Makmur POS v6.0.0 AI Product Capture and Daily Automation
 ```
 
 6. Klik **Push origin**.
@@ -206,7 +229,7 @@ Bumi Makmur POS v5.8.1 Numeric Input and Variant Pricing Stability
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.8.1
+→ Build Bumi Makmur POS v6.0.0
 → test-only
 ```
 
@@ -214,13 +237,13 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Firestore Rules
 
-v5.8.0 **menambah koleksi dan izin Firestore** untuk quotation, riwayat harga pemasok, serial, dan garansi. Jalankan workflow **Deploy Firebase Spark Rules** sekali setelah source v5.8.0 di-push. Tetap Firebase Spark, tanpa Blaze.
+Jika rules Business Suite v5.8.x sudah aktif, v6.0.0 **tidak memerlukan koleksi cloud baru** untuk AI key atau PDF. Field closing summary ikut dokumen shift yang sudah ada. Deploy ulang Rules hanya diperlukan bila repository produksi masih memakai rules sebelum v5.8. Tetap Firebase Spark, tanpa Blaze.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.8.1
+→ Build Bumi Makmur POS v6.0.0
 → android-release
 ```
 
@@ -230,11 +253,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v5.8.1
+→ Build Bumi Makmur POS Desktop v6.0.0
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.8.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.0.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -251,11 +274,11 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.8.1
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v5.8.1
+## Release acceptance v6.0.0
 
 Full-pass source audit final pada 19 Agustus 2026 menghasilkan:
 
-- **161/161 automated core/regression tests PASS**.
+- **174/174 automated core/regression tests PASS**.
 - Static project audit **PASS**.
 - Parser JS/JSX seluruh `src` **PASS**.
 - Electron/Android helper Node syntax **PASS**.
@@ -271,4 +294,4 @@ Acceptance flow produksi yang disarankan setelah push:
 5. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
 6. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v5.8.1.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.
+Lihat `QA-REPORT-Bumi-Makmur-POS-v6.0.0.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.

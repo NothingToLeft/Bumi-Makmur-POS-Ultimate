@@ -1,4 +1,4 @@
-# Firebase Spark — Setup Gratis Bumi Makmur POS v5.8.1
+# Firebase Spark — Setup Gratis Bumi Makmur POS v6.0.0
 
 Project tetap memakai **Firebase Spark/free tier**. Jangan upgrade Blaze dan jangan aktifkan billing.
 
@@ -37,7 +37,7 @@ Service account pada `FIREBASE_SERVICE_ACCOUNT_JSON` memerlukan:
 
 Tidak perlu role Owner dan tidak perlu billing.
 
-## 5. Deploy Rules v5.8 — wajib sekali setelah update
+## 5. Deploy Rules Business Suite — tidak berubah pada v6.0.0
 
 ```text
 Actions → Deploy Firebase Spark Rules → Run workflow
@@ -57,6 +57,8 @@ Rules v5.8 mencakup:
 
 Workflow hanya men-deploy Firestore Rules dan indexes. Tidak ada Functions, Storage, atau Firebase Hosting.
 
+**v6.0.0 tidak menambah koleksi Firestore untuk AI ataupun file laporan.** Gemini API key hanya disimpan lokal pada perangkat. PDF closing dibuat client-side dan dibagikan/download tanpa Firebase Storage.
+
 ## 6. Authorized domain
 
 Firebase → Authentication → Settings → Authorized domains:
@@ -68,7 +70,7 @@ bumi-makmur-pos-ultimate.pages.dev
 
 ## 7. Saat muncul masalah izin
 
-- Pastikan workflow Rules v5.8.0 atau lebih baru sudah hijau. v5.8.1 tidak mengubah skema/rules cloud.
+- Pastikan workflow Rules v5.8.0 atau lebih baru sudah hijau. v6.0.0 tidak menambah kebutuhan rules untuk AI Product Capture atau closing PDF.
 - Logout/login ulang melalui role yang benar.
 - Pastikan `VITE_FIREBASE_STORE_ID` dan `VITE_FIREBASE_STORE_CODE` tidak berubah dari toko produksi.
 - Buka `Pengaturan → Cloud & Backup`; periksa nama koleksi pada Diagnostik Sinkronisasi.

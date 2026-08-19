@@ -50,12 +50,16 @@ const nativePluginSource = packageName => `package ${packageName};
 
 import android.Manifest;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.provider.Settings;
+import android.util.Base64;
 
 import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 import androidx.fragment.app.FragmentActivity;
 
 import com.getcapacitor.JSObject;
@@ -67,6 +71,13 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.concurrent.Executor;
 
 @CapacitorPlugin(
@@ -94,6 +105,112 @@ ${permissionStateJava()}
     @PermissionCallback
     private void cameraPermissionCallback(PluginCall call) {
         resolveCameraPermission(call);
+    }
+
+    @PluginMethod
+    public void recognizeText(PluginCall call) {
+        String dataUrl = call.getString("dataUrl", "");
+        if (dataUrl == null || dataUrl.isEmpty()) {
+            call.reject("Gambar belum tersedia.");
+            return;
+        }
+        try {
+            int comma = dataUrl.indexOf(',');
+            String encoded = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
+            byte[] bytes = Base64.decode(encoded, Base64.DEFAULT);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            if (bitmap == null) {
+                call.reject("Gambar tidak dapat dibaca.");
+                return;
+            }
+            InputImage image = InputImage.fromBitmap(bitmap, 0);
+            TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            recognizer.process(image)
+                .addOnSuccessListener(text -> {
+                    JSObject result = new JSObject();
+                    result.put("success", true);
+                    result.put("status", "native-mlkit");
+                    result.put("text", text.getText());
+                    call.resolve(result);
+                    recognizer.close();
+                    bitmap.recycle();
+                })
+                .addOnFailureListener(error -> {
+                    JSObject result = new JSObject();
+                    result.put("success", false);
+                    result.put("status", "error");
+                    result.put("text", "");
+                    result.put("error", error.getMessage());
+                    call.resolve(result);
+                    recognizer.close();
+                    bitmap.recycle();
+                });
+        } catch (Exception exception) {
+            call.reject("OCR produk gagal: " + exception.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void sharePdf(PluginCall call) {
+        String filename = call.getString("filename", "Laporan-Bumi-Makmur.pdf");
+        String base64 = call.getString("base64", "");
+        String title = call.getString("title", "Bagikan PDF");
+        String text = call.getString("text", "");
+        Boolean preferWhatsApp = call.getBoolean("preferWhatsApp", false);
+        if (base64 == null || base64.isEmpty()) {
+            call.reject("Data PDF kosong.");
+            return;
+        }
+        try {
+            String safeName = filename.replaceAll("[^A-Za-z0-9._-]", "-");
+            File shareDir = new File(getContext().getCacheDir(), "bm-share");
+            if (!shareDir.exists()) shareDir.mkdirs();
+            File output = new File(shareDir, safeName.endsWith(".pdf") ? safeName : safeName + ".pdf");
+            byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+            try (FileOutputStream stream = new FileOutputStream(output)) {
+                stream.write(bytes);
+                stream.flush();
+            }
+            Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", output);
+            Intent share = new Intent(Intent.ACTION_SEND);
+            share.setType("application/pdf");
+            share.putExtra(Intent.EXTRA_STREAM, uri);
+            if (text != null && !text.isEmpty()) share.putExtra(Intent.EXTRA_TEXT, text);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            boolean opened = false;
+            String openedPackage = "";
+            if (Boolean.TRUE.equals(preferWhatsApp)) {
+                String[] whatsappPackages = { "com.whatsapp", "com.whatsapp.w4b" };
+                for (String packageName : whatsappPackages) {
+                    try {
+                        Intent targeted = new Intent(share);
+                        targeted.setPackage(packageName);
+                        getContext().startActivity(targeted);
+                        opened = true;
+                        openedPackage = packageName;
+                        break;
+                    } catch (Exception ignored) {
+                        // WhatsApp / WhatsApp Business mungkin tidak terpasang. Fallback ke chooser sistem.
+                    }
+                }
+            }
+            if (!opened) {
+                Intent chooser = Intent.createChooser(share, title);
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(chooser);
+            }
+            JSObject result = new JSObject();
+            result.put("shared", true);
+            result.put("status", opened ? "whatsapp-opened" : "chooser-opened");
+            result.put("package", openedPackage);
+            call.resolve(result);
+        } catch (Exception exception) {
+            JSObject result = new JSObject();
+            result.put("shared", false);
+            result.put("status", "error");
+            result.put("error", exception.getMessage());
+            call.resolve(result);
+        }
     }
 
     @PluginMethod
@@ -226,6 +343,14 @@ for (const entry of manifestEntries) {
     manifest = manifest.replace(/<manifest([^>]*)>/, `<manifest$1>\n    ${entry}`);
   }
 }
+if (!manifest.includes('.fileprovider')) {
+  const provider = `
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="\${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>`;
+  manifest = manifest.replace(/<\/application>/, `${provider}
+    </application>`);
+}
 await writeFile(manifestPath, manifest);
 
 let appGradle = await read(appGradlePath);
@@ -233,6 +358,9 @@ appGradle = appGradle.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`)
 appGradle = appGradle.replace(/versionName\s+["'][^"']+["']/, `versionName "${versionName}"`);
 if (!appGradle.includes('androidx.biometric:biometric')) {
   appGradle = appGradle.replace(/dependencies\s*\{/, 'dependencies {\n    implementation "androidx.biometric:biometric:1.1.0"');
+}
+if (!appGradle.includes('com.google.mlkit:text-recognition')) {
+  appGradle = appGradle.replace(/dependencies\s*\{/, 'dependencies {\n    implementation "com.google.mlkit:text-recognition:16.0.1"');
 }
 if (!appGradle.includes("apply from: 'signing.gradle'")) {
   appGradle += "\napply from: 'signing.gradle'\n";
@@ -295,6 +423,14 @@ await writeFile(pluginPath, nativePluginSource(packageName));
 // Terapkan identitas BM premium ke launcher icon dan splash Android.
 const publicIconDir = path.join(rootDir, 'public', 'icons');
 const resourceDir = path.join(androidDir, 'app', 'src', 'main', 'res');
+const filePathsDir = path.join(resourceDir, 'xml');
+await mkdir(filePathsDir, { recursive: true });
+await writeFile(path.join(filePathsDir, 'file_paths.xml'), `<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="bm_share" path="bm-share/" />
+</paths>
+`);
+
 const launcherSizes = {
   'mipmap-mdpi': 48,
   'mipmap-hdpi': 72,
@@ -320,4 +456,4 @@ for (const folder of ['drawable', 'drawable-land']) {
   );
 }
 
-console.log(`Android BM icon, splash, camera permission, biometric plugin, release signing, and version ${versionName} (${versionCode}) prepared.`);
+console.log(`Android BM icon, splash, camera permission, ML Kit OCR, PDF share, biometric plugin, release signing, and version ${versionName} (${versionCode}) prepared.`);

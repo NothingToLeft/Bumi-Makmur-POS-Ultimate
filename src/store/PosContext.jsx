@@ -40,6 +40,7 @@ import {
 import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
 import { dataUrlByteLength } from '../utils/assetProcessing.js';
 import { normalizeDbShape } from '../utils/dbShape.js';
+import { buildClosingSummary } from '../services/dailyClosingReport.js';
 import { buildProductLifecycleSummary } from '../utils/productLifecycle.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
 import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, classifySyncError, summarizePendingMutations } from '../utils/syncDiagnostics.js';
@@ -1686,6 +1687,17 @@ export function PosProvider({ children }) {
     }, 0);
     shift.endAt = nowISO(); shift.actualEndingCash = money(actualEndingCash); shift.expectedEndingCash = expected;
     shift.difference = shift.actualEndingCash - expected; shift.status = 'CLOSED'; shift.endNotes = notes || '';
+    const activeBranch = next.branches.find(item => item.id === shift.branchId) || {};
+    shift.closingSummary = buildClosingSummary({
+      shift,
+      sales: next.sales,
+      refunds: next.refunds,
+      expenses: next.expenses,
+      receivables: next.receivables,
+      products: next.products,
+      branch: activeBranch,
+      configs: next.configs
+    });
     return shift;
   });
 
@@ -1766,6 +1778,19 @@ export function PosProvider({ children }) {
       if (itemDiscount > price * qty) throw new Error(`Diskon item ${item.name || 'item'} melebihi subtotal.`);
       return { ...item, qty, price, itemDiscount, netUnitPrice: Math.max(0, price - itemDiscount / qty) };
     });
+    // Snapshot HPP per baris saat transaksi terjadi. Laporan historis tidak boleh berubah
+    // ketika harga modal produk diperbarui oleh pembelian berikutnya.
+    for (const item of normalizedItems) {
+      const lineStockRows = resolveProductStockRows(next, item);
+      const costTotal = Math.round(lineStockRows.reduce((sum, row) => sum + Math.max(0, Number(row.product?.modalPrice || 0)) * Math.max(0, Number(row.qty || 0)), 0));
+      item.costTotal = costTotal;
+      item.costPerUnit = item.qty > 0 ? costTotal / item.qty : 0;
+      if (lineStockRows.length === 1) {
+        item.modalPrice = Math.max(0, Number(lineStockRows[0].product?.modalPrice || 0));
+        item.baseModalPrice = item.modalPrice;
+      }
+    }
+
     const usedSerialIds = new Set();
     for (const item of normalizedItems) {
       const product = next.products.find(row => row.id === item.productId && row.branchId === branchId);
@@ -1785,7 +1810,7 @@ export function PosProvider({ children }) {
     }
 
     const rawStockRows = normalizedItems.flatMap(item => resolveProductStockRows(next, item));
-    const estimatedCost = Math.round(rawStockRows.reduce((sum, row) => sum + Math.max(0, Number(row.product?.modalPrice || 0)) * Math.max(0, Number(row.qty || 0)), 0));
+    const estimatedCost = Math.round(normalizedItems.reduce((sum, item) => sum + Math.max(0, Number(item.costTotal || 0)), 0));
     const belowCostItems = normalizedItems.filter(item => {
       const lineStockRows = resolveProductStockRows(next, item);
       const lineCost = lineStockRows.reduce((sum, row) => sum + Math.max(0, Number(row.product?.modalPrice || 0)) * Math.max(0, Number(row.qty || 0)), 0);

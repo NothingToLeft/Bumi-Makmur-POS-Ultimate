@@ -77,12 +77,12 @@ test('Produk Induk + Varian boleh dimulai dari satu SKU dan tidak memaksakan pre
   assert.doesNotMatch(products, /Produk varian minimal memiliki dua varian/);
 });
 
-test('release v5.8.1 tercatat di versi aplikasi, service worker, dan release notes in-app', async () => {
+test('hotfix v5.8.1 tetap tercatat setelah upgrade v6', async () => {
   const [defaults, sw, settings, pkg] = await Promise.all([
     read('src/data/defaults.js'), read('public/sw.js'), read('src/screens/DeviceSettingsScreens.jsx'), read('package.json')
   ]);
-  assert.match(defaults, /APP_VERSION\s*=\s*'5\.8\.1'/);
-  assert.match(sw, /freesync-v5\.8\.1/);
+  assert.match(defaults, /APP_VERSION\s*=\s*'6\.0\.0'/);
+  assert.match(sw, /freesync-v6\.0\.0/);
   assert.match(settings, /Numeric Input & Variant Pricing Stability v5\.8\.1/);
-  assert.equal(JSON.parse(pkg).version, '5.8.1');
+  assert.equal(JSON.parse(pkg).version, '6.0.0');
 });

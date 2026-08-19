@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Gauge, FileText, ShieldCheck
 } from 'lucide-react';
 
-export const APP_VERSION = '5.8.1';
+export const APP_VERSION = '6.0.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -158,6 +158,7 @@ export const createSeedDb = () => ({
     receiptLogo: '/logo-bm.svg', receiptShowLogo: true, receiptShowCustomer: true, receiptShowCashier: true,
     receiptShowPayment: true, receiptShowStorePhone: true, receiptPaperWidth: 80,
     whatsappCountryCode: '62', whatsappReceiptEnabled: true,
+    closingReportEnabled: true, closingAutoSharePrompt: true,
     qrisMerchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.',
     paymentMethods: [
       { id: 'cash', name: 'Tunai', type: 'cash', brand: 'cash', active: true },

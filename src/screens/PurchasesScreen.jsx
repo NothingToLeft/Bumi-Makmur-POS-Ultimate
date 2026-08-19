@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ClipboardList, History, PackageCheck, Plus, ReceiptText, Trash2, Truck, Undo2 } from 'lucide-react';
+import { ClipboardList, History, PackageCheck, Plus, ReceiptText, Trash2, Truck, Undo2, WandSparkles } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { escapeHtml, formatRp, generateId, localDateKey, printHtmlDocument } from '../utils/helpers.js';
 import {
@@ -8,6 +8,7 @@ import {
 } from '../utils/fractionalUnits.js';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput, NumberInput, PageHeader, SearchBox, Select, StatusBadge, Textarea } from '../components/ui.jsx';
 import ProductPicker from '../components/ProductPicker.jsx';
+import AIProductCaptureModal from '../components/AIProductCaptureModal.jsx';
 
 const PO_STATUSES = ['DRAFT', 'ORDERED', 'PARTIAL', 'RECEIVED', 'CANCELLED'];
 
@@ -49,7 +50,7 @@ export default function PurchasesScreen() {
     </div>
     {poOpen && <PurchaseOrderForm products={scoped.products} suppliers={scoped.suppliers} onClose={() => setPoOpen(false)} onSave={data => { try { savePurchaseOrder(data); setPoOpen(false); } catch (error) { alert(error.message); } }}/>} 
     {editingPo && <PurchaseOrderForm value={editingPo} products={scoped.products} suppliers={scoped.suppliers} onClose={() => setEditingPo(null)} onSave={data => { try { savePurchaseOrder(data); setEditingPo(null); setSelectedPo(null); } catch (error) { alert(error.message); } }}/>} 
-    {directOpen && <DirectPurchaseForm products={scoped.products} suppliers={scoped.suppliers} onClose={() => setDirectOpen(false)} onSave={data => { try { savePurchase({ ...data, status: 'RECEIVED' }); setDirectOpen(false); } catch (error) { alert(error.message); } }}/>} 
+    {directOpen && <DirectPurchaseForm products={scoped.products} suppliers={scoped.suppliers} categories={db.categories || []} onClose={() => setDirectOpen(false)} onSave={data => { try { savePurchase({ ...data, status: 'RECEIVED' }); setDirectOpen(false); } catch (error) { alert(error.message); } }}/>} 
     {selectedPo && <PurchaseOrderDetail order={selectedPo} configs={db.configs} onClose={() => setSelectedPo(null)} onEdit={order => setEditingPo(order)} onSaveOrder={payload => { try { savePurchaseOrder(payload); setSelectedPo(null); } catch (error) { alert(error.message); } }} onReceive={payload => { try { receivePurchaseOrder(payload); setSelectedPo(null); } catch (error) { alert(error.message); } }}/>} 
     {selectedPurchase && <PurchaseDetail purchase={selectedPurchase} serialNumbers={scoped.serialNumbers || []} configs={db.configs} onClose={() => setSelectedPurchase(null)} onReturn={data => { try { returnPurchase(data); setSelectedPurchase(null); } catch (error) { alert(error.message); } }}/>} 
   </div>;
@@ -220,17 +221,31 @@ function PurchaseOrderForm({ value = {}, products, suppliers, onClose, onSave })
   return <Modal title={value.id ? 'Edit Draft Purchase Order' : 'Buat Purchase Order'} onClose={onClose} size="xl" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave({ ...value, orderNo, supplierId, supplierName: supplier?.name || value.supplierName || '', items, expectedDate, notes, status })} disabled={!supplierId || !items.length}>Simpan PO</Button></>}><div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] gap-4"><div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Nomor PO"><Input value={orderNo} onChange={e => setOrderNo(e.target.value)}/></Field><Field label="Pemasok"><Select value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">Pilih pemasok</option>{suppliers.filter(row => row.active !== false).map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</Select></Field><Field label="Estimasi Tiba"><Input type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)}/></Field><Field label="Status"><Select value={status} onChange={e => setStatus(e.target.value)}><option>DRAFT</option><option>ORDERED</option></Select></Field></div><PurchaseLinesEditor products={products} items={items} setItems={setItems}/></div><div className="space-y-4 purchase-summary-column"><Card className="p-4"><p className="text-xs text-gray-500">Estimasi Nilai PO</p><p className="font-black text-2xl text-emerald-700">{formatRp(subtotal)}</p></Card><Field label="Catatan"><Textarea value={notes} onChange={e => setNotes(e.target.value)}/></Field></div></div></Modal>;
 }
 
-function DirectPurchaseForm({ products, suppliers, onClose, onSave }) {
+function DirectPurchaseForm({ products, suppliers, categories = [], onClose, onSave }) {
   const [invoiceNo, setInvoiceNo] = useState(generateId('BUY'));
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || '');
   const [items, setItems] = useState([]);
+  const [aiReceivingOpen, setAiReceivingOpen] = useState(false);
   const [paid, setPaid] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('Tempo');
   const [dueDate, setDueDate] = useState(() => { const d = new Date(); d.setDate(d.getDate() + 30); return localDateKey(d); });
   const [notes, setNotes] = useState('');
   const subtotal = items.reduce((sum, row) => sum + Number(row.qty || 0) * Number(row.price || 0) - Number(row.discount || 0), 0);
   const supplier = suppliers.find(row => row.id === supplierId);
-  return <Modal title="Terima Barang Langsung" onClose={onClose} size="xl" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave({ invoiceNo, supplierId, supplierName: supplier?.name || '', items, paid, paymentMethod, dueDate, notes })} disabled={!supplierId || !items.length}>Terima & Tambah Stok</Button></>}><div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] gap-4"><div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Nomor Faktur"><Input value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)}/></Field><Field label="Pemasok"><Select value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">Pilih pemasok</option>{suppliers.filter(row => row.active !== false).map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</Select></Field></div><PurchaseLinesEditor products={products} items={items} setItems={setItems} captureSerials/></div><div className="space-y-4 purchase-summary-column"><Card className="p-4"><p className="text-xs text-gray-500">Total</p><p className="font-black text-2xl text-emerald-700">{formatRp(subtotal)}</p></Card><Field label="Dibayar"><MoneyInput max={subtotal} value={paid} onValueChange={setPaid}/></Field><Field label="Metode"><Select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Tempo</option><option>Tunai</option><option>Transfer</option></Select></Field>{Number(paid) < subtotal && <Field label="Jatuh Tempo"><Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}/></Field>}<Field label="Catatan"><Textarea value={notes} onChange={e => setNotes(e.target.value)}/></Field></div></div></Modal>;
+  const applyAiReceiving = ({ product, unit, qty, purchasePrice }) => {
+    const factor = conversionFactor(product, unit);
+    const safeStep = quantityStepFor(product, unit);
+    const amount = normalizeQuantity(qty, { allowFractional: safeStep < 1, step: safeStep, min: safeStep });
+    setItems(previous => [...previous, {
+      id: generateId('PITEM'), productId: product.id, name: product.name, qty: amount, unit, factor,
+      baseQty: toBaseQuantity(product, amount, unit), baseUnit: product.baseUnit, quantityStep: safeStep,
+      allowFractional: safeStep < 1, price: Math.max(0, Number(purchasePrice || 0)),
+      baseUnitCost: baseUnitCost(purchasePrice, factor), discount: 0, receivedQty: 0, receivedBaseQty: 0,
+      serialTracking: product.serialTracking === true, warrantyMonths: Number(product.warrantyMonths || 0), serials: ''
+    }]);
+    setAiReceivingOpen(false);
+  };
+  return <Modal title="Terima Barang Langsung" onClose={onClose} size="xl" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={() => onSave({ invoiceNo, supplierId, supplierName: supplier?.name || '', items, paid, paymentMethod, dueDate, notes })} disabled={!supplierId || !items.length}>Terima & Tambah Stok</Button></>}><div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] gap-4"><div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Nomor Faktur"><Input value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)}/></Field><Field label="Pemasok"><Select value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">Pilih pemasok</option>{suppliers.filter(row => row.active !== false).map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</Select></Field></div><Card className="p-4 border-violet-200 bg-violet-50/60"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p className="font-black text-violet-950">Smart Receiving v6</p><p className="text-xs text-violet-700 mt-1">Foto barang masuk, cocokkan barcode/model ke katalog, lalu isi jumlah dan harga beli tanpa mencari barang manual.</p></div><Button variant="secondary" onClick={() => setAiReceivingOpen(true)}><WandSparkles size={17}/> Foto Barang Masuk</Button></div></Card><PurchaseLinesEditor products={products} items={items} setItems={setItems} captureSerials/></div><div className="space-y-4 purchase-summary-column"><Card className="p-4"><p className="text-xs text-gray-500">Total</p><p className="font-black text-2xl text-emerald-700">{formatRp(subtotal)}</p></Card><Field label="Dibayar"><MoneyInput max={subtotal} value={paid} onValueChange={setPaid}/></Field><Field label="Metode"><Select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Tempo</option><option>Tunai</option><option>Transfer</option></Select></Field>{Number(paid) < subtotal && <Field label="Jatuh Tempo"><Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}/></Field>}<Field label="Catatan"><Textarea value={notes} onChange={e => setNotes(e.target.value)}/></Field></div></div>{aiReceivingOpen && <AIProductCaptureModal mode="receive" products={products} categories={categories} onClose={() => setAiReceivingOpen(false)} onApply={applyAiReceiving}/>}</Modal>;
 }
 
 function PurchaseOrderDetail({ order, configs, onClose, onEdit, onSaveOrder, onReceive }) {
