@@ -22,6 +22,84 @@ export function Field({ label, hint, children, className = '' }) {
 
 export function Input(props) { return <input {...props} className={`field-input ${props.className || ''}`} />; }
 
+const numericDraftValue = (value, zeroAsEmpty = false) => {
+  if (value === '' || value === null || value === undefined) return '';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  if (zeroAsEmpty && number === 0) return '';
+  return String(value);
+};
+
+export function NumberInput({
+  value, onChange, onValueChange, onBlur, onFocus, className = '', min, max,
+  allowNegative, allowEmpty = true, integer = false, zeroAsEmpty = false, inputMode = 'decimal', ...props
+}) {
+  const [focused, setFocused] = React.useState(false);
+  const [draft, setDraft] = React.useState(() => numericDraftValue(value, zeroAsEmpty));
+  const permitsNegative = allowNegative ?? (min !== undefined && Number(min) < 0);
+
+  React.useEffect(() => {
+    if (!focused) setDraft(numericDraftValue(value, zeroAsEmpty));
+  }, [value, focused, zeroAsEmpty]);
+
+  const parseDraft = raw => {
+    const normalized = String(raw ?? '').replace(',', '.');
+    if (!normalized || normalized === '.' || normalized === '-' || normalized === '-.') return '';
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : '';
+  };
+
+  const handleChange = event => {
+    const raw = event.target.value;
+    const pattern = permitsNegative ? /^-?\d*(?:[.,]\d*)?$/ : /^\d*(?:[.,]\d*)?$/;
+    if (!pattern.test(raw)) return;
+    setDraft(raw);
+    onChange?.(event);
+    const parsed = parseDraft(raw);
+    if (parsed === '') {
+      if (allowEmpty) onValueChange?.('');
+      return;
+    }
+    onValueChange?.(integer ? Math.trunc(parsed) : parsed);
+  };
+
+  const handleBlur = event => {
+    setFocused(false);
+    const parsed = parseDraft(draft);
+    if (parsed === '') {
+      if (!allowEmpty) {
+        const fallback = Number.isFinite(Number(min)) ? Number(min) : 0;
+        setDraft(String(fallback));
+        onValueChange?.(fallback);
+      } else {
+        setDraft('');
+        onValueChange?.('');
+      }
+      onBlur?.(event);
+      return;
+    }
+    let committed = integer ? Math.trunc(parsed) : parsed;
+    if (Number.isFinite(Number(min))) committed = Math.max(Number(min), committed);
+    if (Number.isFinite(Number(max))) committed = Math.min(Number(max), committed);
+    setDraft(zeroAsEmpty && committed === 0 ? '' : String(committed));
+    onValueChange?.(committed);
+    onBlur?.(event);
+  };
+
+  return <input
+    {...props}
+    type="text"
+    inputMode={inputMode}
+    value={draft}
+    onChange={handleChange}
+    onFocus={event => { setFocused(true); onFocus?.(event); }}
+    onBlur={handleBlur}
+    aria-valuemin={min}
+    aria-valuemax={max}
+    className={`field-input tabular-nums ${className}`}
+  />;
+}
+
 export function MoneyInput({ value, onValueChange, className = '', max = Number.MAX_SAFE_INTEGER, ...props }) {
   const displayValue = formatMoneyInput(value);
   const handleChange = event => {

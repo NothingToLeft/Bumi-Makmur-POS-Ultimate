@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v5.8.0
+# Bumi Makmur POS FreeSync v5.8.1
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.8.0 adalah Business Suite untuk operasional toko listrik/material: Smart Restock, PO dengan penerimaan parsial, riwayat harga pemasok, quotation, serial & garansi, stock opname scanner, inventory aging, proteksi harga modal, serta perapihan navigasi; Smart Barcode Scanner dan seluruh fitur v5.7 tetap dipertahankan. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rilis v5.8.1 adalah hotfix stabilitas input angka di atas Business Suite v5.8.0 untuk operasional toko listrik/material: Smart Restock, PO dengan penerimaan parsial, riwayat harga pemasok, quotation, serial & garansi, stock opname scanner, inventory aging, proteksi harga modal, serta perapihan navigasi; Smart Barcode Scanner dan seluruh fitur v5.7 tetap dipertahankan. Seluruh fitur Produk Induk + Varian, shared barcode, SKU otomatis, harga pcs/pack/dus/roll, penjualan kabel pecahan, kategori dinamis, Store Manager operasional, dan lifecycle produk aman tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -10,6 +10,14 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. Rili
 - **Cloud:** Firebase Authentication + Firestore pada Spark/free tier.
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
+
+## Perbaikan utama v5.8.1
+
+- Markup Eceran pada varian dapat diketik/dihapus walaupun harga modal masih 0.
+- Markup retail/grosir/proyek disimpan per varian dan tetap sinkron dengan harga jual.
+- Input angka controlled yang berisiko terkunci diperbaiki pada produk, pajak/service, loyalty, split bill, PO receiving, garansi, bundle, dan pelanggan.
+- Tidak ada perubahan skema cloud; rules v5.8.0 tetap kompatibel.
+- Seluruh fitur Business Suite v5.8.0 tetap ada.
 
 ## Fitur utama v5.8.0
 
@@ -181,13 +189,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v5.8.0.
+2. Ekstrak ZIP v5.8.1.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v5.8.0 Business Suite and Smart Inventory
+Bumi Makmur POS v5.8.1 Numeric Input and Variant Pricing Stability
 ```
 
 6. Klik **Push origin**.
@@ -198,7 +206,7 @@ Bumi Makmur POS v5.8.0 Business Suite and Smart Inventory
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.8.0
+→ Build Bumi Makmur POS v5.8.1
 → test-only
 ```
 
@@ -212,7 +220,7 @@ v5.8.0 **menambah koleksi dan izin Firestore** untuk quotation, riwayat harga pe
 
 ```text
 Actions
-→ Build Bumi Makmur POS v5.8.0
+→ Build Bumi Makmur POS v5.8.1
 → android-release
 ```
 
@@ -222,11 +230,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v5.8.0
+→ Build Bumi Makmur POS Desktop v5.8.1
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.8.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.8.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -243,7 +251,7 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v5.8.0
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v5.8.0
+## Release acceptance v5.8.1
 
 Full-pass source audit final pada 19 Agustus 2026 menghasilkan:
 
@@ -263,4 +271,4 @@ Acceptance flow produksi yang disarankan setelah push:
 5. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
 6. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v5.8.0.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.
+Lihat `QA-REPORT-Bumi-Makmur-POS-v5.8.1.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.

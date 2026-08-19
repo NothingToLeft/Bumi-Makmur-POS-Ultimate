@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "5.8.0",
+  "version": "5.8.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -47,7 +47,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v5.8.0 Business Suite: Smart Restock, Purchase Order dengan penerimaan parsial, riwayat harga pemasok, quotation, serial & garansi, stock opname scanner, multi-unit/varian/bundle, inventory aging, piutang, approval PIN, dan FreeSync lintas Android/Web/Windows.",
+  "description": "Bumi Makmur POS v5.8.1 Numeric Input & Variant Pricing Stability: Smart Restock, Purchase Order dengan penerimaan parsial, riwayat harga pemasok, quotation, serial & garansi, stock opname scanner, multi-unit/varian/bundle, inventory aging, piutang, approval PIN, dan FreeSync lintas Android/Web/Windows.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

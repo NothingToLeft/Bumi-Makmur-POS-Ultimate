@@ -48,3 +48,8 @@ File `_redirects` dan `_headers` sudah disertakan agar route nota online, SPA, s
 - **Netlify**: `netlify.toml` disertakan; build `npm run build`, publish `dist`. Gunakan sebagai cadangan karena paket gratis memakai credit dan project dapat berhenti sementara saat kuota habis.
 - **Firebase Hosting**: dapat dipakai pada Spark, tetapi kuota transfer gratis lebih sempit daripada Cloudflare Pages.
 - **Vercel Hobby tidak dipilih** untuk POS toko karena paket Hobby ditujukan untuk penggunaan personal/non-komersial.
+
+
+## Custom domain produksi
+
+Domain utama produksi saat ini adalah `https://bumi-makmur.my.id`. Setelah custom domain Cloudflare Pages berstatus Active, gunakan URL ini untuk `VITE_PUBLIC_APP_URL` dan tambahkan `bumi-makmur.my.id` pada Firebase Authentication → Authorized domains. Alamat `*.pages.dev` tetap dapat dipertahankan sebagai fallback/redirect.

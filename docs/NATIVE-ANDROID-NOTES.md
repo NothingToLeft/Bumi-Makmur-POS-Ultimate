@@ -1,7 +1,7 @@
-# Native Android Notes v5.8.0
+# Native Android Notes v5.8.1
 
 - Package ID: `app.bumimakmur.pos`
-- Version name: `5.8.0`
+- Version name: `5.8.1`
 - Tetap gunakan **keystore rilis yang sama** dengan versi produksi sebelumnya.
 - Instal APK update langsung di atas versi lama; jangan uninstall jika ingin mempertahankan cache/perangkat pairing.
 - Kamera digunakan oleh Smart Barcode Scanner, Stock Opname Scanner, Product Picker, dan Tes Scanner.
@@ -9,4 +9,4 @@
 - Produk berserial memerlukan pemilihan serial sebelum checkout.
 - Layout ditargetkan untuk Infinix Note 40 Pro+ dan Huawei MatePad SE 11, portrait/landscape.
 - Fitur tetap dapat berjalan offline setelah perangkat berhasil pairing dan memiliki snapshot lokal.
-- Build release: GitHub Actions `Build Bumi Makmur POS v5.8.0` → `android-release`.
+- Build release: GitHub Actions `Build Bumi Makmur POS v5.8.1` → `android-release`.

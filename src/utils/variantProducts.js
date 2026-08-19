@@ -124,6 +124,11 @@ export function buildVariantGroupDraft(children = []) {
       rack: child.rack || '-',
       modalPrice: Number(child.modalPrice || 0),
       prices: { retail: Number(child.prices?.retail || 0), wholesale: Number(child.prices?.wholesale || 0), project: Number(child.prices?.project || 0) },
+      markups: {
+        retail: Number(child.markups?.retail ?? 0),
+        wholesale: Number(child.markups?.wholesale ?? 0),
+        project: Number(child.markups?.project ?? 0)
+      },
       active: child.active !== false,
       available: child.available !== false,
       favorite: Boolean(child.favorite),

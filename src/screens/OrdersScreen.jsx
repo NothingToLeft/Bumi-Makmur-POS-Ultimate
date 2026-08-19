@@ -3,7 +3,7 @@ import { ShoppingBag, Plus, ArrowRight, Trash2 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { formatRp, generateId } from '../utils/helpers.js';
 import { conversionFactor, formatQuantity, normalizeQuantity, normalizeQuantityStep, priceForSaleUnit, saleUnitOptions, toBaseQuantity } from '../utils/fractionalUnits.js';
-import { Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, StatusBadge, Textarea } from '../components/ui.jsx';
+import { Button, Card, EmptyState, Field, Input, Modal, NumberInput, PageHeader, Select, StatusBadge, Textarea } from '../components/ui.jsx';
 import ProductPicker from '../components/ProductPicker.jsx';
 
 const activeProducts = products => products.filter(product => product.active !== false && product.available !== false);
@@ -102,7 +102,7 @@ function OrderForm({ products, customers, onClose, onSave }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-[minmax(180px,1fr)_120px_100px_auto] gap-3 items-end">
           <ProductPicker products={productsAvailable} value={productId} onChange={id => chooseProduct(id)} label="Barang" className="sm:col-span-2 2xl:col-span-1"/>
           <Field label="Satuan"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && productUnits(selectedProduct).map(option => <option key={option.unit} value={option.unit}>{option.unit}{option.factor !== 1 ? ` = ${formatQuantity(option.factor)} ${selectedProduct.baseUnit}` : ''} · {formatRp(option.price)}</option>)}</Select></Field>
-          <Field label="Jumlah"><Input type="number" inputMode="decimal" min={step} step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: step < 1, step, min: step }))}/></Field>
+          <Field label="Jumlah"><NumberInput inputMode="decimal" min={step} step={step} value={qty} onValueChange={value => setQty(value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: step < 1, step, min: step }))}/></Field>
           <Button onClick={add} className="sm:col-span-2 2xl:col-span-1 w-full 2xl:w-auto"><Plus size={17}/> Tambah</Button>
         </div>
         {selectedProduct && <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold text-blue-700">{formatQuantity(qty)} {unit} = {formatQuantity(toBaseQuantity(selectedProduct, qty, unit))} {selectedProduct.baseUnit}. Harga: {formatRp(priceForSaleUnit(selectedProduct, unit, 'retail'))} per {unit}.</div>}

@@ -34,6 +34,6 @@ test('environment tidak lagi meminta Storage atau Functions', async () => {
   const env = await read('.env.example');
   const pkg = JSON.parse(await read('package.json'));
   assert.doesNotMatch(env, /STORAGE_BUCKET|FUNCTIONS_REGION/);
-  assert.match(env, /pages\.dev/);
+  assert.match(env, /VITE_PUBLIC_APP_URL=https:\/\/bumi-makmur\.my\.id/);
   assert.doesNotMatch(pkg.scripts['firebase:deploy'], /storage|functions|hosting/);
 });

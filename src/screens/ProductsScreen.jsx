@@ -21,7 +21,7 @@ import {
   groupVariantProducts, isVariantChild, variantParentName
 } from '../utils/variantProducts.js';
 import {
-  Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput,
+  Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput, NumberInput,
   PageHeader, SearchBox, Select, SummaryCard, Textarea
 } from '../components/ui.jsx';
 import ProductPicker from '../components/ProductPicker.jsx';
@@ -56,6 +56,18 @@ const blank = {
 const createVariantRow = (parentName = '', variantName = '', products = [], source = {}) => {
   const usedCodes = products.flatMap(item => [item.sku, item.barcode]).filter(Boolean);
   const sku = source.sku || generateVariantSku(parentName, variantName || 'Varian', usedCodes);
+  const modalPrice = Number(source.modalPrice || 0);
+  const prices = {
+    retail: Number(source.prices?.retail || 0),
+    wholesale: Number(source.prices?.wholesale || 0),
+    project: Number(source.prices?.project || 0)
+  };
+  const markups = Object.fromEntries(PRICE_TIERS.map(tier => {
+    const explicit = source.markups?.[tier.id];
+    const derived = calculateMarkupPercent(modalPrice, prices[tier.id]);
+    const fallback = source.id ? derived : DEFAULT_MARKUPS[tier.id];
+    return [tier.id, explicit === '' ? '' : Number(explicit ?? fallback)];
+  }));
   return {
     id: source.id || '',
     variantName: source.variantName || variantName,
@@ -64,8 +76,9 @@ const createVariantRow = (parentName = '', variantName = '', products = [], sour
     stock: Number(source.stock || 0),
     minStock: Number(source.minStock || 0),
     rack: source.rack || '-',
-    modalPrice: Number(source.modalPrice || 0),
-    prices: { retail: Number(source.prices?.retail || 0), wholesale: Number(source.prices?.wholesale || 0), project: Number(source.prices?.project || 0) },
+    modalPrice,
+    prices,
+    markups,
     active: source.active !== false,
     available: source.available !== false,
     favorite: Boolean(source.favorite),
@@ -407,7 +420,7 @@ function PackagingUnitsEditor({ baseUnit, basePrices, rows, onChange, onPreset, 
         return <div key={`${row.unit || 'new'}-${index}`} className="rounded-2xl border border-gray-200 bg-white p-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(120px,.8fr)_minmax(130px,.8fr)_repeat(3,minmax(145px,1fr))_48px] gap-3 items-end">
             <Field label="Nama satuan"><Input value={row.unit || ''} onChange={event => update(index, { unit: event.target.value.toLowerCase() })} placeholder="pack / dus / box / roll"/></Field>
-            <Field label={`Isi dalam ${baseUnit}`}><Input type="number" inputMode="decimal" min="0.001" step="0.001" value={row.factor ?? ''} onChange={event => update(index, { factor: event.target.value })} placeholder="100"/></Field>
+            <Field label={`Isi dalam ${baseUnit}`}><NumberInput inputMode="decimal" min="0.001" step="0.001" value={row.factor ?? ''} onValueChange={value => update(index, { factor: value })} placeholder="100"/></Field>
             <Field label="Harga eceran khusus"><MoneyInput value={row.prices?.retail || 0} onValueChange={value => update(index, { prices: { retail: value } })} placeholder={String(calculatedRetail || 0)}/></Field>
             <Field label="Harga grosir khusus"><MoneyInput value={row.prices?.wholesale || 0} onValueChange={value => update(index, { prices: { wholesale: value } })}/></Field>
             <Field label="Harga proyek khusus"><MoneyInput value={row.prices?.project || 0} onValueChange={value => update(index, { prices: { project: value } })}/></Field>
@@ -571,10 +584,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
           variantName: 'Standar'
         })];
       }
-      return [
-        createVariantRow(form.name, '6W', products),
-        createVariantRow(form.name, '10W', products)
-      ];
+      return [createVariantRow(form.name, 'Varian 1', products)];
     });
   };
 
@@ -636,7 +646,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
   const submitVariantGroup = () => {
     const parentName = form.name.trim();
     if (!parentName) return alert('Nama produk induk wajib diisi.');
-    if (variantRows.length < 2) return alert('Produk varian minimal memiliki dua varian.');
+    if (variantRows.length < 1) return alert('Produk varian minimal memiliki satu varian.');
     const names = new Set();
     const skus = new Set();
     const internalCodes = new Set();
@@ -694,7 +704,8 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
         stock: Number(row.stock || 0),
         minStock: Number(row.minStock || 0),
         modalPrice: Number(row.modalPrice || 0),
-        prices: Object.fromEntries(PRICE_TIERS.map(tier => [tier.id, Number(row.prices?.[tier.id] || 0)]))
+        prices: Object.fromEntries(PRICE_TIERS.map(tier => [tier.id, Number(row.prices?.[tier.id] || 0)])),
+        markups: Object.fromEntries(PRICE_TIERS.map(tier => [tier.id, Math.max(0, Number(row.markups?.[tier.id] || 0))]))
       })),
       deletedVariantIds
     });
@@ -774,8 +785,8 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
           {form.barcode && products.some(item => item.id !== form.id && item.active !== false && String(item.barcode || '') === String(form.barcode || '')) && <p className="text-xs font-bold text-red-600 mt-1">Barcode ini sudah dipakai barang lain.</p>}
         </Field>
         <Field label="Rak/Lokasi"><Input value={form.rack} onChange={event => setForm({ ...form, rack: event.target.value })}/></Field>
-        <Field label={form.id ? 'Stok Saat Ini' : 'Stok Awal'} hint={form.id ? 'Gunakan tab Penyesuaian atau Pembelian untuk mengubah stok agar riwayat tetap tercatat.' : `Masukkan jumlah yang sudah ada dalam satuan ${form.baseUnit}.`}><Input type="number" inputMode="decimal" min="0" step={stockStep} value={form.id ? Number(form.stock || 0) : (form.stock || '')} disabled={Boolean(form.id)} onChange={event => setForm({ ...form, stock: event.target.value })} onBlur={() => setForm(previous => ({ ...previous, stock: normalizeQuantity(previous.stock, { allowFractional: stockStep < 1, step: stockStep, min: 0 }) }))} placeholder="0"/></Field>
-        <Field label="Stok Minimum"><Input type="number" inputMode="decimal" min="0" step={stockStep} value={form.minStock || ''} onChange={event => setForm({ ...form, minStock: event.target.value })} onBlur={() => setForm(previous => ({ ...previous, minStock: normalizeQuantity(previous.minStock, { allowFractional: stockStep < 1, step: stockStep, min: 0 }) }))} placeholder="0"/></Field>
+        <Field label={form.id ? 'Stok Saat Ini' : 'Stok Awal'} hint={form.id ? 'Gunakan tab Penyesuaian atau Pembelian untuk mengubah stok agar riwayat tetap tercatat.' : `Masukkan jumlah yang sudah ada dalam satuan ${form.baseUnit}.`}><NumberInput inputMode="decimal" min="0" step={stockStep} value={form.id ? Number(form.stock || 0) : (form.stock || '')} disabled={Boolean(form.id)} onValueChange={value => setForm({ ...form, stock: value })} onBlur={() => setForm(previous => ({ ...previous, stock: normalizeQuantity(previous.stock, { allowFractional: stockStep < 1, step: stockStep, min: 0 }) }))} placeholder="0"/></Field>
+        <Field label="Stok Minimum"><NumberInput inputMode="decimal" min="0" step={stockStep} value={form.minStock || ''} onValueChange={value => setForm({ ...form, minStock: value })} onBlur={() => setForm(previous => ({ ...previous, minStock: normalizeQuantity(previous.minStock, { allowFractional: stockStep < 1, step: stockStep, min: 0 }) }))} placeholder="0"/></Field>
 
         <Card className="md:col-span-2 p-4 border-blue-200 bg-blue-50/50">
           <div className="flex items-start gap-3"><Ruler className="text-blue-700 shrink-0"/><div><p className="font-black text-gray-800">Penjualan Eceran / Pecahan</p><p className="text-xs text-gray-500 mt-1">Contoh kabel: satuan dasar meter, 1 roll = 50 meter, lalu kasir dapat menjual 2 atau 3,5 meter.</p></div></div>
@@ -799,7 +810,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
               return (
                 <div key={tier.id} className="p-3 bg-white rounded-2xl border border-gray-200">
                   <p className="font-bold text-sm text-gray-800 mb-2">Harga {tier.label}</p>
-                  <Field label="Markup (%)"><div className="relative"><Percent size={17} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/><Input type="number" inputMode="decimal" min="0" max="1000" step="0.1" value={markups[tier.id] || ''} onChange={event => changeMarkup(tier.id, event.target.value)} className="field-input-trailing" placeholder="0"/></div></Field>
+                  <Field label="Markup (%)"><div className="relative"><Percent size={17} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/><NumberInput min={0} max={1000} value={markups[tier.id]} onValueChange={value => changeMarkup(tier.id, value)} zeroAsEmpty className="field-input-trailing" placeholder="0"/></div></Field>
                   <Field label={`Harga/${form.baseUnit}`}><MoneyInput value={form.prices[tier.id]} onValueChange={value => changeSellingPrice(tier.id, value)}/></Field>
                   <p className="text-[11px] text-emerald-700 font-bold mt-2">Untung {formatRp(profit)} per {form.baseUnit}</p>
                   <div className="flex gap-1 mt-2 flex-wrap">{[10, 20, 30, 40, 50].map(value => <button key={value} type="button" onClick={() => changeMarkup(tier.id, value)} className="px-2 py-1 rounded-lg bg-gray-100 text-[10px] font-bold text-gray-600">{value}%</button>)}</div>
@@ -816,7 +827,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
           <p className="field-label">Komponen Paket/Bundle</p>
           <div className="flex gap-2">
             <Select value={bundleId} onChange={event => setBundleId(event.target.value)}><option value="">Pilih barang komponen</option>{products.filter(item => item.id !== form.id && item.active !== false).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select>
-            <Input type="number" className="w-24" min="1" value={bundleQty || ''} onChange={event => setBundleQty(Math.max(1, Number(event.target.value || 1)))}/>
+            <NumberInput className="w-24" min={1} value={bundleQty} allowEmpty={false} integer onValueChange={setBundleQty}/>
             <Button type="button" onClick={() => { if (bundleId) setForm({ ...form, bundleItems: [...form.bundleItems, { productId: bundleId, qty: bundleQty }] }); }}>Tambah</Button>
           </div>
           {form.bundleItems.length > 0 && <div className="mt-2 space-y-2">{form.bundleItems.map((item, index) => { const component = products.find(row => row.id === item.productId); return <div key={`${item.productId}-${index}`} className="flex justify-between p-2 rounded-xl bg-gray-50"><span className="text-sm">{item.qty} × {component?.name || item.productId}</span><button type="button" onClick={() => setForm({ ...form, bundleItems: form.bundleItems.filter((_, itemIndex) => itemIndex !== index) })} className="text-red-600 font-bold">Hapus</button></div>; })}</div>}
@@ -826,7 +837,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
           <div className="flex items-start gap-3"><Barcode className="text-violet-700 shrink-0"/><div><p className="font-black text-gray-800">Serial Number & Garansi</p><p className="text-xs text-gray-500 mt-1">Aktifkan hanya untuk unit yang memang perlu dilacak satu per satu, seperti pompa, stabilizer, alat listrik, inverter, atau produk bergaransi.</p></div></div>
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
             <label className="min-h-[48px] flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={Boolean(form.serialTracking)} onChange={event => setForm({ ...form, serialTracking: event.target.checked, allowFractional: event.target.checked ? false : form.allowFractional, quantityStep: event.target.checked ? 1 : form.quantityStep })}/><span className="font-bold text-sm">Lacak nomor serial per unit</span></label>
-            <Field label="Garansi Default (bulan)" hint="Akan otomatis dipakai saat serial didaftarkan."><Input type="number" min="0" max="120" step="1" disabled={!form.serialTracking} value={form.warrantyMonths || ''} onChange={event => setForm({ ...form, warrantyMonths: Math.max(0, Number(event.target.value || 0)) })} placeholder="12"/></Field>
+            <Field label="Garansi Default (bulan)" hint="Akan otomatis dipakai saat serial didaftarkan."><NumberInput min={0} max={120} disabled={!form.serialTracking} value={form.warrantyMonths} integer zeroAsEmpty onValueChange={value => setForm(previous => ({ ...previous, warrantyMonths: value === '' ? 0 : value }))} placeholder="12"/></Field>
           </div>
         </Card>
 
@@ -904,12 +915,12 @@ function VariantGroupFormModal({
       <Card className="p-4 border-violet-200 bg-violet-50/40">
         <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-end">
           <label className="min-h-[48px] flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={Boolean(form.serialTracking)} onChange={event => setForm(previous => ({ ...previous, serialTracking: event.target.checked, allowFractional: event.target.checked ? false : previous.allowFractional, quantityStep: event.target.checked ? 1 : previous.quantityStep }))}/><div><p className="font-bold text-sm">Lacak serial untuk semua varian</p><p className="text-xs text-gray-500">Serial tetap unik per unit/SKU.</p></div></label>
-          <Field label="Garansi Default (bulan)"><Input type="number" min="0" max="120" step="1" disabled={!form.serialTracking} value={form.warrantyMonths || ''} onChange={event => setForm(previous => ({ ...previous, warrantyMonths: Math.max(0, Number(event.target.value || 0)) }))}/></Field>
+          <Field label="Garansi Default (bulan)"><NumberInput min={0} max={120} disabled={!form.serialTracking} value={form.warrantyMonths} integer zeroAsEmpty onValueChange={value => setForm(previous => ({ ...previous, warrantyMonths: value === '' ? 0 : value }))}/></Field>
         </div>
       </Card>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div><h3 className="font-black text-lg text-gray-900">Daftar Varian</h3><p className="text-sm text-gray-500">Setiap baris adalah SKU nyata dengan stok, HPP, harga jual, dan rak masing-masing.</p></div>
+        <div><h3 className="font-black text-lg text-gray-900">Daftar Varian</h3><p className="text-sm text-gray-500">Setiap baris adalah SKU nyata dengan stok, HPP, harga jual, dan rak masing-masing. Boleh mulai dari satu varian lalu tambahkan warna/ukuran lain saat stoknya benar-benar tersedia.</p></div>
         <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" onClick={applyLedWattPreset}><Layers3 size={17}/> Preset LED 6W–15W</Button><Button type="button" variant="secondary" onClick={regenerateVariantCodes}><WandSparkles size={17}/> Buat Ulang SKU Otomatis</Button><Button type="button" onClick={addVariantRow}><Plus size={17}/> Tambah Varian</Button></div>
       </div>
 
@@ -919,22 +930,39 @@ function VariantGroupFormModal({
           const skuConflict = row.sku && usedCodesOutsideGroup.some(code => String(code).toUpperCase() === String(row.sku).toUpperCase());
           const barcodeConflict = row.internalBarcode && usedCodesOutsideGroup.some(code => String(code).toUpperCase() === String(row.internalBarcode).toUpperCase());
           return <Card key={row.id || `new-${index}`} className="p-4 border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between gap-3 mb-4"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">{index + 1}</div><div><p className="font-black text-gray-900">{row.variantName || `Varian ${index + 1}`}</p><p className="text-xs text-gray-500">{row.existing ? 'Stok lama tetap aman; ubah lewat Pembelian/Penyesuaian.' : 'Varian baru dapat langsung diberi stok awal.'}</p></div></div><button type="button" onClick={() => removeVariantRow(index)} disabled={variantRows.length <= 2} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center disabled:opacity-30" title="Hapus varian"><Trash2 size={17}/></button></div>
+            <div className="flex items-center justify-between gap-3 mb-4"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">{index + 1}</div><div><p className="font-black text-gray-900">{row.variantName || `Varian ${index + 1}`}</p><p className="text-xs text-gray-500">{row.existing ? 'Stok lama tetap aman; ubah lewat Pembelian/Penyesuaian.' : 'Varian baru dapat langsung diberi stok awal.'}</p></div></div><button type="button" onClick={() => removeVariantRow(index)} disabled={variantRows.length <= 1} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center disabled:opacity-30" title="Hapus varian"><Trash2 size={17}/></button></div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
               <Field label="Nama Varian"><Input value={row.variantName} onChange={event => updateVariantRow(index, { variantName: event.target.value })} placeholder="6W / 10W / 12W / Warm White"/></Field>
               <Field label="SKU Otomatis" hint="Boleh diedit, tetapi harus unik."><div className="flex gap-2"><Input value={row.sku} onChange={event => updateVariantRow(index, { sku: event.target.value.toUpperCase() })} className={skuConflict ? 'border-red-400' : ''}/><Button type="button" variant="secondary" onClick={() => navigator.clipboard?.writeText(row.sku)} title="Salin SKU"><Copy size={16}/></Button></div>{skuConflict && <p className="text-xs text-red-600 font-bold mt-1">SKU sudah digunakan produk lain.</p>}</Field>
               <Field label="Barcode Internal / Stiker" hint="Default sama dengan SKU dan dapat dicetak sebagai Code 128."><div className="flex gap-2"><Input value={row.internalBarcode} onChange={event => updateVariantRow(index, { internalBarcode: event.target.value.toUpperCase() })} className={barcodeConflict ? 'border-red-400' : ''}/><Button type="button" variant="secondary" onClick={() => scanVariantBarcode(index)}><ScanLine size={16}/></Button></div>{barcodeConflict && <p className="text-xs text-red-600 font-bold mt-1">Barcode internal sudah digunakan.</p>}</Field>
               <Field label="Rak / Lokasi"><Input value={row.rack} onChange={event => updateVariantRow(index, { rack: event.target.value })}/></Field>
-              <Field label={row.existing ? 'Stok Saat Ini' : 'Stok Awal'}><Input type="number" min="0" step={rowStep} disabled={row.existing} value={row.stock || ''} onChange={event => updateVariantRow(index, { stock: event.target.value })} onBlur={() => updateVariantRow(index, { stock: normalizeQuantity(row.stock, { allowFractional: rowStep < 1, step: rowStep, min: 0 }) })}/></Field>
-              <Field label="Stok Minimum"><Input type="number" min="0" step={rowStep} value={row.minStock || ''} onChange={event => updateVariantRow(index, { minStock: event.target.value })} onBlur={() => updateVariantRow(index, { minStock: normalizeQuantity(row.minStock, { allowFractional: rowStep < 1, step: rowStep, min: 0 }) })}/></Field>
+              <Field label={row.existing ? 'Stok Saat Ini' : 'Stok Awal'}><NumberInput min="0" step={rowStep} disabled={row.existing} value={row.stock || ''} onValueChange={value => updateVariantRow(index, { stock: value })} onBlur={() => updateVariantRow(index, { stock: normalizeQuantity(row.stock, { allowFractional: rowStep < 1, step: rowStep, min: 0 }) })}/></Field>
+              <Field label="Stok Minimum"><NumberInput min="0" step={rowStep} value={row.minStock || ''} onValueChange={value => updateVariantRow(index, { minStock: value })} onBlur={() => updateVariantRow(index, { minStock: normalizeQuantity(row.minStock, { allowFractional: rowStep < 1, step: rowStep, min: 0 }) })}/></Field>
               <Field label={`Harga Modal / ${form.baseUnit}`}><MoneyInput value={row.modalPrice} onValueChange={value => {
-                const currentMarkup = calculateMarkupPercent(row.modalPrice, row.prices.retail);
-                updateVariantRow(index, { modalPrice: value, prices: { ...row.prices, retail: calculateMarkupPrice(value, currentMarkup) } });
+                const nextPrices = Object.fromEntries(PRICE_TIERS.map(tier => [
+                  tier.id, calculateMarkupPrice(value, row.markups?.[tier.id] ?? 0)
+                ]));
+                updateVariantRow(index, { modalPrice: value, prices: nextPrices });
               }}/></Field>
-              <Field label="Markup Eceran (%)"><Input type="number" min="0" max="1000" step="0.1" value={calculateMarkupPercent(row.modalPrice, row.prices.retail) || ''} onChange={event => updateVariantRow(index, { prices: { ...row.prices, retail: calculateMarkupPrice(row.modalPrice, event.target.value) } })}/></Field>
-              <Field label={`Harga Eceran / ${form.baseUnit}`}><MoneyInput value={row.prices.retail} onValueChange={value => updateVariantRow(index, { prices: { ...row.prices, retail: value } })}/></Field>
-              <Field label={`Harga Grosir / ${form.baseUnit}`}><MoneyInput value={row.prices.wholesale} onValueChange={value => updateVariantRow(index, { prices: { ...row.prices, wholesale: value } })}/></Field>
-              <Field label={`Harga Proyek / ${form.baseUnit}`}><MoneyInput value={row.prices.project} onValueChange={value => updateVariantRow(index, { prices: { ...row.prices, project: value } })}/></Field>
+              <Field label="Markup Eceran (%)" hint="Bisa diisi sebelum harga modal. Harga eceran akan dihitung otomatis setelah modal diisi."><NumberInput min={0} max={1000} value={row.markups?.retail ?? ''} zeroAsEmpty onValueChange={value => {
+                const nextMarkup = value === '' ? 0 : value;
+                updateVariantRow(index, {
+                  markups: { ...row.markups, retail: nextMarkup },
+                  prices: { ...row.prices, retail: calculateMarkupPrice(row.modalPrice, nextMarkup) }
+                });
+              }}/></Field>
+              <Field label={`Harga Eceran / ${form.baseUnit}`}><MoneyInput value={row.prices.retail} onValueChange={value => updateVariantRow(index, {
+                prices: { ...row.prices, retail: value },
+                markups: { ...row.markups, retail: calculateMarkupPercent(row.modalPrice, value) }
+              })}/></Field>
+              <Field label={`Harga Grosir / ${form.baseUnit}`}><MoneyInput value={row.prices.wholesale} onValueChange={value => updateVariantRow(index, {
+                prices: { ...row.prices, wholesale: value },
+                markups: { ...row.markups, wholesale: calculateMarkupPercent(row.modalPrice, value) }
+              })}/></Field>
+              <Field label={`Harga Proyek / ${form.baseUnit}`}><MoneyInput value={row.prices.project} onValueChange={value => updateVariantRow(index, {
+                prices: { ...row.prices, project: value },
+                markups: { ...row.markups, project: calculateMarkupPercent(row.modalPrice, value) }
+              })}/></Field>
               <div className="md:col-span-2 flex flex-wrap gap-4 items-center rounded-xl border bg-gray-50 px-3 py-2"><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.available} onChange={event => updateVariantRow(index, { available: event.target.checked })}/> Tersedia di Kasir</label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.favorite} onChange={event => updateVariantRow(index, { favorite: event.target.checked })}/> Favorit</label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.active} onChange={event => updateVariantRow(index, { active: event.target.checked })}/> Aktif</label></div>
             </div>
           </Card>;
@@ -984,7 +1012,7 @@ function AdjustModal({ product, products, onClose, onSelect, onSave }) {
     <div className="space-y-3">
       <ProductPicker products={products} value={product?.id || ''} onChange={(id, selected) => { onSelect(selected || product); setQty(''); }} label="Barang"/>
       <Card className="p-3 bg-blue-50"><p className="text-xs text-blue-700">Stok sistem saat ini</p><p className="text-xl font-black text-blue-900">{formatQuantity(product?.stock)} {product?.baseUnit}</p></Card>
-      <Field label={`Perubahan (${product?.baseUnit})`} hint={`Gunakan tanda + untuk menambah dan - untuk mengurangi. Jumlah dibulatkan ke ${quantityStepLabel(step, product?.baseUnit)}.`}><Input type="number" inputMode="decimal" step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(normalizedQty || '')} placeholder={step === 0.5 ? 'Contoh: 10 atau -1,5' : 'Contoh: 20 atau -2'} autoFocus/></Field>
+      <Field label={`Perubahan (${product?.baseUnit})`} hint={`Gunakan tanda + untuk menambah dan - untuk mengurangi. Jumlah dibulatkan ke ${quantityStepLabel(step, product?.baseUnit)}.`}><NumberInput inputMode="decimal" step={step} allowNegative value={qty} onValueChange={value => setQty(value)} onBlur={() => setQty(normalizedQty || '')} placeholder={step === 0.5 ? 'Contoh: 10 atau -1,5' : 'Contoh: 20 atau -2'} autoFocus/></Field>
       {qty !== '' && Number(qty) !== normalizedQty && <p className="text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded-xl p-3">Jumlah akan disesuaikan menjadi {formatQuantity(normalizedQty)} {product?.baseUnit}.</p>}
       <Field label="Alasan"><Textarea value={reason} onChange={event => setReason(event.target.value)}/></Field>
     </div>
@@ -1042,7 +1070,7 @@ function OpnameModal({ products, onClose, onSave }) {
         return <Card key={item.productId} className={`p-3 ${Math.abs(difference) > 0.000001 ? 'border-orange-200 bg-orange-50/30' : ''}`}>
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_140px_110px_220px] gap-2 items-center">
             <div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Sistem {formatQuantity(item.system)} {item.unit} · {quantityStepLabel(item.step, item.unit)}</p></div>
-            <Input type="number" inputMode="decimal" min="0" step={item.step} value={item.actual} onChange={event => setCounts(previous => previous.map(row => row.productId === item.productId ? { ...row, actual: event.target.value } : row))} onBlur={event => normalizeCount(item.productId, event.target.value)}/>
+            <NumberInput inputMode="decimal" min="0" step={item.step} value={item.actual} onValueChange={value => setCounts(previous => previous.map(row => row.productId === item.productId ? { ...row, actual: value } : row))} onBlur={event => normalizeCount(item.productId, event.target.value)}/>
             <p className={`lg:text-right font-black ${difference === 0 ? 'text-gray-500' : difference > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{difference > 0 ? '+' : ''}{formatQuantity(difference)}</p>
             {Math.abs(difference) > 0.000001 ? <Select value={item.reason} onChange={event => setCounts(previous => previous.map(row => row.productId === item.productId ? { ...row, reason: event.target.value } : row))}><option value="">Pilih alasan selisih...</option>{reasons.map(reason => <option key={reason}>{reason}</option>)}</Select> : <span className="text-xs text-gray-400">Stok sesuai</span>}
           </div>
@@ -1074,7 +1102,7 @@ function TransferModal({ products, branches, activeBranchId, onClose, onSave }) 
     <div className="space-y-3">
       <ProductPicker products={products} value={productId} onChange={id => { setProductId(id); setQty(''); }} label="Barang"/>
       <Field label="Cabang Tujuan"><Select value={destinationBranchId} onChange={event => setDestination(event.target.value)}>{branches.filter(branch => branch.id !== activeBranchId).map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</Select></Field>
-      <Field label={`Jumlah (${product?.baseUnit || 'unit'})`} hint={`${quantityStepLabel(step, product?.baseUnit || 'unit')}. Maksimal ${formatQuantity(maxQty)} ${product?.baseUnit || 'unit'}.`}><Input type="number" inputMode="decimal" min={step} max={maxQty || undefined} step={step} value={qty} onChange={event => setQty(event.target.value)} onBlur={() => setQty(safeQty || '')}/></Field>
+      <Field label={`Jumlah (${product?.baseUnit || 'unit'})`} hint={`${quantityStepLabel(step, product?.baseUnit || 'unit')}. Maksimal ${formatQuantity(maxQty)} ${product?.baseUnit || 'unit'}.`}><NumberInput inputMode="decimal" min={step} max={maxQty || undefined} step={step} value={qty} onValueChange={value => setQty(value)} onBlur={() => setQty(safeQty || '')}/></Field>
       {normalizedQty > maxQty && <p className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">Jumlah melebihi stok tersedia.</p>}
       <Field label="Catatan"><Textarea value={notes} onChange={event => setNotes(event.target.value)}/></Field>
     </div>

@@ -3,7 +3,7 @@ import { ReceiptText, RotateCcw, Ban, Printer, Search, MessageCircle, Share2 } f
 import { usePos } from '../store/PosContext.jsx';
 import { formatRp, printHtmlDocument } from '../utils/helpers.js';
 import { formatQuantity, normalizeQuantity, quantityStepLabel } from '../utils/fractionalUnits.js';
-import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, SearchBox, Select, StatusBadge, Textarea } from '../components/ui.jsx';
+import { Badge, Button, Card, EmptyState, Field, Input, Modal, NumberInput, PageHeader, SearchBox, Select, StatusBadge, Textarea } from '../components/ui.jsx';
 import { buildReceiptPrintHtml, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
 
 export default function TransactionsScreen(){
@@ -69,7 +69,7 @@ function RefundModal({ sale, refunds, serialNumbers = [], voidAll, onClose, onSu
       <div className="space-y-2">{items.map((item, index) => {
         const requiredSerials = item.serialTracking ? Math.max(0, Math.round(Number(item.qty || 0) * Number(item.basePerQty || 1))) : 0;
         return <Card key={item.lineId} className="p-3">
-          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_120px] gap-2 items-center"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Maksimal {formatQuantity(item.maxQty)} {item.unit}</p></div><Input type="number" inputMode="decimal" min="0" max={item.maxQty} step={item.step} disabled={voidAll} value={item.qty} title={item.step < 1 ? quantityStepLabel(item.step, item.unit) : undefined} onChange={event => updateQty(index, event.target.value)}/></div>
+          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_120px] gap-2 items-center"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Maksimal {formatQuantity(item.maxQty)} {item.unit}</p></div><NumberInput inputMode="decimal" min="0" max={item.maxQty} step={item.step} disabled={voidAll} value={item.qty} title={item.step < 1 ? quantityStepLabel(item.step, item.unit) : undefined} onValueChange={value => updateQty(index, value)}/></div>
           {item.serialTracking && Number(item.qty || 0) > 0 && <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3"><p className="text-xs font-black text-violet-900">Serial yang dikembalikan ({(item.serialIds || []).length}/{requiredSerials})</p>{item.serialOptions.length === 0 ? <p className="text-xs text-red-700 mt-2">Tidak ada serial SOLD yang tersedia. Jika serial sedang dalam proses garansi, selesaikan klaim terlebih dahulu.</p> : <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">{item.serialOptions.map(serial => <label key={serial.id} className="flex items-center gap-2 bg-white border rounded-lg p-2 text-xs"><input type="checkbox" checked={(item.serialIds || []).includes(serial.id)} disabled={voidAll} onChange={() => toggleSerial(index, serial.id)}/><span className="font-bold break-all">{serial.serial}</span></label>)}</div>}</div>}
         </Card>;
       })}</div>

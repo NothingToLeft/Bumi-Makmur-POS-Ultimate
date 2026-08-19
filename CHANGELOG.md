@@ -1,5 +1,14 @@
 # Changelog
 
+## v5.8.1 — Numeric Input & Variant Pricing Stability
+
+- Memperbaiki field Markup Eceran varian yang sebelumnya terkunci saat modal masih 0.
+- Menambahkan state markup per varian dan sinkronisasi dua arah markup ↔ harga jual.
+- Menambahkan `NumberInput` reusable untuk controlled numeric input yang aman saat dikosongkan sementara.
+- Memperbaiki pola input angka serupa pada pajak/service, loyalty, split bill, penerimaan PO, garansi, bundle, dan redeem point pelanggan.
+- Menambahkan regression test v5.8.1; tidak ada fitur v5.8.0 yang dihapus dan tidak ada kebutuhan Blaze.
+
+
 ## v5.8.0 — Business Suite & Smart Inventory
 
 - Full-pass upgrade dari v5.7.0: Smart Restock, PO Draft/Ordered/Partial/Received, supplier price history, Stock Opname Scanner, Quotation, Serial & Garansi, inventory/receivable aging, serta PIN tindakan sensitif.
