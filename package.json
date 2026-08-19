@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "6.0.1",
+  "version": "6.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -47,7 +47,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v6.0.1 AI Product Capture & Daily Automation: AI foto produk, OCR lokal Android, Gemini opsional, Smart Receiving, Tutup Harian PDF ke WhatsApp, HPP historis akurat, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, multi-unit/varian/bundle, piutang, approval PIN, dan FreeSync Android/Web/Windows.",
+  "description": "Bumi Makmur POS v6.0.2 Professional Receipt & Cash Change Safety: struk profesional dengan kembalian tunai yang menonjol, AI Product Capture, OCR Android, Gemini opsional, Smart Receiving, Tutup Harian PDF ke WhatsApp, HPP historis, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, multi-unit/varian/bundle, piutang, approval PIN, dan FreeSync Android/Web/Windows.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

@@ -3,6 +3,49 @@ import { formatQuantity } from '../utils/fractionalUnits.js';
 
 export const getReceiptLogo = (configs = {}) => configs.receiptShowLogo === false ? '' : (configs.receiptLogo || '/logo-bm.svg');
 
+
+const normalizePaymentToken = value => String(value || '').trim().toLowerCase();
+
+export const isCashPayment = payment => {
+  const type = normalizePaymentToken(payment?.type);
+  const methodId = normalizePaymentToken(payment?.methodId);
+  const name = normalizePaymentToken(payment?.name);
+  if (type) return type === 'cash';
+  if (methodId) return methodId === 'cash' || methodId === 'tunai';
+  return name === 'cash' || name === 'tunai' || name.startsWith('tunai ');
+};
+
+export const getReceiptPaymentSummary = (sale = {}) => {
+  const payments = (sale.payments || []).map((payment, index) => ({
+    ...payment,
+    id: payment?.id || `payment-${index}`,
+    name: String(payment?.name || payment?.type || 'Pembayaran'),
+    amount: Math.max(0, Number(payment?.amount || 0)),
+    isCash: isCashPayment(payment)
+  }));
+  const total = Math.max(0, Number(sale.total || 0));
+  const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const cashReceived = payments.filter(payment => payment.isCash).reduce((sum, payment) => sum + payment.amount, 0);
+  const storedChange = Math.max(0, Number(sale.change || 0));
+  const derivedChange = cashReceived > 0 ? Math.max(0, totalPaid - total) : 0;
+  const change = Math.min(cashReceived, storedChange > 0 ? storedChange : derivedChange);
+  const cashApplied = Math.max(0, cashReceived - change);
+  return {
+    payments,
+    total,
+    totalPaid,
+    cashReceived,
+    cashApplied,
+    change,
+    hasCash: cashReceived > 0,
+    hasChange: change > 0,
+    remaining: Math.max(0, total - totalPaid),
+    isPaid: totalPaid + 0.000001 >= total
+  };
+};
+
+export const receiptPaymentLabel = payment => isCashPayment(payment) ? 'Tunai diterima' : String(payment?.name || 'Pembayaran');
+
 export const normalizeWhatsappNumber = (value, defaultCountryCode = '62') => {
   const digits = String(value || '').replace(/\D/g, '');
   if (!digits || digits === '0') return '';
@@ -20,7 +63,8 @@ export const buildReceiptText = (sale, configs = {}) => {
     const extra = line.itemDiscount > 0 ? ` | diskon ${formatRp(line.itemDiscount)}` : '';
     return [`*${line.name}*`, `${detail}${extra}`, `= ${formatRp(net)}`];
   });
-  const payments = (sale.payments || []).map(payment => `${payment.name}: ${formatRp(payment.amount)}`);
+  const paymentSummary = getReceiptPaymentSummary(sale);
+  const payments = paymentSummary.payments.map(payment => `${receiptPaymentLabel(payment)}: ${formatRp(payment.amount)}`);
   const lines = [
     `*${configs.companyName || 'BUMI MAKMUR'}*`,
     configs.receiptHeader || 'Nota Pembelian',
@@ -43,7 +87,7 @@ export const buildReceiptText = (sale, configs = {}) => {
     configs.onlineReceiptUrl ? `Nota online: ${configs.onlineReceiptUrl}` : '',
     divider,
     ...payments,
-    sale.change > 0 ? `Kembalian: ${formatRp(sale.change)}` : '',
+    paymentSummary.hasChange ? `*KEMBALIAN: ${formatRp(paymentSummary.change)}*` : '',
     divider,
     configs.receiptMessage || configs.receiptFooter || 'Terima kasih telah berbelanja.',
     configs.receiptWhatsappNote || 'Simpan pesan ini sebagai bukti transaksi.'
@@ -107,17 +151,20 @@ const wrapCanvasText = (context, text, maxWidth) => {
 
 export const createReceiptImageFile = async (sale, configs = {}) => {
   if (typeof document === 'undefined') return null;
+  const paymentSummary = getReceiptPaymentSummary(sale);
   const width = 900;
   const itemHeight = (sale.items || []).reduce((sum, line) => sum + 90 + Math.max(0, Math.ceil(String(line.name || '').length / 34) - 1) * 28, 0);
-  const height = Math.max(1250, 760 + itemHeight + (sale.payments || []).length * 42);
+  const height = Math.max(1320, 790 + itemHeight + paymentSummary.payments.length * 42 + (paymentSummary.hasChange ? 130 : 0));
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext('2d');
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, width, height);
-  context.fillStyle = '#064e3b';
+  context.fillStyle = '#dc2626';
   context.fillRect(0, 0, width, 22);
+  context.fillStyle = '#111827';
+  context.fillRect(0, 22, width, 7);
   let y = 70;
 
   const receiptLogo = getReceiptLogo(configs);
@@ -133,8 +180,8 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
   }
 
   context.textAlign = 'center';
-  context.fillStyle = '#047857';
-  context.font = '700 22px Segoe UI, Arial, sans-serif';
+  context.fillStyle = '#b91c1c';
+  context.font = '800 22px Segoe UI, Arial, sans-serif';
   context.fillText(String(configs.receiptHeader || 'NOTA PEMBELIAN').toUpperCase(), width / 2, y);
   y += 42;
   context.fillStyle = '#111827';
@@ -192,17 +239,27 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
     context.textAlign = 'right'; context.fillText(value, width - 60, y); y += bold ? 48 : 36;
   };
   drawRow('Subtotal', formatRp(sale.subtotal));
-  if (sale.globalDiscount > 0) drawRow('Diskon', `-${formatRp(sale.globalDiscount)}`, false, '#047857');
-  if (sale.promoDiscount > 0) drawRow('Promo', `-${formatRp(sale.promoDiscount)}`, false, '#047857');
+  if (sale.globalDiscount > 0) drawRow('Diskon', `-${formatRp(sale.globalDiscount)}`, false, '#b91c1c');
+  if (sale.promoDiscount > 0) drawRow('Promo', `-${formatRp(sale.promoDiscount)}`, false, '#b91c1c');
   if (sale.loyaltyDiscount > 0) drawRow('Reward Poin', `-${formatRp(sale.loyaltyDiscount)}`, false, '#a16207');
   if (sale.tax > 0) drawRow('Pajak', formatRp(sale.tax));
   if (sale.service > 0) drawRow('Service', formatRp(sale.service));
-  context.fillStyle = '#064e3b'; context.fillRect(45, y - 10, width - 90, 74);
+  context.fillStyle = '#111827'; context.fillRect(45, y - 10, width - 90, 74);
   context.fillStyle = '#ffffff'; context.font = '900 32px Segoe UI, Arial, sans-serif'; context.textAlign = 'left'; context.fillText('TOTAL', 70, y + 38);
   context.textAlign = 'right'; context.fillText(formatRp(sale.total), width - 70, y + 38);
   y += 100;
-  for (const payment of sale.payments || []) drawRow(payment.name, formatRp(payment.amount));
-  if (sale.change > 0) drawRow('Kembalian', formatRp(sale.change), true, '#ea580c');
+  for (const payment of paymentSummary.payments) drawRow(receiptPaymentLabel(payment), formatRp(payment.amount));
+  if (paymentSummary.hasChange) {
+    y += 6;
+    context.fillStyle = '#fff'; context.fillRect(45, y - 12, width - 90, 92);
+    context.strokeStyle = '#dc2626'; context.lineWidth = 3; context.setLineDash([]); context.strokeRect(45, y - 12, width - 90, 92);
+    context.textAlign = 'left'; context.fillStyle = '#991b1b'; context.font = '900 24px Segoe UI, Arial, sans-serif'; context.fillText('KEMBALIAN', 70, y + 24);
+    context.textAlign = 'right'; context.font = '900 36px Segoe UI, Arial, sans-serif'; context.fillText(formatRp(paymentSummary.change), width - 70, y + 28);
+    context.textAlign = 'left'; context.font = '700 18px Segoe UI, Arial, sans-serif'; context.fillText('Berikan kepada pelanggan', 70, y + 57);
+    y += 116;
+  } else if (paymentSummary.isPaid) {
+    drawRow('Status', 'LUNAS', true, '#111827');
+  }
   y += 16;
   context.textAlign = 'center'; context.fillStyle = '#111827'; context.font = '700 22px Segoe UI, Arial, sans-serif';
   for (const line of wrapCanvasText(context, configs.receiptFooter || 'Terima kasih telah berbelanja.', width - 140)) { context.fillText(line, width / 2, y); y += 30; }
@@ -214,13 +271,14 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
 
 export const buildReceiptPrintHtml = (sale, configs = {}) => {
   const logo = getReceiptLogo(configs);
+  const paymentSummary = getReceiptPaymentSummary(sale);
   const rows = (sale.items || []).map(line => `
     <div class="item">
       <div class="item-name">${escapeHtml(line.name || '')}</div>
       <div class="row subtle"><span>${escapeHtml(formatQuantity(line.qty))} ${escapeHtml(line.unit || 'item')} × ${escapeHtml(formatRp(line.price))}</span><b>${escapeHtml(formatRp(Number(line.price || 0) * Number(line.qty || 0) - Number(line.itemDiscount || 0)))}</b></div>
       ${line.itemDiscount > 0 ? `<div class="discount">Diskon item -${escapeHtml(formatRp(line.itemDiscount))}</div>` : ''}
     </div>`).join('');
-  const payments = (sale.payments || []).map(payment => `<div class="row"><span>${escapeHtml(payment.name || 'Pembayaran')}</span><b>${escapeHtml(formatRp(payment.amount))}</b></div>`).join('');
+  const payments = paymentSummary.payments.map(payment => `<div class="row"><span>${escapeHtml(receiptPaymentLabel(payment))}</span><b>${escapeHtml(formatRp(payment.amount))}</b></div>`).join('');
   return `
     <section class="receipt">
       <header>
@@ -246,7 +304,7 @@ export const buildReceiptPrintHtml = (sale, configs = {}) => {
         ${sale.service > 0 ? `<div class="row"><span>Service</span><span>${escapeHtml(formatRp(sale.service))}</span></div>` : ''}
         <div class="grand"><span>TOTAL</span><b>${escapeHtml(formatRp(sale.total))}</b></div>
       </div>
-      ${configs.receiptShowPayment !== false ? `<div class="payments">${payments}${sale.change > 0 ? `<div class="row orange"><span>Kembalian</span><b>${escapeHtml(formatRp(sale.change))}</b></div>` : ''}</div>` : ''}
+      ${(configs.receiptShowPayment !== false || paymentSummary.hasChange) ? `<div class="payments">${configs.receiptShowPayment !== false ? payments : ''}${paymentSummary.hasChange ? `<div class="change-box"><span>KEMBALIAN</span><b>${escapeHtml(formatRp(paymentSummary.change))}</b><small>Berikan kepada pelanggan</small></div>` : paymentSummary.isPaid ? `<div class="paid-status">LUNAS</div>` : ''}</div>` : ''}
       <footer><b>${escapeHtml(configs.receiptFooter || 'Terima kasih telah berbelanja.')}</b><p>${escapeHtml(configs.receiptMessage || '')}</p></footer>
     </section>`;
 };

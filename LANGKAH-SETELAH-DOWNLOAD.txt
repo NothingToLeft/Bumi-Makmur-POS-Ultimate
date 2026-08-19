@@ -1,13 +1,13 @@
-BUMI MAKMUR POS v6.0.1 — AI PRODUCT CAPTURE & DAILY AUTOMATION
+BUMI MAKMUR POS v6.0.2 — AI PRODUCT CAPTURE & DAILY AUTOMATION
 
 1. Backup JSON dari aplikasi dan pastikan Antrean Offline = 0.
-2. Ekstrak ZIP v6.0.1 dan copy SELURUH ISINYA ke root repository Bumi-Makmur-POS-Ultimate (Replace files).
-3. Commit: Bumi Makmur POS v6.0.1 AI Product Capture and Daily Automation
+2. Ekstrak ZIP v6.0.2 dan copy SELURUH ISINYA ke root repository Bumi-Makmur-POS-Ultimate (Replace files).
+3. Commit: Bumi Makmur POS v6.0.2 AI Product Capture and Daily Automation
 4. Push ke main.
-5. Actions > Build Bumi Makmur POS v6.0.1 > test-only.
+5. Actions > Build Bumi Makmur POS v6.0.2 > test-only.
 6. Jika Firestore Rules v5.8.x sudah aktif, v6 tidak perlu deploy Rules ulang khusus AI/closing.
 7. Setelah test-only hijau: jalankan android-release.
-8. Windows: Build Bumi Makmur POS Desktop v6.0.1 > windows-release.
+8. Windows: Build Bumi Makmur POS Desktop v6.0.2 > windows-release.
 9. Uji https://bumi-makmur.my.id.
 10. Pada Android: Pengaturan > AI & Otomasi > masukkan Gemini API key hanya bila ingin analisis Gemini. Tanpa key, POS tetap berfungsi dan OCR/barcode lokal Android tetap tersedia.
 11. Uji Foto Produk AI dengan label nyata, Smart Receiving, lalu Tutup Shift > Kirim PDF ke WhatsApp.

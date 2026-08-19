@@ -496,7 +496,11 @@ export async function createOnlineReceipt(sale, storeId = STORE_ID) {
     receiptFooter: String(settings.receiptFooter || 'Terima kasih telah berbelanja.'),
     receiptMessage: String(settings.receiptMessage || ''),
     receiptLogo: String(settings.receiptLogo || '').slice(0, 180_000),
-    receiptShowLogo: settings.receiptShowLogo !== false
+    receiptShowLogo: settings.receiptShowLogo !== false,
+    receiptShowCustomer: settings.receiptShowCustomer !== false,
+    receiptShowCashier: settings.receiptShowCashier !== false,
+    receiptShowPayment: settings.receiptShowPayment !== false,
+    receiptShowStorePhone: settings.receiptShowStorePhone !== false
   };
   const payload = {
     token,

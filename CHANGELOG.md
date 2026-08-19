@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.2 — Professional Receipt & Cash Change Safety
+
+- Memperbaiki bug kembalian tunai dan memastikan total Rp39.000 dibayar Rp50.000 menampilkan KEMBALIAN Rp11.000 pada seluruh kanal nota.
+- Menyatukan renderer nota utama melalui `ReceiptDocument` untuk Kasir, Nota Online, dan preview Pengaturan.
+- Mendesain ulang struk menjadi lebih profesional, responsif, padat, dan konsisten dengan brand Bumi Makmur 2 merah–hitam.
+- Memperbaiki print panjang 58/80 mm, share-image, teks WhatsApp/Salin, dan cash movement setelah kembalian.
+- Menambahkan regression test khusus cash change dan responsive receipt.
+
 ## v6.0.1 — Brand Identity Refresh
 
 - Mengganti logo global Bumi Makmur dengan logo resmi **Bumi Makmur 2** (globe Indonesia + bingkai merah) tanpa mengubah bentuk master.

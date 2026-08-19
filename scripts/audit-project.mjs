@@ -33,7 +33,7 @@ const required = [
   'package.json', 'src/App.jsx', 'src/store/PosContext.jsx', 'src/services/firebase.js',
   'firestore.rules', 'firestore.indexes.json', 'public/manifest.webmanifest', 'public/sw.js',
   'public/_redirects', 'public/_headers', '.github/workflows/build-android.yml', '.github/workflows/build-windows.yml', 'electron/main.cjs', 'electron/preload.cjs',
-  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.1.md'
+  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.2.md'
 ];
 for (const item of required) {
   try { await access(path.join(root, item)); } catch { errors.push(`File wajib hilang: ${item}`); }
@@ -75,7 +75,7 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '6.0.1') errors.push(`Versi package harus 6.0.1, ditemukan ${pkg.version}`);
+if (pkg.version !== '6.0.2') errors.push(`Versi package harus 6.0.2, ditemukan ${pkg.version}`);
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 
 const rules = await readFile(path.join(root, 'firestore.rules'), 'utf8');

@@ -31,7 +31,7 @@ test('nota memakai renderer premium yang sama dan memiliki preview langsung', as
   assert.match(share, /buildReceiptPrintHtml/);
   assert.match(share, /getReceiptLogo/);
   assert.match(transactions, /buildReceiptPrintHtml\(sale,configs\)/);
-  assert.match(settings, /Preview Nota Langsung/);
+  assert.match(settings, /Preview Nota Profesional/);
 });
 
 test('tipografi dan angka memakai stack sistem yang presisi', async () => {

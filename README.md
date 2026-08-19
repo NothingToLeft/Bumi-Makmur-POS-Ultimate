@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v6.0.1
+# Bumi Makmur POS FreeSync v6.0.2
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.0.1 mempertahankan major release v6.0.0 untuk operasional toko listrik/material dengan **AI Product Capture**, **Smart Receiving**, dan **Tutup Harian PDF → WhatsApp**, di atas Business Suite v5.8.x. Seluruh Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Smart Barcode Scanner, dan FreeSync tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.0.2 mempertahankan major release v6.0.0 untuk operasional toko listrik/material dengan **AI Product Capture**, **Smart Receiving**, dan **Tutup Harian PDF → WhatsApp**, di atas Business Suite v5.8.x. Seluruh Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Smart Barcode Scanner, dan FreeSync tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,12 +11,13 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.0
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
-## Brand Identity Refresh v6.0.1
+## Professional Receipt & Cash Change Safety v6.0.2
 
-- Logo resmi **Bumi Makmur 2** menjadi identitas visual default di seluruh aplikasi dan build.
-- Aset master: `public/branding/bumi-makmur-2-master.png`.
-- Turunan otomatis tersedia untuk Web/PWA, launcher Android, maskable icon, splash, Windows Desktop, nota, dan preview aplikasi.
-- Rasio logo selalu dipertahankan (`object-contain` / fit), sehingga bentuk globe, peta Indonesia, dan bingkai merah tidak terdistorsi.
+- Memperbaiki kembalian tunai pada seluruh struk. Total Rp39.000 dibayar Rp50.000 sekarang selalu menampilkan **KEMBALIAN Rp11.000**.
+- Nota Kasir, Nota Online, dan preview Pengaturan memakai renderer `ReceiptDocument` yang sama agar desain tidak berbeda-beda.
+- Layout struk diperbarui menjadi lebih profesional dan padat dengan brand Bumi Makmur 2 merah–hitam, wrapping nama produk, angka tabular, dan modal viewport-safe untuk HP/tablet.
+- Print/Save PDF 58 mm dan 80 mm, teks WhatsApp/Salin, serta share image menggunakan payment summary konsisten.
+- Logo resmi **Bumi Makmur 2** dari v6.0.1 tetap menjadi identitas global Web/PWA/Android/Windows dan seluruh dokumen.
 
 ## Pembaruan besar v6.0.0
 
@@ -219,13 +220,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v6.0.1.
+2. Ekstrak ZIP v6.0.2.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v6.0.1 Brand Identity Refresh
+Bumi Makmur POS v6.0.2 Brand Identity Refresh
 ```
 
 6. Klik **Push origin**.
@@ -236,7 +237,7 @@ Bumi Makmur POS v6.0.1 Brand Identity Refresh
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.0.1
+→ Build Bumi Makmur POS v6.0.2
 → test-only
 ```
 
@@ -250,7 +251,7 @@ Jika rules Business Suite v5.8.x sudah aktif, v6.0.0 **tidak memerlukan koleksi 
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.0.1
+→ Build Bumi Makmur POS v6.0.2
 → android-release
 ```
 
@@ -260,11 +261,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v6.0.1
+→ Build Bumi Makmur POS Desktop v6.0.2
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.0.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.0.2**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -281,7 +282,7 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.0.1
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v6.0.1
+## Release acceptance v6.0.2
 
 Full-pass source audit final pada 19 Agustus 2026 menghasilkan:
 
@@ -301,4 +302,4 @@ Acceptance flow produksi yang disarankan setelah push:
 5. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
 6. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v6.0.1.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.
+Lihat `QA-REPORT-Bumi-Makmur-POS-v6.0.2.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.

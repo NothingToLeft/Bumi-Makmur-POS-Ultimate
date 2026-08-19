@@ -7,7 +7,8 @@ import {
   priceForSaleUnit, saleUnitOptions
 } from '../utils/fractionalUnits.js';
 import { Badge, Button, Card, Field, Input, Modal, MoneyInput, NumberInput, SearchBox, Select, Textarea } from '../components/ui.jsx';
-import { copyReceiptText, getReceiptLogo, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
+import { copyReceiptText, openWhatsappReceipt, shareReceipt } from '../services/receiptShare.js';
+import ReceiptDocument from '../components/ReceiptDocument.jsx';
 import { findProductByCode, isEditableTarget } from '../utils/barcode.js';
 import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
 import { sortProductsByName } from '../utils/productCatalog.js';
@@ -542,9 +543,9 @@ function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
     <Modal title="Pembayaran Premium" onClose={submitting ? undefined : onClose} size="lg" footer={<><Button variant="secondary" onClick={onClose} disabled={submitting}>Batal</Button><Button variant="orange" onClick={submit} disabled={submitting}>{submitting ? 'Memproses...' : 'Selesaikan Transaksi'}</Button></>}>
       <div className="space-y-4">
         <Card className="premium-total-card p-5 text-center">
-          <p className="text-xs font-bold text-emerald-800 uppercase tracking-[.18em]">Total Tagihan</p>
-          <p className="text-3xl md:text-4xl font-black text-emerald-800 mt-1">{formatRp(total)}</p>
-          <p className={`text-sm font-bold mt-2 ${paid >= total ? 'text-emerald-700' : 'text-orange-600'}`}>Terbayar {formatRp(paid)} · Sisa {formatRp(Math.max(0, total - paid))}</p>
+          <p className="text-xs font-black text-gray-500 uppercase tracking-[.18em]">Total Tagihan</p>
+          <p className="text-3xl md:text-4xl font-black text-gray-950 mt-1 tabular-nums">{formatRp(total)}</p>
+          <p className={`text-sm font-bold mt-2 ${paid >= total ? 'text-emerald-700' : 'text-red-700'}`}>Terbayar {formatRp(paid)} · Sisa {formatRp(Math.max(0, total - paid))}</p>
         </Card>
 
         <div>
@@ -590,7 +591,7 @@ function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
 
         {payments.length === 1 && current?.type === 'cash' && <div><p className="text-xs font-bold text-gray-500 mb-2">Nominal cepat</p><div className="grid grid-cols-2 sm:grid-cols-5 gap-2">{cashPresets.map(amount => <button key={amount} onClick={() => applyCashPreset(amount)} className={`min-h-[44px] rounded-xl border font-bold text-xs ${Number(current.amount) === amount ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-700 border-gray-200'}`}>{formatRp(amount)}</button>)}</div></div>}
         <Button variant="secondary" onClick={add} className="w-full" disabled={submitting}><Plus size={18}/> Split / Tambah Metode Pembayaran</Button>
-        {payments.some(item => item.type === 'cash') && paid > total && <Card className="p-3 bg-orange-50 text-orange-700 text-center font-black border-orange-100">Kembalian: {formatRp(paid - total)}</Card>}
+        {payments.some(item => item.type === 'cash') && paid > total && <Card className="p-4 bg-white border-2 border-red-500 text-center shadow-sm"><div className="flex items-center justify-center gap-2 text-red-800"><Banknote size={20}/><span className="text-xs tracking-[.18em] font-black">KEMBALIAN KE PELANGGAN</span></div><p className="text-3xl font-black text-gray-950 mt-1 tabular-nums">{formatRp(paid - total)}</p><p className="text-[11px] font-bold text-gray-600 mt-1">Wajib diserahkan sebelum transaksi ditutup.</p></Card>}
       </div>
     </Modal>
   );
@@ -607,7 +608,6 @@ function SplitBillModal({ cart, onClose, onSplit }) {
 function CustomItemModal({ onClose, onAdd }) { const [name,setName]=useState('Item Kustom'); const [price,setPrice]=useState(0); return <Modal title="Nominal / Item Kustom" onClose={onClose} size="sm" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={()=>onAdd({lineId:generateId('LINE'),productId:`CUSTOM-${Date.now()}`,name,category:'Kustom',sku:'CUSTOM',barcode:'',qty:1,baseQty:1,unit:'item',factor:1,price:Number(price),modalPrice:0,itemDiscount:0,note:'',variant:'',modifiers:[],bundleItems:[]})} disabled={!name||Number(price)<=0}>Tambah</Button></>}><div className="space-y-3"><Field label="Nama"><Input value={name} onChange={event=>setName(event.target.value)}/></Field><Field label="Nominal"><MoneyInput value={price} onValueChange={setPrice} autoFocus/></Field></div></Modal>; }
 
 function ReceiptModal({ sale, configs, onClose }) {
-  const receiptLogo = getReceiptLogo(configs);
   const [phone, setPhone] = useState(sale.customerPhone && sale.customerPhone !== '-' ? sale.customerPhone : '');
   const [notice, setNotice] = useState('');
   const print = () => window.print();
@@ -615,53 +615,19 @@ function ReceiptModal({ sale, configs, onClose }) {
   const whatsapp = async () => { try { const result=await openWhatsappReceipt(sale, configs, phone); setNotice(result.onlineReceiptUrl?'WhatsApp dibuka dengan link nota online.':'WhatsApp dibuka dengan nota teks.'); } catch { setNotice('Gagal membuka WhatsApp.'); } };
   const share = async () => { try { const native = await shareReceipt(sale, configs); setNotice(native ? 'Menu berbagi dibuka.' : 'Nota disalin karena menu berbagi tidak tersedia.'); } catch (error) { if (error?.name !== 'AbortError') setNotice('Gagal membuka menu berbagi.'); } };
   return (
-    <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 md:p-4 receipt-overlay">
-      <div className={`bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden print-area premium-receipt ${Number(configs.receiptPaperWidth)===58?'receipt-58':'receipt-80'}`}>
-        <div className="receipt-premium-header p-5 text-center border-b border-dashed relative overflow-hidden">
-          <div className="absolute inset-0 receipt-header-glow"/>
-          <div className="relative">
-            {receiptLogo && <img src={receiptLogo} alt="Logo BM" className="w-16 h-16 rounded-[1.15rem] object-contain bg-white shadow-xl ring-1 ring-emerald-100 mx-auto mb-3"/>}
-            <p className="text-[10px] uppercase tracking-[.22em] font-bold text-emerald-700">{configs.receiptHeader || 'Nota Pembelian'}</p>
-            <h3 className="font-black text-xl text-gray-900 mt-1">{configs.companyName}</h3>
-            <p className="text-xs text-gray-600 mt-1">{configs.address}</p>
-            {configs.receiptShowStorePhone !== false && configs.phone && <p className="text-xs text-gray-600">Telp: {configs.phone}</p>}
-            <div className="mt-3 inline-flex px-3 py-1.5 rounded-full bg-white/80 border border-emerald-100 text-[10px] font-black text-emerald-800 shadow-sm">{sale.id}</div>
-            <p className="text-[10px] text-gray-500 mt-2">{new Date(sale.createdAt).toLocaleString('id-ID')}</p>
-          </div>
+    <div className="fixed inset-0 z-[120] bg-black/65 backdrop-blur-sm flex items-center justify-center p-1.5 sm:p-4 receipt-overlay">
+      <div className={`receipt-modal-shell bg-white rounded-[1.4rem] sm:rounded-[1.7rem] shadow-2xl print-area premium-receipt ${Number(configs.receiptPaperWidth)===58?'receipt-58':'receipt-80'}`}>
+        <div className="receipt-modal-scroll custom-scrollbar">
+          <ReceiptDocument sale={sale} configs={configs}/>
         </div>
-        <div className="p-5 text-sm max-h-[55vh] overflow-y-auto custom-scrollbar">
-          <div className="grid grid-cols-2 gap-2 mb-4 text-xs">
-            {configs.receiptShowCustomer !== false && <div className="p-3 rounded-xl bg-gray-50"><span className="text-gray-500 block">Pelanggan</span><b className="text-gray-800">{sale.customerName}</b></div>}
-            {configs.receiptShowCashier !== false && <div className="p-3 rounded-xl bg-gray-50"><span className="text-gray-500 block">Kasir</span><b className="text-gray-800">{sale.cashierName || '-'}</b></div>}
-          </div>
-          <div className="space-y-3">
-            {sale.items.map(line => (
-              <div key={line.lineId} className="flex justify-between gap-3 pb-2 border-b border-dashed border-gray-200">
-                <div className="min-w-0"><p className="font-bold text-gray-900">{line.name}</p><p className="text-xs text-gray-500">{formatQuantity(line.qty)} {line.unit} × {formatRp(line.price)}{line.itemDiscount > 0 ? ` · diskon ${formatRp(line.itemDiscount)}` : ''}</p>{line.modifiers?.length > 0 && <p className="text-xs text-gray-500">+ {line.modifiers.map(modifier => modifier.name).join(', ')}</p>}</div>
-                <b className="shrink-0 text-gray-900">{formatRp(line.price * line.qty - line.itemDiscount)}</b>
-              </div>
-            ))}
-          </div>
-          <div className="pt-3 mt-3 space-y-1 text-gray-700">
-            <div className="flex justify-between"><span>Subtotal</span><span>{formatRp(sale.subtotal)}</span></div>
-            {sale.globalDiscount > 0 && <div className="flex justify-between text-emerald-700"><span>Diskon</span><span>-{formatRp(sale.globalDiscount)}</span></div>}
-            {sale.promoDiscount > 0 && <div className="flex justify-between text-emerald-700"><span>Promo</span><span>-{formatRp(sale.promoDiscount)}</span></div>}
-            {sale.loyaltyDiscount > 0 && <div className="flex justify-between text-yellow-700"><span>Reward Poin</span><span>-{formatRp(sale.loyaltyDiscount)}</span></div>}
-            {sale.tax > 0 && <div className="flex justify-between"><span>Pajak</span><span>{formatRp(sale.tax)}</span></div>}
-            {sale.service > 0 && <div className="flex justify-between"><span>Service</span><span>{formatRp(sale.service)}</span></div>}
-            <div className="premium-receipt-total flex items-end justify-between gap-3 text-xl font-black mt-3 p-4 rounded-2xl"><div><span className="block text-[10px] tracking-[.18em] text-emerald-100">TOTAL PEMBAYARAN</span><span>TOTAL</span></div><span>{formatRp(sale.total)}</span></div>
-          </div>
-          {configs.receiptShowPayment !== false && <div className="border-t border-dashed mt-4 pt-3 space-y-1">{sale.payments.map(payment => <div key={payment.id} className="flex justify-between text-sm"><span>{payment.name}</span><b>{formatRp(payment.amount)}</b></div>)}</div>}
-          <div className="text-center mt-5 pt-4 border-t border-dashed border-gray-200"><img src="/logo-bm.svg" alt="BM" className="w-7 h-7 rounded-lg mx-auto mb-2 opacity-90"/><p className="text-xs font-bold text-gray-800">{configs.receiptFooter}</p>{configs.receiptMessage && <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">{configs.receiptMessage}</p>}<p className="text-[9px] text-gray-400 mt-2">Didukung Bumi Makmur POS · BM</p></div>
-        </div>
-        <div className="p-3 bg-gray-50 border-t print-controls space-y-2">
-          {configs.whatsappReceiptEnabled !== false && <div className="flex gap-2"><Input value={phone} onChange={event => setPhone(event.target.value)} inputMode="tel" placeholder="Nomor WhatsApp pelanggan" className="min-h-[44px]"/><Button onClick={whatsapp} className="shrink-0 bg-[#25D366] hover:bg-[#20bd5a]"><MessageCircle size={18}/> WhatsApp</Button></div>}
-          {notice && <p className="text-xs text-center font-bold text-emerald-700">{notice}</p>}
-          <div className="grid grid-cols-4 gap-2">
+        <div className="receipt-modal-actions p-3 print-controls space-y-2.5">
+          {configs.whatsappReceiptEnabled !== false && <div className="flex flex-col sm:flex-row gap-2"><Input value={phone} onChange={event => setPhone(event.target.value)} inputMode="tel" placeholder="Nomor WhatsApp pelanggan" className="min-h-[44px] flex-1"/><Button onClick={whatsapp} className="sm:shrink-0 bg-[#25D366] hover:bg-[#20bd5a]"><MessageCircle size={18}/> WhatsApp</Button></div>}
+          {notice && <p className="text-xs text-center font-bold text-gray-600">{notice}</p>}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <Button variant="secondary" onClick={onClose} className="px-2">Tutup</Button>
-            <Button variant="secondary" onClick={copy} className="px-2"><Copy size={17}/><span className="hidden sm:inline">Salin</span></Button>
-            <Button variant="secondary" onClick={share} className="px-2"><Share2 size={17}/><span className="hidden sm:inline">Bagikan</span></Button>
-            <Button onClick={print} className="px-2"><Printer size={17}/><span className="hidden sm:inline">Cetak</span></Button>
+            <Button variant="secondary" onClick={copy} className="px-2"><Copy size={17}/> Salin</Button>
+            <Button variant="secondary" onClick={share} className="px-2"><Share2 size={17}/> Bagikan</Button>
+            <Button onClick={print} className="px-2 bg-gray-950 hover:bg-black"><Printer size={17}/> Cetak</Button>
           </div>
         </div>
       </div>

@@ -46,7 +46,7 @@ function makePdfContent(summary) {
   add(`Pengeluaran operasional          ${formatRp(summary.expenses)}`, { size: 10 });
   add(`Piutang baru                     ${formatRp(summary.newReceivable)}`, { size: 10, gap: 7 });
   if (summary.notes) add(`Catatan: ${summary.notes}`, { size: 9, gap: 6 });
-  add(`Dibuat otomatis oleh Bumi Makmur POS v6.0.1 pada ${new Date(summary.generatedAt).toLocaleString('id-ID')}.`, { size: 8 });
+  add(`Dibuat otomatis oleh Bumi Makmur POS v6.0.2 pada ${new Date(summary.generatedAt).toLocaleString('id-ID')}.`, { size: 8 });
   return lines;
 }
 

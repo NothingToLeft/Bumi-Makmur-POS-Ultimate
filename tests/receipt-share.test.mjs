@@ -19,6 +19,7 @@ test('nota digital memuat item, total, metode, dan pesan toko', () => {
   assert.match(text, /BUMI MAKMUR/);
   assert.match(text, /Kabel/);
   assert.match(text, /TOTAL: Rp\s?9\.000/);
-  assert.match(text, /Tunai: Rp\s?10\.000/);
+  assert.match(text, /Tunai diterima: Rp\s?10\.000/);
+  assert.match(text, /KEMBALIAN: Rp\s?1\.000/);
   assert.match(text, /Terima kasih/);
 });
