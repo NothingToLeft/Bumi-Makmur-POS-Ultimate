@@ -1,5 +1,12 @@
 # Changelog
 
+## v6.0.1 — Brand Identity Refresh
+
+- Mengganti logo global Bumi Makmur dengan logo resmi **Bumi Makmur 2** (globe Indonesia + bingkai merah) tanpa mengubah bentuk master.
+- Logo baru dipakai pada aplikasi Web/PWA, Android, Windows Desktop, login, sidebar, loading, layar pelanggan, nota, preview, favicon, launcher, splash, dan aset dokumentasi.
+- Menambahkan master brand asset serta turunan 192/512/1024, maskable icon safe-zone, Windows multi-resolution ICO, dan wordmark merah-hitam.
+- Mempertahankan seluruh fitur v6.0.0, struktur data, Firebase Spark FreeSync, AI Product Capture, Smart Receiving, dan Daily Closing.
+
 ## v6.0.0 — AI Product Capture & Daily Automation
 
 - Menambahkan AI Foto Produk dengan barcode/OCR lokal, parser produk, Gemini opsional, preview wajib, dan pencegahan duplikasi katalog.
