@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "prebuild": "npm run audit:static",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "android:add": "npm run build && npx cap add android && npx cap sync android && npm run android:prepare",

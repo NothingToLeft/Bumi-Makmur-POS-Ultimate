@@ -39,3 +39,9 @@
 - Seluruh antrean offline v6.0.2 tetap kompatibel.
 - Firebase tetap Authentication + Firestore Spark; tanpa Functions, Storage, atau Blaze.
 - Seluruh fitur Professional Receipt, AI Product Capture, Smart Receiving, Daily Closing, PO, quotation, serial/garansi, inventory suite, dan branding resmi tetap dipertahankan.
+## Build Integrity Hotfix R1
+- Memperbaiki syntax error pada `ReleaseNotesSettings` di `DeviceSettingsScreens.jsx` yang membuat Cloudflare Pages/Vite gagal pada proses transform.
+- Menyeragamkan runtime build Web/Android/Windows ke Node.js 24 agar sesuai dengan requirement dependency scanner terbaru.
+- Static audit kini memakai parser esbuild (setelah `npm install`) untuk memvalidasi file JSX sebelum tahap build, sehingga error parser serupa terdeteksi lebih awal.
+- Tidak mengubah schema Firestore, ruleset version, data transaksi, stok, ataupun perilaku sinkronisasi v6.0.3.
+

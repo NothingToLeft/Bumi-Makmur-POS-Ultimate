@@ -126,3 +126,13 @@ Karena itu **GitHub Actions adalah production build gate**. Release tidak boleh 
 ## Kesimpulan
 
 Seluruh automated regression dan static checks yang tersedia lulus. Tidak ada engineer yang dapat menjamin software literal “tanpa cacat sama sekali”; v6.0.3 diperlakukan sebagai release-blocking stabilization dan production smoke test tetap wajib sebelum dianggap siap operasional penuh.
+
+## Build Integrity Hotfix R1 — 20 Agustus 2026
+
+- Cloudflare Pages log menemukan parser failure pada `DeviceSettingsScreens.jsx` karena satu penutup array `]` hilang di `ReleaseNotesSettings`.
+- Root cause telah diperbaiki pada source.
+- Regression suite setelah hotfix: **200/200 PASS**, 0 fail, 0 skip.
+- Static audit: **PASS**, 105 file JS/JSX/MJS dan 4 JSON diperiksa.
+- Audit diperkuat agar setelah `npm install` file JSX ikut diparse menggunakan esbuild sebelum Vite build.
+- Runtime build Web/Android/Windows diseragamkan ke Node.js 24.
+

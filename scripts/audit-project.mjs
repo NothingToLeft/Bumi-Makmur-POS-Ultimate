@@ -45,9 +45,22 @@ for (const forbidden of ['functions', 'storage.rules']) {
 
 const allFiles = await walk(root);
 const sourceFiles = allFiles.filter(file => /\.(?:js|jsx|mjs|cjs)$/.test(file));
+let esbuildTransform = null;
+try {
+  ({ transform: esbuildTransform } = await import('esbuild'));
+} catch {
+  notices.push('Parser esbuild tidak tersedia di environment lokal; CI setelah npm install akan memvalidasi JSX dengan esbuild.');
+}
 for (const file of sourceFiles) {
   const source = await readFile(file, 'utf8');
-  if (!file.endsWith('.jsx')) {
+  if (esbuildTransform && /\.(?:js|jsx|mjs)$/.test(file)) {
+    try {
+      const loader = file.endsWith('.jsx') ? 'jsx' : 'js';
+      await esbuildTransform(source, { loader, sourcefile: relative(file), jsx: 'automatic', format: 'esm' });
+    } catch (error) {
+      errors.push(`${relative(file)}: esbuild syntax error — ${error.message}`);
+    }
+  } else if (!file.endsWith('.jsx')) {
     const result = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
     if (result.status !== 0) errors.push(`${relative(file)}: syntax error — ${(result.stderr || result.stdout).trim()}`);
   }
@@ -90,7 +103,7 @@ for (const collection of ['products', 'sales', 'purchases', 'purchaseOrders', 'c
 
 notices.push(`${sourceFiles.length} file JS/JSX/MJS diperiksa`);
 notices.push(`${allFiles.filter(file => file.endsWith('.json')).length} file JSON valid`);
-notices.push('Relative imports, required files, forbidden paid services, dan secret scan diperiksa');
+notices.push('Relative imports, required files, forbidden paid services, secret scan, dan parser JSX/esbuild CI diperiksa');
 
 if (errors.length) {
   console.error('\nAUDIT GAGAL');

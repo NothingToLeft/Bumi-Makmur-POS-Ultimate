@@ -1,0 +1,21 @@
+BUMI MAKMUR POS v6.0.3 — CLOUDFLARE BUILD HOTFIX R1
+
+ROOT CAUSE
+- src/screens/DeviceSettingsScreens.jsx, ReleaseNotesSettings: tuple v6.0.3 kehilangan satu karakter penutup ].
+- Cloudflare/Vite berhenti dengan: Expected "]" but found ";".
+
+SUDAH DIPERBAIKI
+- Syntax array diperbaiki.
+- Node Web/Android/Windows diseragamkan ke 24.
+- npm run build otomatis menjalankan static audit terlebih dahulu.
+- Audit CI memparse JSX menggunakan esbuild setelah npm install.
+- 200/200 regression tests PASS.
+
+CARA PASANG
+1. Extract ZIP hotfix ini ke root repository dan Replace seluruh file.
+2. Commit/push, misalnya: v6.0.3 build integrity hotfix R1.
+3. Cloudflare Pages akan redeploy otomatis.
+4. Di GitHub Actions, jalankan Build Bumi Makmur POS v6.0.3 > test-only.
+5. Setelah Web hijau, lanjut Deploy Firebase Spark Rules sesuai langkah v6.0.3 bila belum dilakukan.
+
+Tidak perlu reset database. Jangan hapus queue offline.

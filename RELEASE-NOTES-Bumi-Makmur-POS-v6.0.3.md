@@ -29,3 +29,9 @@ Tidak ada queue yang dibuang otomatis. Jangan menekan reset/restore ketika masih
 7. Uji transaksi kasir, Shift Start/End, sale, stok, quotation, warranty/serial, lalu pastikan diagnostik tidak menambah `permission-denied` baru.
 
 Firebase tetap Spark-only.
+
+### Build Integrity Hotfix R1
+- Memperbaiki kegagalan Cloudflare Pages akibat syntax array Changelog yang tidak tertutup.
+- Menambahkan parser JSX/esbuild sebagai build gate dan menyeragamkan Node.js 24.
+- Tidak ada perubahan data, Firestore Rules, transaksi, stok, atau kompatibilitas v6.0.3.
+

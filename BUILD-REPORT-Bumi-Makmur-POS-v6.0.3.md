@@ -48,3 +48,16 @@ Tidak ada Functions atau Storage sehingga tetap kompatibel dengan Firebase Spark
 ## Existing offline queue
 
 Jangan hapus queue lama. v6.0.3 mempertahankan mutation berdasarkan pemilik akun. Login dengan akun pembuat mutation untuk menyelesaikan sync-nya.
+
+## Cloudflare Build Hotfix R1
+
+Build commit `3fde001` berhenti setelah 1.594 module transformed karena syntax error di `src/screens/DeviceSettingsScreens.jsx` (`Expected "]" but found ";"`). Source hotfix memperbaiki tuple Changelog yang kehilangan penutup array.
+
+Hardening tambahan:
+- `.node-version` = 24.
+- GitHub Windows workflow = Node 24, konsisten dengan Android/Firebase dan requirement scanner.
+- `npm run build` sekarang memiliki `prebuild` gate `npm run audit:static`.
+- Audit CI memanfaatkan esbuild untuk parser JSX setelah dependencies tersedia.
+
+Local source-only environment tidak memiliki `node_modules`, sehingga Vite production build final tetap divalidasi oleh Cloudflare/GitHub setelah upload hotfix.
+
