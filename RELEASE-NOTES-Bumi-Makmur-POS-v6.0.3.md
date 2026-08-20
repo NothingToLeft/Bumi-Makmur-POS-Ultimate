@@ -35,3 +35,12 @@ Firebase tetap Spark-only.
 - Menambahkan parser JSX/esbuild sebagai build gate dan menyeragamkan Node.js 24.
 - Tidak ada perubahan data, Firestore Rules, transaksi, stok, atau kompatibilitas v6.0.3.
 
+
+## R2 — Full Stability Recovery
+
+- Owner `Cloud & Backup` kini tahan terhadap data diagnostik lama/korup dan tidak lagi boleh memutihkan seluruh aplikasi.
+- Setiap screen dilindungi recovery boundary; bila sebuah modul crash, shell aplikasi tetap aman dan pengguna dapat kembali ke Kasir.
+- Karyawan tetap tidak memiliki akses Pengaturan, namun dapat memulihkan cloud dari banner dengan `Coba Sinkron Lagi` dan mengunduh diagnostik bila masih gagal.
+- Permission issue lama otomatis divalidasi ulang setelah Rules diperbarui; queue hanya dikirim oleh akun pemiliknya.
+- Layar Pelanggan Web mendapat resend snapshot untuk menutup race popup baru; jalur Electron IPC tetap aktif di Windows.
+- Tidak ada fitur v6.0.3 yang dihapus dan tidak ada migrasi Firestore destruktif.

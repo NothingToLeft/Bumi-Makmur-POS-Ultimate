@@ -1,0 +1,36 @@
+BUMI MAKMUR POS v6.0.3 R2 — FULL STABILITY RECOVERY
+=====================================================
+
+SETELAH UPLOAD KE GITHUB
+1. Pastikan Cloudflare Pages build hijau.
+2. Jalankan GitHub Actions -> Build Bumi Makmur POS v6.0.3 -> test-only dan pastikan hijau.
+3. Firestore Rules tidak berubah dari v6.0.3 yang sebelumnya sudah hijau; redeploy Rules tidak wajib untuk R2.
+
+SMOKE TEST WAJIB
+A. OWNER
+- Login Owner.
+- Pengaturan -> Cloud & Backup harus terbuka; tidak boleh blank putih.
+- Tekan Sinkronkan Sekarang.
+
+B. KARYAWAN
+- Login Zainal/Kasir.
+- Menu Pengaturan harus tetap tidak tersedia.
+- Jika banner Cloud muncul, tekan Coba Sinkron Lagi.
+- Jika gagal, tekan Unduh Diagnostik dan simpan JSON; jangan Bersihkan queue.
+
+C. LAYAR PELANGGAN
+- Buka Layar Pelanggan -> Buka Layar 2.
+- Masukkan produk di Kasir, ubah qty, pelanggan, dan total.
+- Layar kedua harus update tanpa reload.
+
+DATA SAFETY
+- Jangan reset database hanya untuk menghilangkan error cloud.
+- Jangan hapus antrean offline yang belum tersinkron.
+- Queue milik setiap user hanya dikirim saat user tersebut login.
+
+QA R2
+- 206/206 automated tests PASS.
+- Static audit PASS.
+- Syntax parse seluruh source PASS.
+- Electron main/preload PASS.
+- Workflow YAML/JSON PASS.

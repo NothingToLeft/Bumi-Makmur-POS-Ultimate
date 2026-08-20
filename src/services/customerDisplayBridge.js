@@ -113,11 +113,12 @@ export function subscribeCustomerDisplaySnapshot(onSnapshot, { pollInterval = 75
   };
 }
 
-export async function openCustomerDisplayWindow() {
+export async function openCustomerDisplayWindow(snapshot = readCustomerDisplaySnapshot()) {
   if (!canUseWindow()) throw new Error('Layar pelanggan hanya dapat dibuka dari perangkat dengan antarmuka grafis.');
+  const openingSnapshot = { ...FALLBACK_SNAPSHOT, ...(snapshot || {}), cart: Array.isArray(snapshot?.cart) ? snapshot.cart : [] };
 
   if (window.bmDesktop?.openCustomerDisplay) {
-    const result = await window.bmDesktop.openCustomerDisplay(readCustomerDisplaySnapshot());
+    const result = await window.bmDesktop.openCustomerDisplay(openingSnapshot);
     if (!result?.opened) throw new Error('Jendela layar pelanggan gagal dibuat oleh aplikasi Desktop.');
     return { mode: 'desktop', ...result };
   }
@@ -133,5 +134,9 @@ export async function openCustomerDisplayWindow() {
     throw error;
   }
   try { popup.focus(); } catch {}
+  // BroadcastChannel tidak menyimpan pesan untuk listener yang belum selesai load.
+  // Kirim ulang snapshot beberapa kali agar popup Web menerima state kasir bahkan
+  // bila localStorage dibatasi browser/privacy mode.
+  [250, 800, 1600].forEach(delay => window.setTimeout(() => publishCustomerDisplaySnapshot(openingSnapshot), delay));
   return { mode: 'web', opened: true, reused: false, externalMonitor: false };
 }

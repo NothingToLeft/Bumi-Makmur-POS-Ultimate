@@ -53,3 +53,34 @@ v6.0.3 memperkenalkan `src/services/customerDisplayBridge.js`:
 ## Data migration
 
 Tidak ada migrasi schema destruktif. Queue v6.0.2 dapat dibuka langsung oleh v6.0.3; record queue lama tetap dipertahankan.
+
+## R2 — Runtime recovery & white-screen hardening
+
+### Root cause 5 — Cloud & Backup dapat blank putih
+
+Data diagnostik disimpan di localStorage agar tetap tersedia setelah reload. Versi lama mengasumsikan nilai hasil `JSON.parse` selalu array lalu komponen memakai `.filter()`/`.map()` secara langsung. Data legacy, import lama, atau value korup dapat menghasilkan object/string dan menyebabkan render-time exception pada tab Cloud & Backup.
+
+R2 menambahkan `normalizeSyncDiagnostics()` sebagai boundary sanitization. State awal, append, export, dan render Cloud semuanya melalui normalizer. Sebuah mount-healing pass menulis kembali bentuk valid ke localStorage. Ini memperbaiki penyebab data-shape crash tanpa menghapus queue atau database.
+
+Sebagai defense-in-depth, setiap active screen dibungkus `ScreenErrorBoundary`. Jika suatu modul lain di masa depan mengalami runtime exception, pengguna melihat recovery UI yang profesional alih-alih halaman putih penuh.
+
+### Root cause 6 — Karyawan tidak punya jalur recovery cloud
+
+Akses `settings.view` sengaja tidak diberikan ke role Kasir. R1 menempatkan tombol manual sync utama di Settings, sehingga instruksi recovery tidak mungkin dijalankan oleh Karyawan yang justru memiliki mutation pending.
+
+R2 mempertahankan boundary keamanan role dan menambahkan recovery role-safe di banner global:
+
+- `Coba Sinkron Lagi` hanya mem-flush queue milik `currentUser.id`;
+- `Unduh Diagnostik` tersedia tanpa membuka Settings dan tidak mengekspor credential/API key;
+- background recovery melepaskan persistent issue lama, flush queue akun aktif, lalu force-revalidate Firestore subscription;
+- queue akun lain tidak disentuh dan tetap menunggu pemiliknya login.
+
+### Root cause 7 — stale permission issue sesudah Rules sudah benar
+
+Permission error lama sengaja dibuat persistent agar UI tidak memberi status hijau palsu. Kekurangannya: setelah Rules production diperbarui, subscription yang masih dianggap ready dapat membuat persistent issue tidak pernah diuji ulang.
+
+R2 menambahkan forced revalidation pada manual dan background recovery. Persistent error dibersihkan hanya sebagai *candidate stale state* sebelum retry; bila permission masih salah, listener/flush langsung mencatatnya lagi. `markSyncSuccess()` hanya membersihkan history permission/session ketika current-user queue kosong dan tidak ada persistent issue aktif.
+
+### Customer Display popup race
+
+BroadcastChannel tidak menyimpan message untuk listener yang belum terpasang. Web popup sekarang menerima resend snapshot 250/800/1600 ms setelah `window.open()` berhasil. localStorage + storage event + polling tetap fallback, sementara Windows Desktop tetap memakai Electron IPC.

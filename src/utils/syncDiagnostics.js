@@ -7,6 +7,31 @@ const safeDate = value => {
 export const SYNC_DIAGNOSTIC_LIMIT = 80;
 export const FIRESTORE_RULESET_VERSION = '6.0.3';
 
+export function normalizeSyncDiagnostics(value = []) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    .map((item, index) => ({
+      ...item,
+      id: text(item.id || `SYNC-DIAG-RECOVERED-${index}`),
+      at: safeDate(item.at)?.toISOString() || new Date().toISOString(),
+      level: ['error', 'warning', 'info'].includes(item.level) ? item.level : 'warning',
+      category: text(item.category || 'network'),
+      code: text(item.code || 'unknown'),
+      message: text(item.message || 'Catatan sinkronisasi lama tidak memiliki pesan.'),
+      action: text(item.action || 'Coba sinkronkan ulang.'),
+      collection: text(item.collection),
+      entityId: text(item.entityId),
+      mutationId: text(item.mutationId),
+      mutationAction: text(item.mutationAction),
+      deviceId: text(item.deviceId),
+      branchId: text(item.branchId),
+      permanent: item.permanent === true,
+      occurrences: Math.max(1, Number(item.occurrences || 1) || 1)
+    }))
+    .slice(0, SYNC_DIAGNOSTIC_LIMIT);
+}
+
 export function classifySyncError(error, context = {}) {
   const code = text(error?.code || context.code || 'unknown').replace(/^firestore\//, '');
   const message = text(error?.message || context.message || 'Gangguan sinkronisasi tidak dikenal.');
@@ -111,12 +136,13 @@ export function buildSyncStatus({
 }
 
 export function appendSyncDiagnostic(current = [], entry) {
-  if (!entry) return current;
+  const safeCurrent = normalizeSyncDiagnostics(current);
+  if (!entry) return safeCurrent;
   const signature = item => [
     item?.category, item?.code, item?.mutationAction, item?.collection,
     item?.entityId, item?.branchId
   ].map(text).join('|');
-  const match = current.find(item => signature(item) === signature(entry));
+  const match = safeCurrent.find(item => signature(item) === signature(entry));
   if (match) {
     const merged = {
       ...match,
@@ -125,9 +151,9 @@ export function appendSyncDiagnostic(current = [], entry) {
       firstAt: match.firstAt || match.at,
       occurrences: Number(match.occurrences || 1) + 1
     };
-    return [merged, ...current.filter(item => item.id !== match.id)].slice(0, SYNC_DIAGNOSTIC_LIMIT);
+    return [merged, ...safeCurrent.filter(item => item.id !== match.id)].slice(0, SYNC_DIAGNOSTIC_LIMIT);
   }
-  const next = [{ ...entry, occurrences: 1 }, ...current.filter(item => item.id !== entry.id)];
+  const next = [{ ...entry, occurrences: 1 }, ...safeCurrent.filter(item => item.id !== entry.id)];
   return next.slice(0, SYNC_DIAGNOSTIC_LIMIT);
 }
 
@@ -147,6 +173,6 @@ export function buildSyncDiagnosticsExport({ status, queue, queueOwnership, diag
     } : null,
     profile: profile ? { id: profile.id, name: profile.name, role: profile.role, branchId: profile.branchId, storeId: profile.storeId } : null,
     deviceId: text(deviceId),
-    diagnostics: diagnostics || []
+    diagnostics: normalizeSyncDiagnostics(diagnostics)
   };
 }

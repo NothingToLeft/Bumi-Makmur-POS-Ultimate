@@ -45,7 +45,7 @@ import { normalizeDbShape } from '../utils/dbShape.js';
 import { buildClosingSummary } from '../services/dailyClosingReport.js';
 import { buildProductLifecycleSummary } from '../utils/productLifecycle.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
-import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, classifySyncError, FIRESTORE_RULESET_VERSION, summarizePendingMutations } from '../utils/syncDiagnostics.js';
+import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, classifySyncError, FIRESTORE_RULESET_VERSION, normalizeSyncDiagnostics, summarizePendingMutations } from '../utils/syncDiagnostics.js';
 import { validateBackupPayload } from '../utils/backupValidation.js';
 import { publishCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
 import {
@@ -161,7 +161,7 @@ export function PosProvider({ children }) {
   const [syncConflictCount, setSyncConflictCount] = useState(0);
   const [lastSyncAttemptAt, setLastSyncAttemptAt] = useState(null);
   const [lastSyncSuccessAt, setLastSyncSuccessAt] = useState(() => localStorage.getItem(SYNC_SUCCESS_KEY) || '');
-  const [syncDiagnostics, setSyncDiagnostics] = useState(() => safeJSONParse(localStorage.getItem(SYNC_DIAGNOSTICS_KEY), []));
+  const [syncDiagnostics, setSyncDiagnostics] = useState(() => normalizeSyncDiagnostics(safeJSONParse(localStorage.getItem(SYNC_DIAGNOSTICS_KEY), [])));
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [customerDisplay, setCustomerDisplay] = useState({ cart: [], total: 0, customerName: 'Umum', message: '' });
   const [loginDirectory, setLoginDirectory] = useState(() => {
@@ -187,6 +187,14 @@ export function PosProvider({ children }) {
   const initialLoadFinishedRef = useRef(false);
   const employeeDirectoryPublishSignatureRef = useRef('');
   const persistentCloudIssueRef = useRef('');
+
+  useEffect(() => {
+    const normalized = normalizeSyncDiagnostics(syncDiagnostics);
+    if (JSON.stringify(normalized) !== JSON.stringify(syncDiagnostics)) {
+      setSyncDiagnostics(normalized);
+      localStorage.setItem(SYNC_DIAGNOSTICS_KEY, JSON.stringify(normalized));
+    }
+  }, []);
 
   const recordSyncDiagnostic = useCallback((errorOrEntry, context = {}) => {
     const entry = errorOrEntry?.category && errorOrEntry?.at
@@ -219,6 +227,14 @@ export function PosProvider({ children }) {
     const value = nowISO();
     setLastSyncSuccessAt(value);
     setCloudError('');
+    // Permission/session lama yang sudah terbukti pulih tidak boleh terus
+    // membuat pemilik toko mengira cloud masih rusak. Konflik/network history
+    // tetap disimpan untuk audit, sedangkan error aktif akan dicatat ulang.
+    setSyncDiagnostics(previous => {
+      const next = normalizeSyncDiagnostics(previous).filter(item => !['permission', 'session'].includes(item.category));
+      localStorage.setItem(SYNC_DIAGNOSTICS_KEY, JSON.stringify(next));
+      return next;
+    });
     localStorage.setItem(SYNC_SUCCESS_KEY, value);
     return value;
   }, [storeCode]);
@@ -688,8 +704,15 @@ export function PosProvider({ children }) {
       if (cancelled || document.visibilityState === 'hidden' || syncRunRef.current) return;
       const task = (async () => {
         try {
+          const recoveringPersistentIssue = Boolean(persistentCloudIssueRef.current);
+          if (recoveringPersistentIssue) {
+            persistentCloudIssueRef.current = '';
+            setCloudError('');
+          }
           await flushPendingMutations(currentUser);
-          if (!cloudReadyRef.current) await startCloudSubscription(currentUser, { initial: false, force: true });
+          if (!cloudReadyRef.current || recoveringPersistentIssue) {
+            await startCloudSubscription(currentUser, { initial: false, force: true });
+          }
           attempt = 0;
         } catch (error) {
           attempt += 1;
@@ -2756,6 +2779,11 @@ export function PosProvider({ children }) {
   const syncNow = async () => {
     if (!currentUser) throw new Error('Sesi pengguna belum aktif.');
     if (!navigator.onLine) throw new Error(`Perangkat sedang offline. ${getOfflineQueueStats(storeCode).count} pembaruan tetap aman di perangkat.`);
+    // Sync manual adalah health-check baru. Error permission lama tidak boleh
+    // menempel selamanya setelah Rules sudah diperbarui; jika masalah masih ada,
+    // flush/listener berikut akan mencatatnya kembali secara deterministik.
+    persistentCloudIssueRef.current = '';
+    setCloudError('');
     const result = await flushPendingMutations(currentUser);
     await startCloudSubscription(currentUser, { initial: false, force: true });
     return { id: 'HYBRID_SYNC', count: result.synced || 0, pending: result.pending || 0, totalPending: result.totalPending ?? getOfflineQueueStats(storeCode).count, deferredUserCount: result.deferredUserCount || 0, conflicts: result.conflicts || 0 };

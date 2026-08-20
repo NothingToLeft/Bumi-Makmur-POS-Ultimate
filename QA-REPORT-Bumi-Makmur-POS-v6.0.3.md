@@ -136,3 +136,11 @@ Seluruh automated regression dan static checks yang tersedia lulus. Tidak ada en
 - Audit diperkuat agar setelah `npm install` file JSX ikut diparse menggunakan esbuild sebelum Vite build.
 - Runtime build Web/Android/Windows diseragamkan ke Node.js 24.
 
+
+## Full Stability Recovery R2 — 20 Agustus 2026
+
+Koreksi acceptance dari R1: role Kasir memang tidak mempunyai akses `Pengaturan → Cloud & Backup`. R2 tidak melonggarkan permission tersebut. Recovery Karyawan dilakukan dari banner global melalui `Coba Sinkron Lagi` dan `Unduh Diagnostik`, sementara Owner/Manager tetap dapat memakai halaman Cloud & Backup.
+
+Temuan white-screen Owner diperbaiki dengan normalisasi diagnostik legacy/korup sebelum render serta screen-level error boundary. Background/manual sync juga force-revalidate persistent permission issue agar sesi Karyawan dapat pulih setelah Rules produksi sudah benar.
+
+QA final R2: **206/206 automated tests PASS**, static audit PASS (107 JS/JSX/MJS + 4 JSON), TypeScript syntax parse seluruh source PASS, Electron main/preload PASS, workflow YAML PASS.
