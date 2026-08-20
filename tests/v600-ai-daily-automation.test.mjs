@@ -71,8 +71,8 @@ test('v6 menyimpan Gemini key lokal, menyediakan fallback OCR, dan tidak menamba
   assert.match(android, /whatsapp-opened/);
   assert.match(native, /preferWhatsApp/);
   assert.doesNotMatch(rules, /match \/aiKeys\//);
-  assert.equal(JSON.parse(pkg).version, '6.0.3');
-  assert.match(sw, /freesync-v6\.0\.3/);
+  assert.equal(JSON.parse(pkg).version, '6.0.4');
+  assert.match(sw, /freesync-v6\.0\.4/);
 });
 
 test('v6 UI menyediakan Foto Produk AI, Smart Receiving, dan closing PDF WhatsApp', async () => {

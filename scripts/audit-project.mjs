@@ -33,7 +33,7 @@ const required = [
   'package.json', 'src/App.jsx', 'src/store/PosContext.jsx', 'src/services/firebase.js',
   'firestore.rules', 'firestore.indexes.json', 'public/manifest.webmanifest', 'public/sw.js',
   'public/_redirects', 'public/_headers', '.github/workflows/build-android.yml', '.github/workflows/build-windows.yml', 'electron/main.cjs', 'electron/preload.cjs',
-  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md'
+  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.4.md'
 ];
 for (const item of required) {
   try { await access(path.join(root, item)); } catch { errors.push(`File wajib hilang: ${item}`); }
@@ -64,6 +64,30 @@ for (const file of sourceFiles) {
     const result = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
     if (result.status !== 0) errors.push(`${relative(file)}: syntax error — ${(result.stderr || result.stdout).trim()}`);
   }
+  if (file.endsWith('.jsx')) {
+    // Heuristik ringan untuk menangkap komponen JSX yang dipakai tetapi tidak
+    // di-import/dideklarasikan. Ini sengaja ada sebagai guard tambahan saat
+    // parser penuh belum tersedia; bug CloudUpload v6.0.3 R2 akan tertangkap di sini.
+    const defined = new Set(['React', 'Fragment', 'Icon']);
+    for (const match of source.matchAll(/import\s+([^;]+?)\s+from\s+['"][^'"]+['"]/gs)) {
+      const clause = match[1].trim();
+      if (clause && !clause.startsWith('{') && !clause.startsWith('*')) defined.add(clause.split(',')[0].trim());
+      for (const named of clause.matchAll(/\{([^}]+)\}/gs)) {
+        for (const item of named[1].split(',')) {
+          const clean = item.trim();
+          if (clean) defined.add(clean.split(/\s+as\s+/).pop().trim());
+        }
+      }
+      const namespace = clause.match(/\*\s+as\s+(\w+)/);
+      if (namespace) defined.add(namespace[1]);
+    }
+    for (const pattern of [/function\s+([A-Z]\w*)\s*\(/g, /class\s+([A-Z]\w*)/g, /(?:const|let|var)\s+([A-Z]\w*)\s*=/g]) {
+      for (const match of source.matchAll(pattern)) defined.add(match[1]);
+    }
+    const tags = new Set([...source.matchAll(/<([A-Z][A-Za-z0-9_]*)\b/g)].map(match => match[1]));
+    for (const tag of tags) if (!defined.has(tag)) errors.push(`${relative(file)}: komponen JSX ${tag} dipakai tetapi tidak di-import/dideklarasikan`);
+  }
+
   const importPattern = /(?:import\s+(?:[^'";]+?\s+from\s+)?|export\s+[^'";]+?\s+from\s+|import\()(['"])(\.[^'"]+)\1/g;
   for (const match of source.matchAll(importPattern)) {
     if (!await resolveImport(file, match[2])) errors.push(`${relative(file)}: import tidak ditemukan ${match[2]}`);
@@ -88,13 +112,13 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '6.0.3') errors.push(`Versi package harus 6.0.3, ditemukan ${pkg.version}`);
+if (pkg.version !== '6.0.4') errors.push(`Versi package harus 6.0.4, ditemukan ${pkg.version}`);
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 
 const rules = await readFile(path.join(root, 'firestore.rules'), 'utf8');
 
 const deployWorkflow = await readFile(path.join(root, '.github/workflows/deploy-firebase.yml'), 'utf8');
-if (!deployWorkflow.includes('BUMI_MAKMUR_RULESET_VERSION=6.0.3')) errors.push('Workflow deploy Firebase belum memverifikasi marker ruleset v6.0.3');
+if (!deployWorkflow.includes('BUMI_MAKMUR_RULESET_VERSION=6.0.4')) errors.push('Workflow deploy Firebase belum memverifikasi marker ruleset v6.0.4');
 if (!deployWorkflow.includes('firestore:rules,firestore:indexes')) errors.push('Workflow deploy Firebase tidak dibatasi ke Firestore Rules/Indexes');
 if (/--only[^\n]*(?:functions|storage)|firebase deploy[^\n]*(?:functions|storage)/i.test(deployWorkflow)) errors.push('Workflow Firebase mencoba deploy layanan di luar Spark-only Firestore');
 for (const collection of ['products', 'sales', 'purchases', 'purchaseOrders', 'customers', 'receivables', 'payables', 'refunds', 'publicReceipts', 'branchPaymentProfiles', 'supplierPriceHistory', 'quotations', 'serialNumbers', 'warrantyClaims', 'shifts', 'cashMovements', 'feedback']) {

@@ -1,4 +1,4 @@
-// BUMI_MAKMUR_RULESET_VERSION=6.0.3
+// BUMI_MAKMUR_RULESET_VERSION=6.0.4
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -12,8 +12,14 @@ service cloud.firestore {
     function profile(storeId) {
       return get(userPath(storeId, request.auth.uid)).data;
     }
+    // Profil karyawan legacy sebelum v6 dapat belum memiliki field `active`.
+    // Client sejak lama menganggap field yang hilang sebagai aktif, sedangkan
+    // `active: false` tetap berarti akun dinonaktifkan. Samakan semantics Rules
+    // dengan client agar akun legacy dapat menyinkronkan data tanpa membuka
+    // akses untuk akun yang memang sudah dinonaktifkan.
     function activeMember(storeId) {
-      return hasProfile(storeId) && profile(storeId).active == true;
+      return hasProfile(storeId)
+        && (!('active' in profile(storeId)) || profile(storeId).active == true);
     }
     function owner(storeId) { return activeMember(storeId) && profile(storeId).role == 'owner'; }
     function manager(storeId) { return activeMember(storeId) && profile(storeId).role == 'manager'; }

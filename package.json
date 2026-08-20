@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "6.0.3",
+  "version": "6.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -48,7 +48,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v6.0.3 Cloud & Customer Display Stability: sinkronisasi user-scoped yang aman saat berganti Owner/Karyawan, Firestore Rules recovery, customer display multi-channel Web/Electron, struk profesional dengan kembalian, AI Product Capture, Smart Receiving, Daily Closing PDF/WhatsApp, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, multi-unit/varian/bundle, piutang, approval PIN, dan FreeSync Android/Web/Windows.",
+  "description": "Bumi Makmur POS v6.0.4 Cloud Compatibility & Runtime Stability: sinkronisasi user-scoped yang aman saat berganti Owner/Karyawan, Firestore Rules recovery, customer display multi-channel Web/Electron, struk profesional dengan kembalian, AI Product Capture, Smart Receiving, Daily Closing PDF/WhatsApp, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, multi-unit/varian/bundle, piutang, approval PIN, dan FreeSync Android/Web/Windows.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

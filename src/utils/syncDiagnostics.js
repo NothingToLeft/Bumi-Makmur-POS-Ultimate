@@ -5,7 +5,7 @@ const safeDate = value => {
 };
 
 export const SYNC_DIAGNOSTIC_LIMIT = 80;
-export const FIRESTORE_RULESET_VERSION = '6.0.3';
+export const FIRESTORE_RULESET_VERSION = '6.0.4';
 
 export function normalizeSyncDiagnostics(value = []) {
   if (!Array.isArray(value)) return [];
