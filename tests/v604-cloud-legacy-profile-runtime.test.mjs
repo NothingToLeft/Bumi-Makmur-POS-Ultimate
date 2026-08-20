@@ -12,8 +12,8 @@ test('v6.1.0 imports CloudUpload used by Cloud & Backup runtime', () => {
   assert.match(deviceSettings, /<CloudUpload\b/);
 });
 
-test('v6.1.0 Firestore keeps explicitly disabled profiles blocked but accepts legacy missing active field', () => {
-  assert.match(rules, /BUMI_MAKMUR_RULESET_VERSION=6\.1\.0/);
+test('v6.4.0 Firestore keeps explicitly disabled profiles blocked but accepts legacy missing active field', () => {
+  assert.match(rules, /BUMI_MAKMUR_RULESET_VERSION=6\.4\.0/);
   assert.match(rules, /!\('active' in profile\(storeId\)\)/);
   assert.match(rules, /profile\(storeId\)\.active == true/);
 });
@@ -25,6 +25,6 @@ test('v6.1.0 keeps cashier shift writes identity and branch scoped', () => {
   assert.match(shifts, /cashier\(storeId\)/);
 });
 
-test('app version is 6.3.1', () => {
-  assert.match(defaults, /APP_VERSION = '6\.3\.1'/);
+test('app version is 6.4.0', () => {
+  assert.match(defaults, /APP_VERSION = '6\.4\.0'/);
 });

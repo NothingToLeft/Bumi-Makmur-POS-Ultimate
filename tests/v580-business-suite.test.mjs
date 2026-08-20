@@ -200,8 +200,8 @@ test('QRIS preview memotong simbol QR saja dengan detector dan fallback lokal', 
   assert.match(assets, /BarcodeDetector/);
   assert.match(assets, /BrowserQRCodeReader/);
   assert.match(assets, /cropStrategy/);
-  assert.match(settings, /QRIS Adaptive v4 · QR-Only Preview/);
-  assert.match(settings, /Preview fokus ke QR, bukan seluruh poster QRIS/);
+  assert.match(settings, /QRIS Payment Assurance v6\.4 · Static Source \+ Dynamic Engine/);
+  assert.match(settings, /QR-only auto-crop|QR Saja/);
 });
 
 test('Smart Restock dapat membuat Draft PO, workflow hemat artifact, dan QRIS Mode Kasir tidak ditambahkan', async () => {

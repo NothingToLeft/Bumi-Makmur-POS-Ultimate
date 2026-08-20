@@ -1,4 +1,4 @@
-// BUMI_MAKMUR_RULESET_VERSION=6.1.0
+// BUMI_MAKMUR_RULESET_VERSION=6.4.0
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -57,7 +57,9 @@ service cloud.firestore {
     function validBranchPaymentProfile(data, branchId) {
       return data.keys().hasOnly([
           'branchId', 'merchantName', 'qrisImage', 'qrisInstruction',
-          'qrisAssetMeta', 'enabled', 'updatedAt', 'updatedBy'
+          'qrisAssetMeta', 'qrisPayload', 'qrisPayloadMeta',
+          'qrisDynamicEnabled', 'qrisDynamicAcknowledged', 'qrisRequireConfirmation',
+          'enabled', 'updatedAt', 'updatedBy'
         ])
         && data.branchId == branchId
         && data.merchantName is string
@@ -67,7 +69,23 @@ service cloud.firestore {
         && data.qrisImage.size() <= 600000
         && data.qrisInstruction is string
         && data.qrisInstruction.size() <= 240
+        && (!('qrisAssetMeta' in data) || data.qrisAssetMeta == null || data.qrisAssetMeta is map)
+        && (!('qrisPayload' in data) || (data.qrisPayload is string && data.qrisPayload.size() <= 4096))
+        && (!('qrisPayloadMeta' in data) || data.qrisPayloadMeta == null || data.qrisPayloadMeta is map)
+        && (!('qrisDynamicEnabled' in data) || data.qrisDynamicEnabled is bool)
+        && (!('qrisDynamicAcknowledged' in data) || data.qrisDynamicAcknowledged is bool)
+        && (!('qrisRequireConfirmation' in data) || data.qrisRequireConfirmation == true)
+        && (!('qrisDynamicEnabled' in data) || data.qrisDynamicEnabled == false || (
+          'qrisPayload' in data
+          && data.qrisPayload is string
+          && data.qrisPayload.size() > 0
+          && 'qrisDynamicAcknowledged' in data
+          && data.qrisDynamicAcknowledged == true
+          && 'qrisRequireConfirmation' in data
+          && data.qrisRequireConfirmation == true
+        ))
         && data.enabled is bool
+        && data.updatedAt is string
         && data.updatedBy is string;
     }
     function existingBranchAllowed(storeId) {

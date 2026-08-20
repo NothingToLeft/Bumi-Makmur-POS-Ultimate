@@ -45,7 +45,13 @@ export const getReceiptPaymentSummary = (sale = {}) => {
   };
 };
 
-export const receiptPaymentLabel = payment => isCashPayment(payment) ? 'Tunai diterima' : String(payment?.name || 'Pembayaran');
+export const receiptPaymentLabel = payment => {
+  if (isCashPayment(payment)) return 'Tunai diterima';
+  if (payment?.methodId === 'qris' || payment?.brand === 'qris') {
+    return payment?.qrisAssurance?.mode === 'dynamic' ? 'QRIS Dinamis' : 'QRIS';
+  }
+  return String(payment?.name || 'Pembayaran');
+};
 
 export const normalizeWhatsappNumber = (value, defaultCountryCode = '62') => {
   const digits = String(value || '').replace(/\D/g, '');

@@ -4,6 +4,7 @@ import { formatRp } from '../utils/helpers.js';
 import { formatQuantity } from '../utils/fractionalUnits.js';
 import { formatTimeId, toEpochMs } from '../utils/temporal.js';
 import { readCustomerDisplaySnapshot, subscribeCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
+import QrisCode from '../components/QrisCode.jsx';
 
 export default function DesktopCustomerDisplayScreen() {
   const [snapshot, setSnapshot] = useState(readCustomerDisplaySnapshot);
@@ -63,21 +64,39 @@ export default function DesktopCustomerDisplayScreen() {
         </div>
       </section>
 
-      <aside className="rounded-[2rem] bg-gradient-to-b from-red-700 to-red-950 p-6 lg:p-7 shadow-2xl flex flex-col justify-between border border-red-500/30 min-h-[360px]">
-        <div>
-          <div className="flex items-center justify-between gap-3"><p className="text-xs uppercase tracking-[.2em] font-black text-red-100">Ringkasan</p><MonitorSmartphone className="text-red-200"/></div>
-          <p className="text-2xl font-black mt-5 break-words">{snapshot.customerName || 'Pelanggan Umum'}</p>
-          <p className="text-red-100/80 mt-1">{formatQuantity(itemCount)} item dalam transaksi</p>
-        </div>
-        <div className="my-8 rounded-3xl bg-white text-slate-950 p-6 shadow-xl">
-          <p className="text-sm text-slate-500 font-bold">TOTAL PEMBAYARAN</p>
-          <p className="text-4xl lg:text-5xl font-black mt-3 break-words tabular-nums">{formatRp(snapshot.total)}</p>
-        </div>
-        <div className="rounded-2xl bg-black/25 border border-white/10 p-5 text-center">
-          <p className="font-black">Terima kasih telah berbelanja</p>
-          <p className="text-sm text-red-100 mt-1">Mohon periksa kembali barang dan nota sebelum meninggalkan toko.</p>
-          <p className="text-[11px] text-red-200/70 mt-3">{connectionLabel}{snapshot.updatedAt ? ` · ${formatTimeId(snapshot.updatedAt)}` : ''}</p>
-        </div>
+      <aside className={`rounded-[2rem] p-6 lg:p-7 shadow-2xl flex flex-col justify-between border min-h-[360px] ${snapshot.payment?.active && snapshot.payment?.methodId === 'qris' ? 'bg-gradient-to-b from-emerald-800 to-slate-950 border-emerald-500/30' : 'bg-gradient-to-b from-red-700 to-red-950 border-red-500/30'}`}>
+        {snapshot.payment?.active && snapshot.payment?.methodId === 'qris' ? <>
+          <div>
+            <div className="flex items-center justify-between gap-3"><p className="text-xs uppercase tracking-[.2em] font-black text-emerald-100">Pembayaran QRIS</p><QrCode className="text-emerald-200"/></div>
+            <p className="text-2xl font-black mt-4 break-words">{snapshot.payment.merchantName || snapshot.companyName || 'BUMI MAKMUR'}</p>
+            <p className="text-emerald-100/80 mt-1">{snapshot.payment.mode === 'dynamic' ? 'QRIS Dinamis · nominal sudah terisi' : 'QRIS Statis / fallback merchant'}</p>
+          </div>
+          <div className="my-5 flex-1 flex flex-col items-center justify-center">
+            {snapshot.payment.qrisPayload ? <div className="w-full max-w-[320px] aspect-square rounded-[2rem] bg-white p-3 shadow-2xl"><QrisCode payload={snapshot.payment.qrisPayload} size={520} className="w-full h-full rounded-2xl"/></div> : <div className="w-full rounded-3xl bg-white/10 border border-white/15 p-8 text-center"><QrCode size={88} className="mx-auto text-emerald-100"/><p className="font-black text-xl mt-4">Scan QRIS di meja kasir</p><p className="text-sm text-emerald-100/80 mt-2">Kasir menggunakan QRIS statis sebagai fallback.</p></div>}
+            <div className="text-center mt-5"><p className="text-sm text-emerald-100 font-bold">BAYAR SESUAI NOMINAL</p><p className="text-4xl lg:text-5xl font-black mt-2 tabular-nums">{formatRp(snapshot.payment.amount)}</p></div>
+          </div>
+          <div className={`rounded-2xl border p-4 text-center ${snapshot.payment.confirmed ? 'bg-emerald-400/20 border-emerald-300/30' : 'bg-black/25 border-white/10'}`}>
+            <p className="font-black">{snapshot.payment.confirmed ? 'Pembayaran sudah dikonfirmasi kasir' : 'Selesaikan pembayaran di aplikasi Anda'}</p>
+            <p className="text-sm text-emerald-100 mt-1">{snapshot.payment.confirmed ? 'Transaksi sedang diselesaikan. Terima kasih.' : 'Tunggu kasir memastikan notifikasi pembayaran merchant sudah masuk.'}</p>
+            {snapshot.payment.warning && <p className="text-xs text-amber-200 font-bold mt-2">{snapshot.payment.warning}</p>}
+            <p className="text-[11px] text-emerald-200/70 mt-3">{connectionLabel}{snapshot.updatedAt ? ` · ${formatTimeId(snapshot.updatedAt)}` : ''}</p>
+          </div>
+        </> : <>
+          <div>
+            <div className="flex items-center justify-between gap-3"><p className="text-xs uppercase tracking-[.2em] font-black text-red-100">Ringkasan</p><MonitorSmartphone className="text-red-200"/></div>
+            <p className="text-2xl font-black mt-5 break-words">{snapshot.customerName || 'Pelanggan Umum'}</p>
+            <p className="text-red-100/80 mt-1">{formatQuantity(itemCount)} item dalam transaksi</p>
+          </div>
+          <div className="my-8 rounded-3xl bg-white text-slate-950 p-6 shadow-xl">
+            <p className="text-sm text-slate-500 font-bold">TOTAL PEMBAYARAN</p>
+            <p className="text-4xl lg:text-5xl font-black mt-3 break-words tabular-nums">{formatRp(snapshot.total)}</p>
+          </div>
+          <div className="rounded-2xl bg-black/25 border border-white/10 p-5 text-center">
+            <p className="font-black">Terima kasih telah berbelanja</p>
+            <p className="text-sm text-red-100 mt-1">Mohon periksa kembali barang dan nota sebelum meninggalkan toko.</p>
+            <p className="text-[11px] text-red-200/70 mt-3">{connectionLabel}{snapshot.updatedAt ? ` · ${formatTimeId(snapshot.updatedAt)}` : ''}</p>
+          </div>
+        </>}
       </aside>
     </main>
   </div>;

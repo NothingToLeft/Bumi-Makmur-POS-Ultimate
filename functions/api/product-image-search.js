@@ -131,7 +131,7 @@ async function fetchSourcePage(source) {
   try {
     const response = await safeFetch(source.url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BumiMakmurPOS/6.3.1; product-image-helper)' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BumiMakmurPOS/6.4.0; product-image-helper)' }
     });
     if (!response.ok) return null;
     const type = String(response.headers.get('content-type') || '').toLowerCase();
@@ -169,7 +169,7 @@ async function fetchSelectedImageDataUrl(imageUrl) {
   try {
     const response = await safeFetch(imageUrl, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BumiMakmurPOS/6.3.1; product-image-helper)' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BumiMakmurPOS/6.4.0; product-image-helper)' }
     });
     if (!response.ok) throw new Error(`Sumber gambar merespons ${response.status}.`);
     const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();

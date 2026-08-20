@@ -33,7 +33,13 @@ const required = [
   'package.json', 'src/App.jsx', 'src/store/PosContext.jsx', 'src/services/firebase.js',
   'firestore.rules', 'firestore.indexes.json', 'public/manifest.webmanifest', 'public/sw.js',
   'public/_redirects', 'public/_headers', '.github/workflows/build-android.yml', '.github/workflows/build-windows.yml', 'electron/main.cjs', 'electron/preload.cjs',
-  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.1.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.2.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.1.md', 'CHANGELOG-Bumi-Makmur-POS-v6.3.1.md', 'QA-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'FINAL-RELEASE-CHECKLIST-v6.3.1.md', 'functions/api/product-image-search.js', 'src/services/geminiRuntime.js'
+  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.1.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.2.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.1.md', 'CHANGELOG-Bumi-Makmur-POS-v6.3.1.md', 'QA-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'FINAL-RELEASE-CHECKLIST-v6.3.1.md', 'functions/api/product-image-search.js', 'src/services/geminiRuntime.js',
+  'src/utils/qrisDynamic.js', 'src/services/qrisPaymentAssurance.js', 'src/components/QrisCode.jsx',
+  'RELEASE-NOTES-Bumi-Makmur-POS-v6.4.0.md', 'CHANGELOG-Bumi-Makmur-POS-v6.4.0.md',
+  'QA-REPORT-Bumi-Makmur-POS-v6.4.0.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.4.0.md',
+  'FINAL-RELEASE-CHECKLIST-v6.4.0.md', 'docs/IMPLEMENTATION-NOTES-v6.4.0.md',
+  'docs/QRIS-PAYMENT-ASSURANCE-API-v6.4.0.md', 'docs/QRIS-SOURCE-AUDIT-v6.4.0.md',
+  'docs/FOLDER-STRUCTURE-v6.4.0.md', 'THIRD-PARTY-NOTICES.md'
 ];
 for (const item of required) {
   try { await access(path.join(root, item)); } catch { errors.push(`File wajib hilang: ${item}`); }
@@ -112,7 +118,7 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '6.3.1') errors.push(`Versi package harus 6.3.1, ditemukan ${pkg.version}`);
+if (pkg.version !== '6.4.0') errors.push(`Versi package harus 6.4.0, ditemukan ${pkg.version}`);
 if (pkg.dependencies?.['firebase-functions']) errors.push('Dependency firebase-functions tidak boleh digunakan; backend Firebase harus tetap Spark-only.');
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 
@@ -128,6 +134,21 @@ if (/generativelanguage\.googleapis\.com|google_search|body\?\.apiKey|apiKey\s*=
 if (/firebase-functions|firebase\/functions/.test(imageSearchFunction)) errors.push('Cloudflare Pages Function tidak boleh bergantung Firebase Functions.');
 if (!/safeFetch|127\.0\.0\.1|localhost|isBlockedHostname/i.test(imageSearchFunction)) errors.push('Cloudflare Pages image helper belum menunjukkan SSRF/private-network guard.');
 
+
+const qrisCore = await readFile(path.join(root, 'src/utils/qrisDynamic.js'), 'utf8');
+const qrisAssurance = await readFile(path.join(root, 'src/services/qrisPaymentAssurance.js'), 'utf8');
+const posScreen = await readFile(path.join(root, 'src/screens/POSScreen.jsx'), 'utf8');
+const customerDisplayScreen = await readFile(path.join(root, 'src/screens/DesktopCustomerDisplayScreen.jsx'), 'utf8');
+const transactionsScreen = await readFile(path.join(root, 'src/screens/TransactionsScreen.jsx'), 'utf8');
+const posContext = await readFile(path.join(root, 'src/store/PosContext.jsx'), 'utf8');
+if (/fetch\s*\(|axios|https?:\/\/|miraipedia|puppeteer|playwright|payhook/i.test(qrisCore)) errors.push('QRIS Dynamic core harus tetap lokal dan tidak boleh bergantung converter/scraping/network eksternal.');
+if (/miraipedia|gobiz|puppeteer|playwright|payhook|otp interception/i.test(qrisAssurance)) errors.push('QRIS Payment Assurance mengandung dependency/pola unofficial yang dilarang.');
+if (!qrisCore.includes("QRIS_MAX_AMOUNT = 10_000_000") || !qrisCore.includes("MANAGED_DYNAMIC_TAGS") || !qrisCore.includes("calculateQrisCrc16")) errors.push('Guard nominal/fee stripping/CRC QRIS v6.4.0 tidak lengkap.');
+if (!posScreen.includes('Saya sudah melihat notifikasi pembayaran masuk ke merchant') || !posScreen.includes('sanitizePaymentForSale') || !posScreen.includes('checkoutId')) errors.push('Kasir belum menerapkan konfirmasi merchant, sanitization, atau idempotent checkout QRIS v6.4.0.');
+if (!customerDisplayScreen.includes('QrisCode') || !customerDisplayScreen.includes('snapshot.payment.qrisPayload')) errors.push('Customer Display belum menerapkan QRIS Dynamic transient v6.4.0.');
+if (!transactionsScreen.includes('Payment Assurance QRIS')) errors.push('Detail transaksi belum menampilkan Payment Assurance QRIS.');
+if (!posContext.includes('Metadata assurance QRIS tidak lengkap') || !posContext.includes('payloadStored !== false')) errors.push('completeSale belum menerapkan defense-in-depth QRIS Payment Assurance.');
+
 const indexes = JSON.parse(await readFile(path.join(root, 'firestore.indexes.json'), 'utf8'));
 for (const fieldPath of ['posImage.dataUrl', 'groupPosImage.dataUrl']) {
   const exemption = (indexes.fieldOverrides || []).find(item => item.collectionGroup === 'products' && item.fieldPath === fieldPath && Array.isArray(item.indexes) && item.indexes.length === 0);
@@ -136,8 +157,19 @@ for (const fieldPath of ['posImage.dataUrl', 'groupPosImage.dataUrl']) {
 
 const rules = await readFile(path.join(root, 'firestore.rules'), 'utf8');
 
+
+if (!rules.includes('BUMI_MAKMUR_RULESET_VERSION=6.4.0')) errors.push('Firestore Rules belum memakai marker v6.4.0.');
+for (const field of ['qrisPayload', 'qrisPayloadMeta', 'qrisDynamicEnabled', 'qrisDynamicAcknowledged', 'qrisRequireConfirmation']) {
+  if (!rules.includes(`'${field}'`)) errors.push(`Firestore Rules branchPaymentProfiles belum mengizinkan field ${field}.`);
+}
+if (!rules.includes("data.qrisRequireConfirmation == true")) errors.push('Firestore Rules belum mengunci konfirmasi QRIS sebagai wajib.');
+for (const fieldPath of ['qrisImage', 'qrisPayload']) {
+  const exemption = (indexes.fieldOverrides || []).find(item => item.collectionGroup === 'branchPaymentProfiles' && item.fieldPath === fieldPath && Array.isArray(item.indexes) && item.indexes.length === 0);
+  if (!exemption) errors.push(`Firestore index exemption hilang untuk branchPaymentProfiles.${fieldPath}`);
+}
+
 const deployWorkflow = await readFile(path.join(root, '.github/workflows/deploy-firebase.yml'), 'utf8');
-if (!deployWorkflow.includes('BUMI_MAKMUR_RULESET_VERSION=6.1.0')) errors.push('Workflow deploy Firebase belum memverifikasi marker ruleset v6.1.0');
+if (!deployWorkflow.includes('BUMI_MAKMUR_RULESET_VERSION=6.4.0')) errors.push('Workflow deploy Firebase belum memverifikasi marker ruleset v6.4.0');
 if (!deployWorkflow.includes('firestore:rules,firestore:indexes')) errors.push('Workflow deploy Firebase tidak dibatasi ke Firestore Rules/Indexes');
 if (/--only[^\n]*(?:functions|storage)|firebase deploy[^\n]*(?:functions|storage)/i.test(deployWorkflow)) errors.push('Workflow Firebase mencoba deploy layanan di luar Spark-only Firestore');
 for (const collection of ['products', 'sales', 'purchases', 'purchaseOrders', 'customers', 'receivables', 'payables', 'refunds', 'publicReceipts', 'branchPaymentProfiles', 'supplierPriceHistory', 'quotations', 'serialNumbers', 'warrantyClaims', 'shifts', 'cashMovements', 'feedback']) {
@@ -146,7 +178,7 @@ for (const collection of ['products', 'sales', 'purchases', 'purchaseOrders', 'c
 
 notices.push(`${sourceFiles.length} file JS/JSX/MJS diperiksa`);
 notices.push(`${allFiles.filter(file => file.endsWith('.json')).length} file JSON valid`);
-notices.push('Relative imports, required files, Firebase Spark-only, Cloudflare Pages Free function, secret scan, dan parser JSX/esbuild CI diperiksa');
+notices.push('Relative imports, required files, Firebase Spark-only, Cloudflare Pages Free function, QRIS local-only/Payment Assurance guards, secret scan, dan parser JSX/esbuild CI diperiksa');
 
 if (errors.length) {
   console.error('\nAUDIT GAGAL');

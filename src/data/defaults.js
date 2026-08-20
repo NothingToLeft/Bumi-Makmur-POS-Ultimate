@@ -4,7 +4,7 @@ import {
   MonitorSmartphone, Settings, ListChecks, Gauge, FileText, ShieldCheck
 } from 'lucide-react';
 
-export const APP_VERSION = '6.3.1';
+export const APP_VERSION = '6.4.0';
 export const DB_KEY = 'bm_pos_freesync_v4_3';
 export const MAIN_BRANCH_ID = 'BMP-001';
 
@@ -160,7 +160,7 @@ export const createSeedDb = () => ({
     receiptShowPayment: true, receiptShowStorePhone: true, receiptPaperWidth: 80,
     whatsappCountryCode: '62', whatsappReceiptEnabled: true,
     closingReportEnabled: true, closingAutoSharePrompt: true,
-    qrisMerchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.',
+    qrisMerchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu pastikan notifikasi pembayaran berhasil diterima kasir.',
     paymentMethods: [
       { id: 'cash', name: 'Tunai', type: 'cash', brand: 'cash', active: true },
       { id: 'qris', name: 'QRIS', type: 'digital', brand: 'qris', active: true },
@@ -194,7 +194,7 @@ export const createSeedDb = () => ({
   ],
   sales: [], heldSales: [], purchases: [], purchaseOrders: [], stockMovements: [], stockAdjustments: [], stockOpnames: [], stockTransfers: [],
   productPriceHistory: [], supplierPriceHistory: [], quotations: [], serialNumbers: [], warrantyClaims: [], approvalRequests: [], deviceSessions: [],
-  branchPaymentProfiles: [{ id: MAIN_BRANCH_ID, branchId: MAIN_BRANCH_ID, merchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.', qrisAssetMeta: null, enabled: true, updatedAt: now, updatedBy: 'SYSTEM' }],
+  branchPaymentProfiles: [{ id: MAIN_BRANCH_ID, branchId: MAIN_BRANCH_ID, merchantName: 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu pastikan notifikasi pembayaran berhasil diterima kasir.', qrisAssetMeta: null, qrisPayload: '', qrisPayloadMeta: null, qrisDynamicEnabled: false, qrisDynamicAcknowledged: false, qrisRequireConfirmation: true, enabled: true, updatedAt: now, updatedBy: 'SYSTEM' }],
   expenses: [], receivables: [], payables: [], refunds: [], shifts: [
     { id: 'SHIFT-DEMO', branchId: MAIN_BRANCH_ID, userId: 'USR-KASIR', userName: 'Kasir Satu', startAt: now, endAt: null, startingCash: 500000, actualEndingCash: null, expectedEndingCash: null, difference: null, status: 'OPEN', notes: 'Shift demo awal' }
   ],

@@ -5,10 +5,10 @@ import { readFileSync } from 'node:fs';
 const root = new URL('../', import.meta.url);
 const read = rel => readFileSync(new URL(rel, root), 'utf8');
 
-test('v6.3.1 keeps unified autosync with the deployed v6.1.0 ruleset', () => {
-  assert.match(read('src/data/defaults.js'), /APP_VERSION = '6\.3\.1'/);
-  assert.match(read('src/utils/syncDiagnostics.js'), /FIRESTORE_RULESET_VERSION = '6\.1\.0'/);
-  assert.match(read('firestore.rules'), /BUMI_MAKMUR_RULESET_VERSION=6\.1\.0/);
+test('v6.4.0 keeps unified autosync aligned with the deployed v6.4.0 ruleset', () => {
+  assert.match(read('src/data/defaults.js'), /APP_VERSION = '6\.4\.0'/);
+  assert.match(read('src/utils/syncDiagnostics.js'), /FIRESTORE_RULESET_VERSION = '6\.4\.0'/);
+  assert.match(read('firestore.rules'), /BUMI_MAKMUR_RULESET_VERSION=6\.4\.0/);
 });
 
 test('cashier mutation receipt idempotency preflight can GET but cannot LIST', () => {

@@ -39,6 +39,16 @@
       "collectionGroup": "products",
       "fieldPath": "groupPosImage.dataUrl",
       "indexes": []
+    },
+    {
+      "collectionGroup": "branchPaymentProfiles",
+      "fieldPath": "qrisImage",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "branchPaymentProfiles",
+      "fieldPath": "qrisPayload",
+      "indexes": []
     }
   ]
 }

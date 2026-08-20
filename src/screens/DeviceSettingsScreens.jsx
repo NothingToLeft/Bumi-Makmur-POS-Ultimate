@@ -17,6 +17,9 @@ import { clearGeminiDiagnostics, getGeminiDiagnostics, getGeminiRuntimeStatus } 
 import { openCustomerDisplayWindow, publishCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
 import { normalizeSyncDiagnostics } from '../utils/syncDiagnostics.js';
 import { formatDateTimeId } from '../utils/temporal.js';
+import QrisCode from '../components/QrisCode.jsx';
+import { decodeQrisFromDataUrl, decodeQrisFromFile } from '../services/qrisImageDecoder.js';
+import { createDynamicQrisPayload, QRIS_MAX_AMOUNT, qrisPayloadMeta, validateQrisPayload } from '../utils/qrisDynamic.js';
 
 export function DevicesScreen(){
  const {db,branch,hasPermission,savePrinterProfile}=usePos();const[editing,setEditing]=useState(null);const canManage=hasPermission('devices.manage');const typeIcon={bluetooth:Bluetooth,usb:Usb,lan:Wifi,browser:FileText,pdf:FileText};
@@ -251,6 +254,8 @@ function PaymentSettings({db,config,patch,addPayment,currentUser,branchId,saveBr
   const [assetState,setAssetState]=useState({status:'idle',message:'',tone:'success'});
   const [saving,setSaving]=useState(false);
   const [previewOpen,setPreviewOpen]=useState(false);
+  const [dynamicPreview,setDynamicPreview]=useState('');
+  const [dynamicTestAmount,setDynamicTestAmount]=useState(1000);
   const qrisRef=useRef(null);
   const activeProfile=(db.branchPaymentProfiles||[]).find(item=>item.branchId===selectedBranchId);
   const selectedBranch=availableBranches.find(item=>item.id===selectedBranchId);
@@ -258,51 +263,109 @@ function PaymentSettings({db,config,patch,addPayment,currentUser,branchId,saveBr
   useEffect(()=>{
     const source=activeProfile||{
       id:selectedBranchId,branchId:selectedBranchId,merchantName:config.qrisMerchantName||config.companyName||'BUMI MAKMUR',
-      qrisImage:config.qrisImage||'',qrisInstruction:config.qrisInstruction||'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.',
-      qrisAssetMeta:null,enabled:true
+      qrisImage:config.qrisImage||'',qrisInstruction:config.qrisInstruction||'Scan QR lalu pastikan notifikasi pembayaran berhasil diterima kasir.',
+      qrisAssetMeta:null,qrisPayload:'',qrisPayloadMeta:null,qrisDynamicEnabled:false,qrisDynamicAcknowledged:false,qrisRequireConfirmation:true,enabled:true
     };
-    setDraft({...source,id:selectedBranchId,branchId:selectedBranchId});
+    setDraft({qrisPayload:'',qrisPayloadMeta:null,qrisDynamicEnabled:false,qrisDynamicAcknowledged:false,...source,qrisRequireConfirmation:true,id:selectedBranchId,branchId:selectedBranchId});
     setAssetState({status:'idle',message:'',tone:'success'});
-  },[selectedBranchId,activeProfile?.updatedAt,activeProfile?.qrisImage,config.companyName]);
+    setDynamicPreview('');
+  },[selectedBranchId,activeProfile?.updatedAt,activeProfile?.qrisImage,activeProfile?.qrisPayload,config.companyName]);
 
   useEffect(()=>{
     if(!availableBranches.some(item=>item.id===selectedBranchId))setSelectedBranchId(availableBranches[0]?.id||branchId);
   },[availableBranches,selectedBranchId,branchId]);
 
   const updateDraft=patchValue=>setDraft(previous=>({...previous,...patchValue}));
+  const payloadValidation=validateQrisPayload(draft?.qrisPayload||'',{requireStatic:true});
+  const sourceValid=payloadValidation.valid;
+  const payloadInfo=sourceValid?payloadValidation.data:null;
+  const merchantMismatch=Boolean(sourceValid&&draft?.merchantName?.trim()&&payloadInfo?.merchantName?.trim()&&draft.merchantName.trim().toUpperCase()!==payloadInfo.merchantName.trim().toUpperCase());
+
+  const applyValidatedPayload=(payload,origin='QRIS')=>{
+    const normalized=String(payload||'').trim();
+    const validation=validateQrisPayload(normalized,{requireStatic:true});
+    if(!validation.valid)throw new Error(validation.errors[0]||'Payload QRIS statis tidak valid.');
+    const nextMeta={...qrisPayloadMeta(normalized),verifiedAt:new Date().toISOString(),origin};
+    setDraft(previous=>{
+      const changed=String(previous?.qrisPayload||'').trim()!==normalized;
+      return {...previous,qrisPayload:normalized,qrisPayloadMeta:nextMeta,qrisDynamicEnabled:changed?false:previous.qrisDynamicEnabled,qrisDynamicAcknowledged:changed?false:previous.qrisDynamicAcknowledged};
+    });
+    setDynamicPreview('');
+    return validation;
+  };
+
   const uploadQris=async file=>{
     if(!file)return;
-    setAssetState({status:'processing',message:'Menganalisis ketajaman dan mengoptimalkan QRIS...',tone:'success'});
+    setAssetState({status:'processing',message:'Mengoptimalkan gambar dan membaca payload QRIS statis...',tone:'success'});
     try{
-      const result=await uploadStoreAsset(file,'qris');
-      updateDraft({qrisImage:result.dataUrl,qrisAssetMeta:result.meta});
+      const [assetResult,decodeResult]=await Promise.allSettled([uploadStoreAsset(file,'qris'),decodeQrisFromFile(file)]);
+      if(assetResult.status!=='fulfilled')throw assetResult.reason;
+      const result=assetResult.value;
+      const imagePatch={qrisImage:result.dataUrl,qrisAssetMeta:result.meta};
+      let decodeNote=' Payload dinamis belum terbaca; QRIS statis tetap dapat digunakan.';
+      if(decodeResult.status==='fulfilled'){
+        const payload=decodeResult.value.payload;
+        const meta={...qrisPayloadMeta(payload),verifiedAt:new Date().toISOString(),origin:'upload'};
+        Object.assign(imagePatch,{qrisPayload:payload,qrisPayloadMeta:meta,qrisDynamicEnabled:false,qrisDynamicAcknowledged:false});
+        decodeNote=` Payload QRIS statis valid terdeteksi untuk ${decodeResult.value.validation.data.merchantName}; QRIS Dinamis siap diuji sebelum diaktifkan.`;
+      }
+      updateDraft(imagePatch);
       const cropLabel=result.meta.cropStrategy==='barcode-detector'||result.meta.cropStrategy==='zxing-qr-points'?'QR-only auto-crop':result.meta.cropped?'auto-crop':'gambar penuh';
       const pipelineLabel=result.meta.pipeline==='high-contrast-fallback'?`${cropLabel} + kontras aman`:`${cropLabel} + warna`;
       const limitNote=result.meta.nearLimit?' Hasil mendekati batas aman, tetapi masih dapat disimpan.':'';
-      setAssetState({status:'success',tone:'success',message:`QRIS siap disimpan: ${formatAssetBytes(result.meta.originalBytes)} → ${formatAssetBytes(result.meta.outputBytes)} (${result.meta.width}×${result.meta.height}px, ${pipelineLabel}).${limitNote}`});
+      setAssetState({status:'success',tone:'success',message:`QRIS siap: ${formatAssetBytes(result.meta.originalBytes)} → ${formatAssetBytes(result.meta.outputBytes)} (${result.meta.width}×${result.meta.height}px, ${pipelineLabel}).${limitNote}${decodeNote}`});
     }catch(error){
       setAssetState({status:'error',tone:'error',message:error.message||'QRIS gagal diproses.'});
     }finally{
       if(qrisRef.current)qrisRef.current.value='';
     }
   };
+
+  const detectStoredPayload=async()=>{
+    if(!draft?.qrisImage)return;
+    setAssetState({status:'processing',message:'Membaca payload dari QRIS tersimpan...',tone:'success'});
+    try{
+      const decoded=await decodeQrisFromDataUrl(draft.qrisImage);
+      applyValidatedPayload(decoded.payload,'stored-image');
+      setAssetState({status:'success',tone:'success',message:`Payload QRIS statis valid ditemukan: ${decoded.validation.data.merchantName} · ${decoded.validation.data.merchantCity}. Lakukan uji scan sebelum mengaktifkan mode dinamis.`});
+    }catch(error){setAssetState({status:'error',tone:'error',message:error.message||'Payload QRIS tidak dapat dibaca.'})}
+  };
+
+  const validateManualPayload=()=>{
+    try{
+      const validation=applyValidatedPayload(draft?.qrisPayload||'','manual');
+      setAssetState({status:'success',tone:'success',message:`Payload QRIS valid · ${validation.data.merchantName} · ${validation.data.merchantCity} · CRC ${validation.data.crc}.`});
+    }catch(error){setAssetState({status:'error',tone:'error',message:error.message||'Payload QRIS tidak valid.'})}
+  };
+
+  const buildDynamicTest=()=>{
+    try{
+      const generated=createDynamicQrisPayload(draft?.qrisPayload||'',Number(dynamicTestAmount));
+      setDynamicPreview(generated);
+      setAssetState({status:'success',tone:'success',message:`QR uji dinamis berhasil dibuat lokal untuk ${formatRp(Number(dynamicTestAmount))}. Scan dengan aplikasi pembayaran dan pastikan nama merchant serta nominal benar; tidak perlu menyelesaikan pembayaran.`});
+    }catch(error){setDynamicPreview('');setAssetState({status:'error',tone:'error',message:error.message||'QRIS dinamis uji gagal dibuat.'})}
+  };
+
   const saveProfile=async()=>{
     if(!draft)return;
     setSaving(true);
     setAssetState(previous=>({...previous,status:previous.status==='error'?'error':'processing',message:'Menyimpan profil pembayaran cabang ke cache dan Firebase...'}));
     try{
-      await Promise.resolve(saveBranchPaymentProfile(draft));
-      setAssetState({status:'success',tone:'success',message:`Profil QRIS ${selectedBranch?.name||selectedBranchId} berhasil disimpan.`});
+      if(draft.qrisDynamicEnabled&&!sourceValid)throw new Error(payloadValidation.errors[0]||'Payload QRIS statis belum valid.');
+      if(draft.qrisDynamicEnabled&&!draft.qrisDynamicAcknowledged)throw new Error('Centang konfirmasi uji QRIS Dinamis sebelum mengaktifkannya.');
+      await Promise.resolve(saveBranchPaymentProfile({...draft,qrisRequireConfirmation:true}));
+      setAssetState({status:'success',tone:'success',message:`Profil pembayaran ${selectedBranch?.name||selectedBranchId} berhasil disimpan. Mode ${draft.qrisDynamicEnabled?'QRIS Dinamis + fallback statis':'QRIS Statis'} aktif.`});
     }catch(error){
       setAssetState({status:'error',tone:'error',message:error.message||'Profil QRIS gagal disimpan.'});
     }finally{setSaving(false)}
   };
+
   const brandClass={cash:'payment-cash',qris:'payment-qris',shopeepay:'payment-shopeepay',ovo:'payment-ovo',gopay:'payment-gopay',dana:'payment-dana',bank:'payment-bank',card:'payment-card',credit:'payment-credit',other:'payment-other'};
   const meta=draft?.qrisAssetMeta;
   return <div className="max-w-5xl space-y-4">
     <Card className="p-4 border-emerald-200 bg-emerald-50/60">
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
-        <Field label="Profil Pembayaran Cabang" hint={isOwner?'Setiap cabang dapat memakai QRIS dan nama merchant berbeda.':'Store Manager hanya dapat mengatur cabangnya sendiri.'}>
+        <Field label="Profil Pembayaran Cabang" hint={isOwner?'Setiap cabang dapat memakai QRIS dan payload merchant berbeda. Konfirmasi notifikasi pembayaran selalu wajib selama belum ada callback PJP resmi.':'Store Manager hanya dapat mengatur cabangnya sendiri.'}>
           {isOwner?<Select value={selectedBranchId} onChange={event=>setSelectedBranchId(event.target.value)}>{availableBranches.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</Select>:<Input value={selectedBranch?.name||currentUser?.branchId||'-'} disabled/>}
         </Field>
         <Badge tone="green">Firestore dokumen terpisah per cabang</Badge>
@@ -316,14 +379,14 @@ function PaymentSettings({db,config,patch,addPayment,currentUser,branchId,saveBr
           {draft?.qrisImage&&<span className="absolute right-3 bottom-3 w-10 h-10 rounded-xl bg-slate-950/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Maximize2 size={18}/></span>}
         </button>
         <div>
-          <p className="text-xs uppercase tracking-[.2em] text-emerald-300 font-black">QRIS Adaptive v4 · QR-Only Preview</p>
-          <h3 className="text-2xl font-black mt-1">Preview fokus ke QR, bukan seluruh poster QRIS</h3>
-          <p className="text-sm text-emerald-100 mt-2">Gambar QRIS resmi boleh tetap diunggah utuh. Sistem mencoba menemukan simbol QR, memotong hanya area QR, menambahkan quiet zone putih baru, lalu mengoptimalkannya untuk Firestore. Jika deteksi QR tidak tersedia, sistem memakai auto-crop aman sebagai fallback.</p>
+          <p className="text-xs uppercase tracking-[.2em] text-emerald-300 font-black">QRIS Payment Assurance v6.4 · Static Source + Dynamic Engine</p>
+          <h3 className="text-2xl font-black mt-1">Satu QRIS merchant, nominal transaksi otomatis</h3>
+          <p className="text-sm text-emerald-100 mt-2">Gambar QRIS resmi tetap menjadi fallback. Saat diunggah, sistem mencoba membaca payload QRIS statis, memvalidasi struktur/CRC, lalu dapat membentuk QR dinamis secara lokal tanpa Firebase Functions, server pembayaran, atau biaya API.</p>
           <input ref={qrisRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={event=>void uploadQris(event.target.files?.[0])}/>
           <div className="flex flex-wrap gap-2 mt-4">
             <Button onClick={()=>qrisRef.current?.click()} disabled={assetState.status==='processing'||saving}><Upload size={17}/> {draft?.qrisImage?'Ganti QRIS':'Unggah QRIS'}</Button>
             {draft?.qrisImage&&<Button variant="secondary" onClick={()=>setPreviewOpen(true)}><Maximize2 size={17}/> Preview Besar</Button>}
-            {draft?.qrisImage&&<Button variant="danger" onClick={()=>{updateDraft({qrisImage:'',qrisAssetMeta:null});setAssetState({status:'success',tone:'success',message:'QRIS dihapus dari draft. Tekan Simpan Profil untuk menerapkan.'})}}><Trash2 size={17}/> Hapus</Button>}
+            {draft?.qrisImage&&<Button variant="danger" onClick={()=>{updateDraft({qrisImage:'',qrisAssetMeta:null,qrisPayload:'',qrisPayloadMeta:null,qrisDynamicEnabled:false,qrisDynamicAcknowledged:false});setDynamicPreview('');setAssetState({status:'success',tone:'success',message:'QRIS dan payload dinamis dihapus dari draft. Tekan Simpan Profil untuk menerapkan.'})}}><Trash2 size={17}/> Hapus</Button>}
           </div>
           {meta&&<div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 text-center"><div className="rounded-xl bg-white/10 p-2"><p className="text-[10px] text-emerald-200">Asli</p><b className="text-xs">{formatAssetBytes(meta.originalBytes)}</b></div><div className="rounded-xl bg-white/10 p-2"><p className="text-[10px] text-emerald-200">Hasil</p><b className="text-xs">{formatAssetBytes(meta.outputBytes)}</b></div><div className="rounded-xl bg-white/10 p-2"><p className="text-[10px] text-emerald-200">Resolusi</p><b className="text-xs">{meta.width}×{meta.height}</b></div><div className="rounded-xl bg-white/10 p-2"><p className="text-[10px] text-emerald-200">Hemat</p><b className="text-xs">{meta.reductionPercent}%</b></div><div className="rounded-xl bg-white/10 p-2 col-span-2 sm:col-span-1"><p className="text-[10px] text-emerald-200">Mode</p><b className="text-[10px]">{meta.pipeline==='high-contrast-fallback'?'Kontras':meta.cropStrategy==='barcode-detector'||meta.cropStrategy==='zxing-qr-points'?'QR Saja':meta.cropped?'Auto-crop':'Warna'}</b></div></div>}
         </div>
@@ -332,23 +395,54 @@ function PaymentSettings({db,config,patch,addPayment,currentUser,branchId,saveBr
 
     {assetState.message&&<div className={`p-4 rounded-2xl border flex gap-3 text-sm font-semibold ${assetState.status==='error'?'bg-red-50 border-red-200 text-red-800':assetState.status==='processing'?'bg-blue-50 border-blue-200 text-blue-800':'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>{assetState.status==='processing'?<Loader2 size={20} className="animate-spin shrink-0"/>:assetState.status==='error'?<AlertTriangle size={20} className="shrink-0"/>:<CircleCheck size={20} className="shrink-0"/>}<span>{assetState.message}</span></div>}
 
+    <Card className="p-5 border-violet-200 overflow-hidden">
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+        <div className="flex gap-3"><div className="w-12 h-12 rounded-2xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0"><QrCode size={24}/></div><div><p className="font-black text-lg">QRIS Dinamis Lokal & Payment Assurance</p><p className="text-xs text-gray-500 mt-1 max-w-3xl">Engine v6.4.0 hanya mengubah Point of Initiation menjadi dinamis dan menyisipkan nominal transaksi, lalu menghitung CRC16 ulang. Data merchant/acquirer dipertahankan. Tidak ada service fee QRIS dan tidak ada klaim pembayaran otomatis.</p></div></div>
+        <Badge tone={draft?.qrisDynamicEnabled?'green':sourceValid?'blue':'gray'}>{draft?.qrisDynamicEnabled?'Dinamis Aktif':sourceValid?'Sumber Valid':'Belum Siap'}</Badge>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1.15fr_.85fr] gap-4">
+        <div className="space-y-3">
+          <Field label="Payload QRIS Statis" hint="Biasanya terisi otomatis saat gambar QRIS diunggah. Payload ini adalah data yang memang ada di QR merchant, bukan API key atau secret.">
+            <Textarea value={draft?.qrisPayload||''} onChange={event=>updateDraft({qrisPayload:event.target.value,qrisPayloadMeta:null,qrisDynamicEnabled:false,qrisDynamicAcknowledged:false})} placeholder="000201010211...6304ABCD" className="min-h-[110px] font-mono text-xs"/>
+          </Field>
+          <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={validateManualPayload} disabled={!draft?.qrisPayload?.trim()||assetState.status==='processing'}><ShieldCheck size={17}/> Validasi Payload</Button>{draft?.qrisImage&&<Button variant="secondary" onClick={()=>void detectStoredPayload()} disabled={assetState.status==='processing'}><QrCode size={17}/> Baca dari Gambar Tersimpan</Button>}</div>
+
+          {sourceValid?<div className="grid grid-cols-2 sm:grid-cols-4 gap-2"><div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100"><p className="text-[10px] text-emerald-700">Merchant</p><b className="text-xs break-words">{payloadInfo.merchantName}</b></div><div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100"><p className="text-[10px] text-emerald-700">Kota</p><b className="text-xs break-words">{payloadInfo.merchantCity}</b></div><div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100"><p className="text-[10px] text-emerald-700">MCC / IDR</p><b className="text-xs">{payloadInfo.merchantCategoryCode} · {payloadInfo.currency}</b></div><div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100"><p className="text-[10px] text-emerald-700">CRC</p><b className="text-xs font-mono">{payloadInfo.crc}</b></div></div>:draft?.qrisPayload?.trim()?<p className="text-xs font-bold text-red-600">{payloadValidation.errors[0]}</p>:<p className="text-xs text-gray-500">Belum ada payload QRIS statis. QRIS statis gambar tetap dapat dipakai, tetapi generator dinamis belum tersedia.</p>}
+          {merchantMismatch&&<div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800"><b>Periksa nama merchant:</b> payload QR menyebut “{payloadInfo.merchantName}”, sedangkan label POS “{draft.merchantName}”. Ini boleh berbeda untuk label internal, tetapi saat pelanggan scan pastikan aplikasi pembayaran menampilkan merchant yang benar.</div>}
+        </div>
+
+        <div className="rounded-2xl bg-slate-950 text-white p-4">
+          <p className="text-xs uppercase tracking-[.16em] text-violet-300 font-black">Uji Generator Sebelum Aktif</p>
+          <p className="text-sm text-slate-300 mt-2">Buat QR uji lalu scan dengan aplikasi pembayaran. Cukup verifikasi nama merchant dan nominal; jangan tekan Bayar bila hanya melakukan uji tampilan.</p>
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2"><MoneyInput min={1} max={QRIS_MAX_AMOUNT} value={dynamicTestAmount} onValueChange={setDynamicTestAmount}/><Button onClick={buildDynamicTest} disabled={!sourceValid}>Buat QR Uji</Button></div>
+          {dynamicPreview?<div className="mt-4 text-center"><div className="w-56 h-56 bg-white rounded-2xl p-2 mx-auto"><QrisCode payload={dynamicPreview} size={420} className="w-full h-full rounded-xl"/></div><p className="font-black text-xl mt-3">{formatRp(Number(dynamicTestAmount))}</p><p className="text-[11px] text-amber-200 mt-1">QR ini valid secara struktur dan dapat dipindai. Jangan selesaikan pembayaran jika hanya menguji.</p></div>:<div className="mt-4 h-44 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center text-slate-500"><QrCode size={72}/></div>}
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        <label className={`flex items-start gap-3 p-4 rounded-xl border ${sourceValid?'bg-blue-50 border-blue-200':'bg-gray-50 border-gray-200 opacity-70'}`}><input type="checkbox" className="w-5 h-5 mt-0.5" checked={draft?.qrisDynamicAcknowledged===true} disabled={!sourceValid} onChange={event=>updateDraft({qrisDynamicAcknowledged:event.target.checked,qrisDynamicEnabled:event.target.checked?draft.qrisDynamicEnabled:false})}/><span><b className="text-sm block">Saya sudah menguji hasil scan QRIS Dinamis merchant ini</b><small className="text-gray-600">Nama merchant dan nominal tampil benar pada aplikasi pembayaran/PJP yang digunakan. Pengaktifan ini adalah persetujuan operasional per cabang, bukan verifikasi otomatis dari PJP.</small></span></label>
+        <label className={`flex items-start gap-3 p-4 rounded-xl border ${draft?.qrisDynamicEnabled?'bg-emerald-50 border-emerald-200':'bg-gray-50 border-gray-200'}`}><input type="checkbox" className="w-5 h-5 mt-0.5" checked={draft?.qrisDynamicEnabled===true} disabled={!sourceValid||draft?.qrisDynamicAcknowledged!==true} onChange={event=>updateDraft({qrisDynamicEnabled:event.target.checked})}/><span><b className="text-sm block">Gunakan QRIS Dinamis otomatis di Kasir</b><small className="text-gray-600">Nominal QRIS dibuat lokal per baris pembayaran. Jika generator gagal, Kasir otomatis kembali ke gambar QRIS statis dan memberi peringatan.</small></span></label>
+        <label className="flex items-start gap-3 p-4 rounded-xl border bg-amber-50 border-amber-200"><input type="checkbox" className="w-5 h-5 mt-0.5" checked readOnly disabled/><span><b className="text-sm block">Konfirmasi notifikasi merchant wajib sebelum transaksi ditutup</b><small className="text-amber-800">Dikunci aktif untuk keamanan. Generator lokal tidak menerima callback bank/PJP, jadi Kasir wajib memastikan notifikasi pembayaran benar-benar masuk sebelum stok dan transaksi difinalisasi. Opsi ini baru boleh otomatis bila kelak memakai integrasi PJP/acquirer resmi.</small></span></label>
+      </div>
+    </Card>
+
     <Card className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
       <Field label="Nama Merchant QRIS"><Input value={draft?.merchantName||''} onChange={event=>updateDraft({merchantName:event.target.value})} placeholder="BUMI MAKMUR"/></Field>
-      <Field label="Petunjuk Pembayaran"><Input value={draft?.qrisInstruction||''} onChange={event=>updateDraft({qrisInstruction:event.target.value})} placeholder="Scan QR lalu tunjukkan bukti pembayaran..."/></Field>
+      <Field label="Petunjuk Pembayaran"><Input value={draft?.qrisInstruction||''} onChange={event=>updateDraft({qrisInstruction:event.target.value})} placeholder="Scan QR lalu pastikan notifikasi pembayaran..."/></Field>
       <label className="md:col-span-2 flex items-center gap-3 p-4 bg-gray-50 border rounded-xl"><input type="checkbox" className="w-5 h-5" checked={draft?.enabled!==false} onChange={event=>updateDraft({enabled:event.target.checked})}/><span><b className="text-sm block">Aktifkan QRIS pada cabang ini</b><small className="text-gray-500">Bila dimatikan, kasir tetap dapat memakai metode digital lain tanpa menampilkan QRIS.</small></span></label>
-      <Button className="md:col-span-2" onClick={saveProfile} disabled={saving||assetState.status==='processing'||!draft?.merchantName?.trim()}>{saving?<Loader2 size={17} className="animate-spin"/>:<Save size={17}/>} {saving?'Menyimpan...':'Simpan Profil QRIS Cabang'}</Button>
+      <Button className="md:col-span-2" onClick={saveProfile} disabled={saving||assetState.status==='processing'||!draft?.merchantName?.trim()}>{saving?<Loader2 size={17} className="animate-spin"/>:<Save size={17}/>} {saving?'Menyimpan...':'Simpan Profil Pembayaran Cabang'}</Button>
     </Card>
 
     {isOwner&&<>
-      <Card className="p-4"><p className="font-black mb-1">Pengaturan Transaksi Global Owner</p><p className="text-xs text-gray-500 mb-3">Pajak, service, pembulatan, dan daftar metode berlaku ke seluruh cabang.</p><Toggle label="Pajak" checked={config.taxEnabled} onChange={v=>patch('taxEnabled',v)} description={`Tarif saat ini ${config.taxRate}%`}/><Toggle label="Service Charge / Gratuity" checked={config.serviceEnabled} onChange={v=>patch('serviceEnabled',v)} description={`Tarif saat ini ${config.serviceRate}%`}/></Card>
+      <Card className="p-4"><p className="font-black mb-1">Pengaturan Transaksi Global Owner</p><p className="text-xs text-gray-500 mb-3">Pajak, service, pembulatan, dan daftar metode berlaku ke seluruh cabang. Service toko bukan biaya tambahan QRIS dan tetap dihitung sebagai bagian total barang/jasa sebelum metode pembayaran dipilih.</p><Toggle label="Pajak" checked={config.taxEnabled} onChange={v=>patch('taxEnabled',v)} description={`Tarif saat ini ${config.taxRate}%`}/><Toggle label="Service Charge / Gratuity" checked={config.serviceEnabled} onChange={v=>patch('serviceEnabled',v)} description={`Tarif saat ini ${config.serviceRate}%`}/></Card>
       <Card className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3"><Field label="Tarif Pajak (%)"><NumberInput min={0} max={100} value={config.taxRate} onValueChange={value=>patch('taxRate', value === '' ? 0 : value)} zeroAsEmpty/></Field><Field label="Service (%)"><NumberInput min={0} max={100} value={config.serviceRate} onValueChange={value=>patch('serviceRate', value === '' ? 0 : value)} zeroAsEmpty/></Field><Field label="Pembulatan"><Select value={config.roundingStep} onChange={e=>patch('roundingStep',Number(e.target.value))}><option value="0">Tanpa pembulatan</option><option value="100">Rp100</option><option value="500">Rp500</option><option value="1000">Rp1.000</option></Select></Field></Card>
       <Card className="p-4"><div className="flex justify-between items-center mb-4"><div><p className="font-black">Metode Pembayaran Global</p><p className="text-xs text-gray-500">Aktifkan hanya metode yang dipakai seluruh jaringan toko.</p></div><Button size="sm" onClick={addPayment}><Plus size={15}/> Tambah</Button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{config.paymentMethods.map((method,index)=><label key={method.id} className={`payment-setting-card ${brandClass[method.brand||method.id]||'payment-other'} ${method.active?'is-enabled':''}`}><span className="payment-method-icon"><WalletCards size={20}/></span><span className="flex-1 min-w-0"><b className="block truncate">{method.name}</b><small>{method.type}</small></span><input type="checkbox" checked={method.active} onChange={e=>patch('paymentMethods',config.paymentMethods.map((row,i)=>i===index?{...row,active:e.target.checked}:row))}/></label>)}</div></Card>
     </>}
 
-    {previewOpen&&draft?.qrisImage&&<Modal title={`Preview QRIS — ${selectedBranch?.name||selectedBranchId}`} onClose={()=>setPreviewOpen(false)} size="lg" footer={<Button onClick={()=>setPreviewOpen(false)}>Tutup</Button>}><div className="max-w-xl mx-auto text-center"><div className="bg-white p-5 rounded-3xl border shadow-sm max-w-[520px] mx-auto aspect-square flex items-center justify-center"><img src={draft.qrisImage} alt="Preview QRIS ukuran besar" className="w-full h-full object-contain"/></div><p className="font-black text-xl mt-4">{draft.merchantName}</p><p className="text-sm text-gray-500 mt-1">{draft.qrisInstruction}</p><p className="text-xs text-emerald-700 font-bold mt-3">Uji pemindaian dengan aplikasi pembayaran sebelum dipakai pada transaksi sungguhan.</p></div></Modal>}
+    {previewOpen&&draft?.qrisImage&&<Modal title={`Preview QRIS Statis — ${selectedBranch?.name||selectedBranchId}`} onClose={()=>setPreviewOpen(false)} size="lg" footer={<Button onClick={()=>setPreviewOpen(false)}>Tutup</Button>}><div className="max-w-xl mx-auto text-center"><div className="bg-white p-5 rounded-3xl border shadow-sm max-w-[520px] mx-auto aspect-square flex items-center justify-center"><img src={draft.qrisImage} alt="Preview QRIS ukuran besar" className="w-full h-full object-contain"/></div><p className="font-black text-xl mt-4">{draft.merchantName}</p><p className="text-sm text-gray-500 mt-1">{draft.qrisInstruction}</p><p className="text-xs text-emerald-700 font-bold mt-3">QRIS statis tetap dipertahankan sebagai fallback. Uji pemindaian dengan aplikasi pembayaran sebelum dipakai pada transaksi sungguhan.</p></div></Modal>}
   </div>
 }
-
 function SystemSettings({currentUser,db,online,localReady,cloudReady,cloudSaving,cloudError,pendingSyncCount,activePendingSyncCount=0,otherUserPendingSyncCount=0,syncConflictCount,lastSyncAttemptAt,lastSyncSuccessAt,syncStatus,syncDiagnostics,queueSummary,clearSyncDiagnostics,exportSyncDiagnostics,exportBackup,inspectBackup,importBackup,fileRef,syncNow,resetDemo,signOutAccount,authorizeManagerPin}){
  const [refreshing,setRefreshing]=useState(false);
  const [backupPreview,setBackupPreview]=useState(null);
@@ -370,7 +464,7 @@ function SystemSettings({currentUser,db,online,localReady,cloudReady,cloudSaving
  return <div className="max-w-5xl space-y-4">
   <Card className="p-5 bg-gradient-to-br from-emerald-950 to-slate-950 text-white border-0"><div className="flex flex-col md:flex-row md:items-center gap-4"><div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${syncStatus?.healthy?'bg-emerald-400/20 text-emerald-200':'bg-orange-400/20 text-orange-200'}`}>{online&&cloudReady&&!cloudError?<Cloud size={28}/>:<Database size={28}/>}</div><div className="flex-1 min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-black text-lg">Hybrid Local + Firebase</p><Badge tone={syncStatus?.healthy?'green':cloudError?'orange':'blue'}>{syncStatus?.healthy?'TERHUBUNG':!online?'OFFLINE':'PERLU CEK'}</Badge></div><p className="text-sm text-emerald-100 mt-1">{conciseStatus}</p><p className="text-xs text-emerald-300 mt-2">Sinkron terakhir: {lastSyncSuccessAt?formatDateTimeId(lastSyncSuccessAt):'Belum tercatat'}{lastSyncAttemptAt?` · Percobaan ${formatDateTimeId(lastSyncAttemptAt)}`:''}</p></div><button type="button" onClick={refresh} disabled={!online||refreshing} style={{backgroundColor:'#ffffff',color:'#064e3b'}} className="w-full md:w-auto md:min-w-[220px] min-h-[48px] rounded-xl font-black inline-flex items-center justify-center gap-2 border border-white/70 shadow-sm disabled:opacity-60"><RefreshCw size={18} className={refreshing?'animate-spin':''}/><span>{refreshing?'Menyinkronkan...':'Sinkronkan Sekarang'}</span></button></div></Card>
 
-  {rulesMismatch&&<Card className="p-4 border-red-200 bg-red-50"><div className="flex gap-3"><AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={22}/><div className="min-w-0"><p className="font-black text-red-900">Firestore Rules / profil cloud perlu dipulihkan</p><p className="text-sm text-red-800 mt-1">Data lokal tetap aman dan tidak akan dibuang. Cloud menolak sebagian koleksi karena rules produksi belum aktif atau sesi/profil akun tidak sesuai.</p>{permissionCollections.length>0&&<p className="text-xs text-red-700 mt-2 break-words">Terdeteksi pada: {permissionCollections.join(', ')}.</p>}<ol className="text-xs text-red-800 mt-3 space-y-1 list-decimal pl-4"><li>Upload source v6.3.1 ke GitHub.</li><li>Jalankan Actions → <b>Deploy Firebase Spark Rules</b>.</li><li>Setelah workflow hijau, kembali ke sini lalu tekan <b>Sinkronkan Sekarang</b>.</li><li>Jika masih ditolak, keluar lalu login lagi dengan akun yang membuat mutation tersebut.</li></ol></div></div></Card>}
+  {rulesMismatch&&<Card className="p-4 border-red-200 bg-red-50"><div className="flex gap-3"><AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={22}/><div className="min-w-0"><p className="font-black text-red-900">Firestore Rules / profil cloud perlu dipulihkan</p><p className="text-sm text-red-800 mt-1">Data lokal tetap aman dan tidak akan dibuang. Cloud menolak sebagian koleksi karena rules produksi belum aktif atau sesi/profil akun tidak sesuai.</p>{permissionCollections.length>0&&<p className="text-xs text-red-700 mt-2 break-words">Terdeteksi pada: {permissionCollections.join(', ')}.</p>}<ol className="text-xs text-red-800 mt-3 space-y-1 list-decimal pl-4"><li>Upload source v6.4.0 ke GitHub.</li><li>Jalankan Actions → <b>Deploy Firebase Spark Rules</b>.</li><li>Setelah workflow hijau, kembali ke sini lalu tekan <b>Sinkronkan Sekarang</b>.</li><li>Jika masih ditolak, keluar lalu login lagi dengan akun yang membuat mutation tersebut.</li></ol></div></div></Card>}
 
   {otherUserPendingSyncCount>0&&<Card className="p-4 border-blue-200 bg-blue-50"><div className="flex gap-3"><CloudUpload className="text-blue-600 shrink-0 mt-0.5" size={22}/><div><p className="font-black text-blue-900">{otherUserPendingSyncCount} pembaruan milik akun lain tetap aman</p><p className="text-sm text-blue-800 mt-1">Antrean tidak lagi dikirim memakai akun yang salah. Login kembali dengan karyawan yang membuat transaksi/shift tersebut; sinkronisasi akan dilanjutkan otomatis dengan identitas yang benar.</p></div></div></Card>}
 

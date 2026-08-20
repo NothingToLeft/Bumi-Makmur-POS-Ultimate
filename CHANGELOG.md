@@ -1,5 +1,20 @@
 # Changelog
 
+## v6.4.0 — QRIS Dynamic & Payment Assurance
+
+- Menambahkan generator QRIS Dinamis lokal dari payload QRIS statis merchant yang tervalidasi ketat, tanpa API converter eksternal.
+- Parser QRIS sekarang byte-aware/fail-closed dengan validasi TLV, required fields, IDR, merchant/account data, dan CRC16 sebelum maupun sesudah konversi.
+- Nominal QRIS per payment line wajib Rupiah bulat Rp1–Rp10.000.000; split payment tetap didukung untuk kombinasi metode/nominal lebih besar.
+- Menambahkan Payment Assurance: mode QRIS, nominal, merchant, fingerprint/CRC source, status konfirmasi, kasir, dan waktu konfirmasi disimpan sebagai audit; payload QR dinamis tidak disimpan di histori transaksi.
+- Checkout Kasir memakai stable checkout ID selama satu attempt sehingga retry/double-submit memanfaatkan duplicate-sale guard yang sudah ada.
+- Customer Display dapat menampilkan QRIS dinamis transient, nominal, status menunggu/terkonfirmasi, serta fallback guidance.
+- Detail Transaksi menampilkan audit Payment Assurance QRIS; struk membedakan QRIS Dinamis tanpa mencetak payload.
+- QRIS statis lama tetap tersedia sebagai fallback dan Dynamic Mode bersifat opt-in per cabang setelah source QRIS diuji dan diakui.
+- Source research membandingkan empat project QRIS; external converter, Puppeteer/portal scraping, OTP interception, unofficial GoBiz/QFM automation, mock QR, random suffix tanpa official feed, dan customer surcharge sengaja tidak diadopsi.
+- Seluruh fitur v6.3.1 dan arsitektur Firebase Auth + Firestore Spark-only tetap dipertahankan; tidak ada migrasi destruktif atau index baru.
+- Regression suite: **260/260 PASS**.
+
+
 ## v6.3.1 — AI Quota Resilience Patch
 
 - Menangani Gemini quota/rate-limit/API key/model/network/service error melalui shared runtime dan pesan Bahasa Indonesia.

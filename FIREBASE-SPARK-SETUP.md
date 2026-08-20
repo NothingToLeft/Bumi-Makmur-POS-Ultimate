@@ -1,4 +1,4 @@
-# Firebase Spark — Setup Gratis Bumi Makmur POS v6.3.0
+# Firebase Spark — Setup Gratis Bumi Makmur POS v6.4.0
 
 Project tetap memakai **Firebase Spark/free tier**. Jangan upgrade Blaze dan jangan aktifkan layanan berbayar.
 
@@ -15,7 +15,7 @@ Firebase Console → Firestore Database → Create database → Production mode.
 Ruleset release ini memiliki marker:
 
 ```text
-BUMI_MAKMUR_RULESET_VERSION=6.1.0
+BUMI_MAKMUR_RULESET_VERSION=6.4.0
 ```
 
 ## 3. GitHub Secrets
@@ -43,13 +43,13 @@ Secret service account hanya digunakan GitHub Actions untuk deploy Firestore Rul
 
 Tidak perlu Firebase Functions, Storage, Hosting, atau billing Blaze.
 
-## 5. Deploy Rules + Indexes — WAJIB sekali setelah upload v6.3.0
+## 5. Deploy Rules + Indexes — WAJIB sekali setelah upload v6.4.0
 
 ```text
 GitHub → Actions → Deploy Firebase Spark Rules → Run workflow
 ```
 
-Tunggu workflow hijau sebelum validasi produksi. **Firestore Rules tetap marker v6.1.0**, tetapi v6.3.0 menambah index exemption untuk thumbnail Kasir sehingga workflow perlu dijalankan satu kali setelah source v6.3.0 diunggah.
+Tunggu workflow hijau sebelum validasi produksi. **v6.4.0 menaikkan Firestore Rules ke marker v6.4.0** agar field QRIS Dinamis pada `branchPaymentProfiles` diizinkan dan tetap branch-scoped. Release ini juga menambah index exemption `branchPaymentProfiles.qrisImage` dan `branchPaymentProfiles.qrisPayload`, sehingga workflow wajib dijalankan setelah source v6.4.0 diunggah.
 
 Rules mencakup:
 
@@ -83,6 +83,11 @@ Foto induk grup varian disimpan hanya pada satu child product dan digunakan seba
 
 Gemini API key untuk pencarian foto tidak pernah diperlukan workflow Firebase dan tidak boleh dimasukkan ke GitHub secret tambahan untuk fitur ini. API key tetap pada perangkat pengguna.
 
+### Index QRIS v6.4.0
+
+`firestore.indexes.json` juga mengecualikan `branchPaymentProfiles.qrisImage` dan `branchPaymentProfiles.qrisPayload` dari single-field indexes. Keduanya tidak dipakai untuk query dan pengecualian ini mengurangi pemborosan index pada data QRIS merchant.
+
+
 ## 6. Authorized domains
 
 Firebase → Authentication → Settings → Authorized domains:
@@ -95,7 +100,7 @@ bumi-makmur-pos-ultimate.pages.dev
 ## 7. Jika muncul `Missing or insufficient permissions`
 
 1. Jangan hapus antrean offline.
-2. Pastikan repository sudah berisi source v6.3.0.
+2. Pastikan repository sudah berisi source v6.4.0.
 3. Jalankan workflow **Deploy Firebase Spark Rules** sampai hijau.
 4. Keluar dan login lagi hanya bila diagnostik menyebut sesi/credential, bukan sekadar rules.
 5. Buka `Pengaturan → Cloud & Backup → Sinkronkan Sekarang`.
@@ -105,7 +110,7 @@ bumi-makmur-pos-ultimate.pages.dev
 Jika rules sudah hijau tetapi permission masih muncul, ekspor Diagnostik Sinkronisasi dan periksa `storeId`, `branchId`, role, serta nama koleksi yang ditolak.
 
 
-## Kebijakan sinkronisasi v6.1.0
+## Kebijakan sinkronisasi v6.4.0
 
 - Semua data bisnis utama dan konfigurasi non-rahasia disinkronkan otomatis ke Firestore.
 - Database lokal tetap dipakai sebagai cache/offline mirror agar kasir dapat bekerja tanpa internet.

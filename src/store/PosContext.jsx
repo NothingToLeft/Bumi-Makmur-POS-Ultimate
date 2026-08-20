@@ -52,6 +52,7 @@ import { preparePosImageForStorage } from '../services/productMedia.js';
 import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, classifySyncError, FIRESTORE_RULESET_VERSION, normalizeSyncDiagnostics, summarizePendingMutations } from '../utils/syncDiagnostics.js';
 import { validateBackupPayload } from '../utils/backupValidation.js';
 import { publishCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
+import { QRIS_MAX_AMOUNT, QRIS_MIN_AMOUNT, validateQrisPayload, qrisPayloadMeta } from '../utils/qrisDynamic.js';
 import {
   baseUnitCost as calculateBaseUnitCost, conversionFactor, formatQuantity,
   normalizeQuantityStep, recommendedQuantityStep
@@ -167,7 +168,7 @@ export function PosProvider({ children }) {
   const [lastSyncSuccessAt, setLastSyncSuccessAt] = useState(() => localStorage.getItem(SYNC_SUCCESS_KEY) || '');
   const [syncDiagnostics, setSyncDiagnostics] = useState(() => normalizeSyncDiagnostics(safeJSONParse(localStorage.getItem(SYNC_DIAGNOSTICS_KEY), [])));
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
-  const [customerDisplay, setCustomerDisplay] = useState({ cart: [], total: 0, customerName: 'Umum', message: '' });
+  const [customerDisplay, setCustomerDisplay] = useState({ cart: [], total: 0, customerName: 'Umum', message: '', payment: null });
   const [loginDirectory, setLoginDirectory] = useState(() => {
     const cached = safeJSONParse(localStorage.getItem(LOGIN_DIRECTORY_KEY), {});
     return {
@@ -1129,7 +1130,7 @@ export function PosProvider({ children }) {
       next.branches.push(created);
       const general = { id: generateId('CUS'), branchId: created.id, name: 'Umum (Non-Member)', phone: '-', email: '', type: 'Reguler', priceTier: 'retail', creditLimit: 0, points: 0, address: '', project: '', notes: '', active: true };
       next.customers.push(general);
-      next.branchPaymentProfiles.push({ id: created.id, branchId: created.id, merchantName: next.configs.companyName || 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.', qrisAssetMeta: null, enabled: true, updatedAt: nowISO(), updatedBy: currentUserRef.current.id });
+      next.branchPaymentProfiles.push({ id: created.id, branchId: created.id, merchantName: next.configs.companyName || 'BUMI MAKMUR', qrisImage: '', qrisInstruction: 'Scan QR lalu pastikan notifikasi pembayaran berhasil diterima kasir.', qrisAssetMeta: null, qrisPayload: '', qrisPayloadMeta: null, qrisDynamicEnabled: false, qrisDynamicAcknowledged: false, qrisRequireConfirmation: true, enabled: true, updatedAt: nowISO(), updatedBy: currentUserRef.current.id });
       return created;
     });
     if (navigator.onLine && currentUserRef.current?.role === 'owner' && auth?.currentUser?.uid === currentUserRef.current.id) {
@@ -1971,6 +1972,33 @@ export function PosProvider({ children }) {
     if (creditPayments.some(payment => !payment.dueDate)) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
     const overpayment = paymentTotal - recalculatedTotal;
     if (overpayment > cashTotal) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan. Kelebihan hanya boleh berasal dari pembayaran tunai sebagai kembalian.');
+    const qrisProfile = (next.branchPaymentProfiles || []).find(row => row.branchId === branchId || row.id === branchId);
+    const qrisPayments = (payload.payments || []).filter(payment => payment.methodId === 'qris' || payment.brand === 'qris');
+    for (const payment of qrisPayments) {
+      const qrisAmount = money(payment.amount);
+      if (qrisAmount < QRIS_MIN_AMOUNT || qrisAmount > QRIS_MAX_AMOUNT) throw new Error(`Nominal QRIS per pembayaran harus antara Rp${QRIS_MIN_AMOUNT.toLocaleString('id-ID')} dan Rp${QRIS_MAX_AMOUNT.toLocaleString('id-ID')}. Gunakan split payment untuk nominal yang lebih besar.`);
+      const assurance = payment.qrisAssurance;
+      if (!assurance || Number(assurance.schemaVersion || 0) < 1) throw new Error('Metadata assurance QRIS tidak lengkap. Buka ulang pembayaran QRIS dari Kasir agar transaksi dapat diverifikasi.');
+      if (money(assurance.amount) !== qrisAmount) throw new Error('Nominal assurance QRIS tidak cocok dengan nominal pembayaran.');
+      if (!['dynamic', 'static', 'static-fallback', 'physical-static', 'physical-static-fallback'].includes(assurance.mode)) throw new Error('Mode assurance QRIS tidak dikenali.');
+      if (assurance.payloadStored !== false) throw new Error('Payload QRIS tidak boleh disimpan di histori transaksi.');
+      if (String(assurance.branchId || '') !== String(branchId || '')) throw new Error('Cabang assurance QRIS tidak cocok dengan cabang transaksi.');
+      if (!String(assurance.sessionId || '').trim()) throw new Error('Session ID assurance QRIS tidak tersedia.');
+      if ('payload' in assurance || 'qrisPayload' in assurance || 'qrisPayload' in payment) throw new Error('Payload QRIS tidak boleh disimpan di histori transaksi.');
+      if (assurance.mode === 'dynamic') {
+        if (assurance.generatedLocally !== true) throw new Error('QRIS Dinamis harus tercatat sebagai payload yang dibuat lokal.');
+        if (!String(assurance.sourceFingerprint || '').trim() || !/^[0-9A-F]{4}$/i.test(String(assurance.sourceCrc || ''))) throw new Error('Identitas sumber QRIS Dinamis tidak lengkap.');
+      } else if (assurance.generatedLocally === true) {
+        throw new Error('Mode QRIS statis tidak boleh ditandai sebagai generated locally.');
+      }
+      if (payment.verification !== 'merchant-notification-confirmed' || assurance.verification?.status !== 'merchant-notification-confirmed') {
+        throw new Error('Pembayaran QRIS belum dikonfirmasi. Pastikan notifikasi pembayaran berhasil diterima merchant sebelum menyelesaikan transaksi.');
+      }
+      if (!assurance.verification?.confirmedAt || !assurance.verification?.confirmedBy) throw new Error('Audit konfirmasi QRIS belum lengkap.');
+      if (String(assurance.verification.confirmedBy) !== String(currentUser.id)) throw new Error('Konfirmasi QRIS harus dilakukan oleh kasir yang sedang login.');
+      const confirmedAtMs = Date.parse(String(assurance.verification.confirmedAt || ''));
+      if (!Number.isFinite(confirmedAtMs)) throw new Error('Waktu konfirmasi QRIS tidak valid.');
+    }
 
     const stockMap = new Map();
     for (const row of rawStockRows) {
@@ -2745,8 +2773,13 @@ export function PosProvider({ children }) {
       branchId: targetBranchId,
       merchantName: String(data.merchantName || next.configs.companyName || 'BUMI MAKMUR').trim(),
       qrisImage: String(data.qrisImage || ''),
-      qrisInstruction: String(data.qrisInstruction || 'Scan QR lalu tunjukkan bukti pembayaran kepada kasir.').trim(),
+      qrisInstruction: String(data.qrisInstruction || 'Scan QR lalu pastikan notifikasi pembayaran berhasil diterima kasir.').trim(),
       qrisAssetMeta: data.qrisAssetMeta || null,
+      qrisPayload: String(data.qrisPayload || '').trim(),
+      qrisPayloadMeta: data.qrisPayloadMeta || null,
+      qrisDynamicEnabled: data.qrisDynamicEnabled === true,
+      qrisDynamicAcknowledged: data.qrisDynamicAcknowledged === true,
+      qrisRequireConfirmation: true,
       enabled: data.enabled !== false,
       updatedAt: nowISO(),
       updatedBy: currentUserRef.current.id
@@ -2754,6 +2787,19 @@ export function PosProvider({ children }) {
     if (item.qrisImage && !item.qrisImage.startsWith('data:image/')) throw new Error('Data QRIS tidak valid. Unggah ulang gambar QRIS.');
     if (item.qrisImage && (item.qrisImage.length > 590_000 || dataUrlByteLength(item.qrisImage) > 420_000)) {
       throw new Error('QRIS lama masih terlalu besar untuk Firestore. Tekan Ganti QRIS agar sistem mengoptimalkannya sebelum disimpan.');
+    }
+    if (item.qrisPayload.length > 4096) throw new Error('Payload QRIS terlalu panjang untuk disimpan.');
+    if (item.qrisPayload) {
+      const validation = validateQrisPayload(item.qrisPayload, { requireStatic: true });
+      if (!validation.valid) throw new Error(`Payload QRIS tidak valid: ${validation.errors[0]}`);
+      item.qrisPayloadMeta = { ...qrisPayloadMeta(item.qrisPayload), verifiedAt: nowISO() };
+    } else {
+      item.qrisPayloadMeta = null;
+      item.qrisDynamicEnabled = false;
+      item.qrisDynamicAcknowledged = false;
+    }
+    if (item.qrisDynamicEnabled && (!item.qrisPayload || !item.qrisDynamicAcknowledged)) {
+      throw new Error('QRIS Dinamis hanya dapat diaktifkan setelah payload QRIS statis valid dan konfirmasi uji merchant dicentang.');
     }
     const index = next.branchPaymentProfiles.findIndex(row => row.branchId === targetBranchId || row.id === targetBranchId);
     if (index >= 0) next.branchPaymentProfiles[index] = item;

@@ -82,7 +82,7 @@ test('v5 menambahkan Pusat Kontrol dan QRIS per cabang untuk Manager', async () 
   assert.match(context, /saveBranchPaymentProfile/);
   assert.match(context, /Store Manager hanya dapat mengubah QRIS cabangnya sendiri/);
   assert.match(settings, /QRIS Adaptive v3/);
-  assert.match(settings, /Simpan Profil QRIS Cabang/);
+  assert.match(settings, /Simpan Profil Pembayaran Cabang/);
   assert.match(pos, /branchPaymentProfile/);
   assert.match(sync, /branchPaymentProfiles/);
   assert.match(defaults, /updatedBy: 'SYSTEM'/);

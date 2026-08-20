@@ -14,6 +14,9 @@ import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
 import { sortProductsByName } from '../utils/productCatalog.js';
 import { barcodeSearchText } from '../utils/productBarcodes.js';
 import { resolveProductPosImage } from '../services/productMedia.js';
+import QrisCode from '../components/QrisCode.jsx';
+import { QRIS_MAX_AMOUNT } from '../utils/qrisDynamic.js';
+import { QRIS_VERIFICATION_CONFIRMED, isQrisPayment, resolveQrisPresentation, sanitizePaymentForSale, validateQrisPaymentAmount } from '../services/qrisPaymentAssurance.js';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
@@ -272,18 +275,21 @@ export default function POSScreen() {
   };
 
   const finalizePayment = async (payments, approval = null) => {
-    const paid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-    const credit = payments.find(item => item.type === 'credit');
+    const checkoutId = payments.find(item => item.checkoutId)?.checkoutId || '';
+    const salePayments = payments.map(payment => { const { checkoutId: _checkoutId, ...safePayment } = payment; return safePayment; });
+    const paid = salePayments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const credit = salePayments.find(item => item.type === 'credit');
     if (paid < totals.total) throw new Error('Jumlah pembayaran belum mencukupi.');
     if (credit && !credit.dueDate) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
     const incompleteSerial = cart.find(line => line.serialTracking && (line.serialIds || []).length !== Math.round(Number(line.baseQty || 0)));
     if (incompleteSerial) throw new Error(`Pilih ${Math.round(Number(incompleteSerial.baseQty || 0))} nomor serial untuk ${incompleteSerial.name} melalui tombol Atur Item.`);
     const sale = completeSale({
+      id: checkoutId || undefined,
       items: cart.map(line => ({ ...line, netUnitPrice: Math.max(0, line.price - Number(line.itemDiscount || 0) / Math.max(0.001, Number(line.qty) || 1)) })),
       customerId: customer?.id, customerName: customer?.name || 'Umum', customerPhone: customer?.phone || '', cashierName: currentUser?.name || 'Kasir', saleType, notes, globalDiscount: Number(globalDiscount || 0),
       promoDiscount: 0, appliedPromos: [],
       loyaltyDiscount: totals.loyaltyDiscount, subtotal: Math.round(totals.subtotal), tax: totals.tax, service: totals.service, rounding: totals.rounding, total: totals.total,
-      payments, change: Math.max(0, paid - totals.total), heldSaleId, pointsRedeemed: Number(pointsRedeemed || 0),
+      payments: salePayments, change: Math.max(0, paid - totals.total), heldSaleId, pointsRedeemed: Number(pointsRedeemed || 0),
       approvedBy: approval?.user?.id || '', approvedByName: approval?.user?.name || '', approvalToken: approval?.approvalToken || '', approvalPurpose: approval?.purpose || ''
     });
     setReceipt(sale); setPaymentOpen(false); setDiscountApproval(null); setMobileCart(false); clear();
@@ -369,7 +375,7 @@ export default function POSScreen() {
 
       {choosingProduct && <ProductChoiceModal product={choosingProduct} saleType={saleType} onClose={() => setChoosingProduct(null)} onAdd={options => { addProduct(choosingProduct, options); setChoosingProduct(null); }}/>}      
       {editingLine && <LineEditModal line={editingLine} product={scoped.products.find(item => item.id === editingLine.productId)} serialNumbers={scoped.serialNumbers || []} saleType={saleType} onClose={() => setEditingLine(null)} onSave={line => { updateLine(line); setEditingLine(null); }}/>}      
-      {paymentOpen && <PaymentModal total={totals.total} methods={activePaymentMethods} configs={paymentDisplayConfig} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
+      {paymentOpen && <PaymentModal total={totals.total} methods={activePaymentMethods} configs={paymentDisplayConfig} qrisProfile={branchPaymentProfile} onClose={() => setPaymentOpen(false)} onConfirm={processPayment}/>}      
       {discountApproval && <DiscountApprovalModal approval={discountApproval} onClose={() => setDiscountApproval(null)} onApprove={async pin => { const approval = await authorizeManagerPin(pin, discountApproval.purpose || 'SALE_DISCOUNT'); await finalizePayment(discountApproval.payments, approval); }}/>}      
       {splitOpen && <SplitBillModal cart={cart} onClose={() => setSplitOpen(false)} onSplit={splitBill}/>}      
       {holdOpen && <HoldModal defaultName={customer?.name || ''} onClose={() => setHoldOpen(false)} onSave={saveBill}/>}      
@@ -517,13 +523,23 @@ function LineEditModal({ line, product, serialNumbers = [], saleType, onClose, o
   </Modal>;
 }
 
-function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
+function PaymentModal({ total, methods, configs, qrisProfile, onClose, onConfirm }) {
+  const { setCustomerDisplay, currentUser, branch } = usePos();
   const firstMethod = methods[0] || { id: 'cash', type: 'cash', name: 'Tunai', brand: 'cash' };
-  const [payments, setPayments] = useState([{ id: generateId('PAYLINE'), methodId: firstMethod.id, type: firstMethod.type, name: firstMethod.name, brand: firstMethod.brand, amount: total, dueDate: '', reference: '' }]);
+  const createPaymentLine = (method, amount) => ({
+    id: generateId('PAYLINE'), methodId: method.id, type: method.type, name: method.name, brand: method.brand || method.id,
+    amount, dueDate: '', reference: '', qrisSessionId: generateId('QRIS'), verification: ''
+  });
+  const [payments, setPayments] = useState(() => [createPaymentLine(firstMethod, total)]);
+  const [checkoutId] = useState(() => generateId('INV'));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const paid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const current = payments[0];
+  // Until a licensed PJP/acquirer callback is integrated, QRIS confirmation is
+  // always manual and mandatory. A local QR payload only proves presentation,
+  // never settlement.
+  const requireQrisConfirmation = true;
 
   const brandClass = {
     cash: 'payment-cash', qris: 'payment-qris', shopeepay: 'payment-shopeepay', ovo: 'payment-ovo',
@@ -537,19 +553,72 @@ function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
     return WalletCards;
   };
 
+  const safePresentation = payment => {
+    try {
+      return { ...resolveQrisPresentation(payment, qrisProfile || {}, configs || {}), error: '' };
+    } catch (presentationError) {
+      return {
+        mode: 'invalid', amount: Number(payment?.amount || 0), payload: '', staticImage: qrisProfile?.qrisImage || configs?.qrisImage || '',
+        merchantName: qrisProfile?.merchantName || configs?.qrisMerchantName || configs?.companyName || 'BUMI MAKMUR', merchantCity: '',
+        sourceFingerprint: qrisProfile?.qrisPayloadMeta?.fingerprint || '', sourceCrc: qrisProfile?.qrisPayloadMeta?.crc || '',
+        instruction: qrisProfile?.qrisInstruction || configs?.qrisInstruction || '', warning: '', error: presentationError?.message || 'QRIS tidak dapat disiapkan.'
+      };
+    }
+  };
+  const qrisRows = payments.filter(isQrisPayment);
+  const activeQris = qrisRows.find(payment => payment.verification !== QRIS_VERIFICATION_CONFIRMED) || qrisRows[0] || null;
+  const activeQrisPresentation = activeQris ? safePresentation(activeQris) : null;
+
+  useEffect(() => {
+    if (!activeQris) {
+      setCustomerDisplay(previous => previous?.payment ? { ...previous, payment: null } : previous);
+      return undefined;
+    }
+    const displayPayment = {
+      active: true,
+      methodId: 'qris',
+      methodName: activeQris.name || 'QRIS',
+      mode: activeQrisPresentation?.mode || 'invalid',
+      amount: Number(activeQris.amount || 0),
+      merchantName: activeQrisPresentation?.merchantName || '',
+      instruction: activeQrisPresentation?.instruction || 'Scan QRIS lalu selesaikan pembayaran.',
+      warning: activeQrisPresentation?.warning || activeQrisPresentation?.error || '',
+      qrisPayload: activeQrisPresentation?.payload || '',
+      confirmed: activeQris.verification === QRIS_VERIFICATION_CONFIRMED
+    };
+    setCustomerDisplay(previous => ({ ...previous, payment: displayPayment }));
+    return () => setCustomerDisplay(previous => previous?.payment ? { ...previous, payment: null } : previous);
+  }, [
+    activeQris?.id, activeQris?.name, activeQris?.amount, activeQris?.verification,
+    activeQrisPresentation?.mode, activeQrisPresentation?.merchantName, activeQrisPresentation?.instruction,
+    activeQrisPresentation?.warning, activeQrisPresentation?.error, activeQrisPresentation?.payload, setCustomerDisplay
+  ]);
+
+  const resetQrisVerification = row => ({
+    ...row, verification: '', confirmedAt: '', confirmedBy: '', confirmedByName: ''
+  });
   const selectSingleMethod = method => {
     setError('');
-    setPayments([{ id: generateId('PAYLINE'), methodId: method.id, type: method.type, name: method.name, brand: method.brand || method.id, amount: total, dueDate: '', reference: '' }]);
+    setPayments([createPaymentLine(method, total)]);
   };
   const add = () => {
     const method = methods.find(item => item.id === 'cash') || methods[0] || firstMethod;
-    setPayments(previous => [...previous, {
-      id: generateId('PAYLINE'), methodId: method.id, type: method.type, name: method.name, brand: method.brand || method.id,
-      amount: Math.max(0, total - paid), dueDate: '', reference: ''
-    }]);
+    setPayments(previous => [...previous, createPaymentLine(method, Math.max(0, total - paid))]);
   };
-  const update = (id, patch) => setPayments(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
+  const update = (id, patch, { resetVerification = false } = {}) => setPayments(previous => previous.map(item => {
+    if (item.id !== id) return item;
+    const next = { ...item, ...patch };
+    return resetVerification ? resetQrisVerification(next) : next;
+  }));
   const applyCashPreset = amount => update(current.id, { amount });
+  const confirmQris = (payment, checked) => update(payment.id, checked ? {
+    verification: QRIS_VERIFICATION_CONFIRMED,
+    confirmedAt: new Date().toISOString(),
+    confirmedBy: currentUser?.id || '',
+    confirmedByName: currentUser?.name || ''
+  } : {
+    verification: '', confirmedAt: '', confirmedBy: '', confirmedByName: ''
+  });
 
   const submit = async () => {
     if (submitting) return;
@@ -559,8 +628,22 @@ function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
       if (paid < total) throw new Error('Jumlah pembayaran belum mencukupi total tagihan.');
       if (payments.some(payment => payment.type === 'credit' && !payment.dueDate)) throw new Error('Pembayaran tempo wajib memiliki tanggal jatuh tempo.');
       if (paid > total && !payments.some(payment => payment.type === 'cash')) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan.');
+
+      const now = new Date().toISOString();
+      const prepared = payments.map(payment => {
+        if (!isQrisPayment(payment)) return { ...sanitizePaymentForSale(payment, null), checkoutId };
+        validateQrisPaymentAmount(payment.amount);
+        if (requireQrisConfirmation && payment.verification !== QRIS_VERIFICATION_CONFIRMED) {
+          throw new Error('Konfirmasi QRIS belum dicentang. Pastikan notifikasi pembayaran benar-benar sudah masuk ke merchant sebelum transaksi diselesaikan.');
+        }
+        const presentation = safePresentation(payment);
+        if (presentation.mode === 'invalid') throw new Error(presentation.error || 'QRIS tidak dapat disiapkan.');
+        return { ...sanitizePaymentForSale({ ...payment, qrisRequireConfirmation: requireQrisConfirmation }, presentation, {
+          cashierId: currentUser?.id || '', cashierName: currentUser?.name || '', branchId: branch?.id || '', now
+        }), checkoutId };
+      });
       setSubmitting(true);
-      await onConfirm(payments);
+      await onConfirm(prepared);
     } catch (err) {
       setError(err.message || 'Transaksi gagal diproses.');
       setSubmitting(false);
@@ -568,8 +651,12 @@ function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
   };
 
   const cashPresets = [...new Set([total, Math.ceil(total / 10000) * 10000, Math.ceil(total / 20000) * 20000, Math.ceil(total / 50000) * 50000, Math.ceil(total / 100000) * 100000])].filter(value => value >= total).slice(0, 5);
+  const close = () => {
+    setCustomerDisplay(previous => previous?.payment ? { ...previous, payment: null } : previous);
+    onClose();
+  };
   return (
-    <Modal title="Pembayaran Premium" onClose={submitting ? undefined : onClose} size="lg" footer={<><Button variant="secondary" onClick={onClose} disabled={submitting}>Batal</Button><Button variant="orange" onClick={submit} disabled={submitting}>{submitting ? 'Memproses...' : 'Selesaikan Transaksi'}</Button></>}>
+    <Modal title="Pembayaran Premium" onClose={submitting ? undefined : close} size="lg" footer={<><Button variant="secondary" onClick={close} disabled={submitting}>Batal</Button><Button variant="orange" onClick={submit} disabled={submitting}>{submitting ? 'Memproses...' : 'Selesaikan Transaksi'}</Button></>}>
       <div className="space-y-4">
         <Card className="premium-total-card p-5 text-center">
           <p className="text-xs font-black text-gray-500 uppercase tracking-[.18em]">Total Tagihan</p>
@@ -590,32 +677,60 @@ function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
 
         {error && <p className="p-3 bg-red-50 text-red-700 rounded-xl text-sm font-bold border border-red-100">{error}</p>}
 
-        {payments.length === 1 && current?.type === 'digital' && (
-          <Card className="p-4 bg-gradient-to-br from-slate-950 to-emerald-950 text-white border-0 overflow-hidden relative">
-            <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-emerald-400/20 blur-2xl"/>
-            <div className="relative flex flex-col sm:flex-row items-center gap-4">
-              <div className="w-40 h-40 bg-white rounded-2xl p-3 flex items-center justify-center shadow-xl shrink-0">
-                {configs.qrisImage ? <img src={configs.qrisImage} alt="QRIS Bumi Makmur" className="w-full h-full object-contain rounded-xl"/> : <QrCode size={105} className="text-gray-900"/>}
-              </div>
-              <div className="text-center sm:text-left"><Badge tone="green">{current.name}</Badge><h3 className="font-black text-xl mt-2">{configs.qrisMerchantName || configs.companyName}</h3><p className="text-sm text-emerald-100 mt-2">{configs.qrisInstruction || 'Scan QR lalu konfirmasi pembayaran kepada kasir.'}</p><p className="text-xs text-white/60 mt-3">Nominal: {formatRp(current.amount)}</p></div>
-            </div>
-          </Card>
-        )}
-
         <div className="space-y-3">
-          {payments.map(payment => (
-            <Card key={payment.id} className="p-3 premium-line-card">
-              <div className="flex gap-2 items-start">
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <Select value={payment.methodId} onChange={event => { const method = methods.find(item => item.id === event.target.value); if (method) update(payment.id, { methodId: method.id, type: method.type, name: method.name, brand: method.brand || method.id, amount: Math.max(0, total - (paid - payment.amount)), dueDate: method.type === 'credit' ? payment.dueDate : '', reference: '' }); }}>{methods.map(method => <option key={method.id} value={method.id}>{method.name}</option>)}</Select>
-                  <MoneyInput value={payment.amount} onValueChange={amount => update(payment.id, { amount })} placeholder="Nominal"/>
-                  {payment.type === 'credit' && <Input type="date" value={payment.dueDate} onChange={event => update(payment.id, { dueDate: event.target.value })}/>} 
-                  {payment.type !== 'cash' && payment.type !== 'credit' && <Input value={payment.reference} onChange={event => update(payment.id, { reference: event.target.value })} placeholder="Nomor referensi / approval (opsional)"/>}
+          {payments.map(payment => {
+            const qris = isQrisPayment(payment);
+            const presentation = qris ? safePresentation(payment) : null;
+            const qrisConfirmed = payment.verification === QRIS_VERIFICATION_CONFIRMED;
+            return (
+              <Card key={payment.id} className="p-3 premium-line-card">
+                <div className="flex gap-2 items-start">
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Select value={payment.methodId} onChange={event => {
+                      const method = methods.find(item => item.id === event.target.value);
+                      if (method) update(payment.id, {
+                        methodId: method.id, type: method.type, name: method.name, brand: method.brand || method.id,
+                        amount: Math.max(0, total - (paid - payment.amount)), dueDate: method.type === 'credit' ? payment.dueDate : '', reference: ''
+                      }, { resetVerification: true });
+                    }}>{methods.map(method => <option key={method.id} value={method.id}>{method.name}</option>)}</Select>
+                    <MoneyInput value={payment.amount} onValueChange={amount => update(payment.id, { amount }, { resetVerification: qris })} placeholder="Nominal"/>
+                    {payment.type === 'credit' && <Input type="date" value={payment.dueDate} onChange={event => update(payment.id, { dueDate: event.target.value })}/>} 
+                    {payment.type !== 'cash' && payment.type !== 'credit' && <Input value={payment.reference} onChange={event => update(payment.id, { reference: event.target.value })} placeholder="Nomor referensi / approval (opsional)"/>}
+                  </div>
+                  {payments.length > 1 && <button onClick={() => setPayments(previous => previous.filter(item => item.id !== payment.id))} disabled={submitting} className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><X size={18}/></button>}
                 </div>
-                {payments.length > 1 && <button onClick={() => setPayments(previous => previous.filter(item => item.id !== payment.id))} disabled={submitting} className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center"><X size={18}/></button>}
-              </div>
-            </Card>
-          ))}
+
+                {qris && <div className="mt-3 rounded-2xl overflow-hidden border border-emerald-200 bg-gradient-to-br from-slate-950 to-emerald-950 text-white p-4">
+                  <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+                    <div className="w-44 h-44 bg-white rounded-2xl p-2 flex items-center justify-center shadow-lg shrink-0">
+                      {presentation?.mode === 'dynamic' && presentation.payload
+                        ? <QrisCode payload={presentation.payload} size={300} className="w-full h-full rounded-xl"/>
+                        : presentation?.staticImage
+                          ? <img src={presentation.staticImage} alt="QRIS Bumi Makmur" className="w-full h-full object-contain rounded-xl"/>
+                          : <div className="text-gray-800 text-center"><QrCode size={80} className="mx-auto"/><p className="text-[10px] font-black mt-2">Gunakan QRIS fisik merchant</p></div>}
+                    </div>
+                    <div className="flex-1 text-center sm:text-left min-w-0">
+                      <div className="flex flex-wrap justify-center sm:justify-start gap-2">
+                        <Badge tone="green">{presentation?.mode === 'dynamic' ? 'QRIS Dinamis' : presentation?.mode === 'static-fallback' || presentation?.mode === 'physical-static-fallback' ? 'Fallback Statis' : 'QRIS Statis'}</Badge>
+                        {qrisConfirmed && <Badge tone="green">Pembayaran Dikonfirmasi</Badge>}
+                      </div>
+                      <h3 className="font-black text-lg mt-2 break-words">{presentation?.merchantName || configs.qrisMerchantName || configs.companyName}</h3>
+                      <p className="text-3xl font-black tabular-nums mt-2 text-white">{formatRp(payment.amount)}</p>
+                      <p className="text-xs text-emerald-100 mt-2">{presentation?.instruction || 'Scan QR lalu konfirmasi pembayaran kepada kasir.'}</p>
+                      {presentation?.mode === 'dynamic' && <p className="text-[11px] text-white/60 mt-2">Nominal tertanam otomatis pada QR. Payload dibuat lokal dan tidak disimpan di transaksi.</p>}
+                      {presentation?.warning && <p className="text-xs font-bold mt-3 p-2 rounded-xl bg-amber-400/15 border border-amber-300/20 text-amber-100">{presentation.warning}</p>}
+                      {presentation?.error && <p className="text-xs font-bold mt-3 p-2 rounded-xl bg-red-400/15 border border-red-300/20 text-red-100">{presentation.error}</p>}
+                      {Number(payment.amount || 0) > QRIS_MAX_AMOUNT && <p className="text-xs font-black mt-3 text-red-200">Maksimum QRIS Rp10.000.000 per pembayaran. Pecah pembayaran QRIS menjadi beberapa bagian.</p>}
+                    </div>
+                  </div>
+                  <label className={`mt-4 flex items-start gap-3 p-3 rounded-xl border cursor-pointer ${qrisConfirmed ? 'bg-emerald-400/15 border-emerald-300/30' : 'bg-white/10 border-white/15'}`}>
+                    <input type="checkbox" className="w-5 h-5 mt-0.5 shrink-0" checked={qrisConfirmed} onChange={event => confirmQris(payment, event.target.checked)}/>
+                    <span><b className="text-sm block">Saya sudah melihat notifikasi pembayaran masuk ke merchant</b><small className="text-emerald-100/80">{requireQrisConfirmation ? 'Wajib sebelum transaksi ditutup. Generator QR lokal tidak membuktikan dana sudah diterima.' : 'Konfirmasi manual dinonaktifkan di profil cabang, tetapi pencatatan ini tetap disarankan untuk audit.'}</small></span>
+                  </label>
+                </div>}
+              </Card>
+            );
+          })}
         </div>
 
         {payments.length === 1 && current?.type === 'cash' && <div><p className="text-xs font-bold text-gray-500 mb-2">Nominal cepat</p><div className="grid grid-cols-2 sm:grid-cols-5 gap-2">{cashPresets.map(amount => <button key={amount} onClick={() => applyCashPreset(amount)} className={`min-h-[44px] rounded-xl border font-bold text-xs ${Number(current.amount) === amount ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-700 border-gray-200'}`}>{formatRp(amount)}</button>)}</div></div>}
@@ -625,7 +740,6 @@ function PaymentModal({ total, methods, configs, onClose, onConfirm }) {
     </Modal>
   );
 }
-
 function SplitBillModal({ cart, onClose, onSplit }) {
   const [name, setName] = useState('Tagihan Terpisah');
   const [selections, setSelections] = useState(Object.fromEntries(cart.map(line => [line.lineId, 0])));

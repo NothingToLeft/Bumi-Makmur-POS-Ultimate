@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v6.3.1 — AI Quota Resilience Patch
+# Bumi Makmur POS FreeSync v6.4.0 — QRIS Dynamic & Payment Assurance
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.3.1 mem-patch fitur Foto Produk agar **quota/rate-limit Gemini tidak lagi menampilkan error mentah atau memicu request berulang**, menambahkan **cache kandidat 12 jam**, **status/diagnostik AI lokal**, serta **fallback link halaman produk tanpa Gemini**. Seluruh Product Visual & Multi-Barcode v6.3.0, hardening data v6.2.0, Unified AutoSync, AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan PDF closing profesional tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.4.0 menambahkan **QRIS Dinamis lokal + Payment Assurance** di atas QRIS statis yang sudah ada: payload merchant divalidasi ketat, nominal transaksi dimasukkan otomatis, CRC dihitung ulang, Customer Display dapat menampilkan QR, split payment tetap didukung, dan transaksi QRIS wajib menunggu konfirmasi notifikasi merchant selama belum ada callback PJP/acquirer resmi. Payload QR dinamis tidak disimpan pada histori transaksi. Seluruh AI Quota Resilience v6.3.1, Product Visual & Multi-Barcode v6.3.0, hardening data v6.2.0, Unified AutoSync, AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan PDF closing profesional tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -12,6 +12,22 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.3
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
 
+
+
+## QRIS Dynamic & Payment Assurance v6.4.0
+
+- QRIS statis cabang sekarang dapat menjadi **source + fallback** untuk QRIS Dinamis. Engine dibuat lokal di device; tidak ada request ke converter QRIS pihak ketiga.
+- Parser QRIS bersifat **byte-aware dan fail-closed**: payload terpotong, trailing data, tag duplikat, UTF-8 invalid, field utama yang tidak sesuai, atau CRC rusak ditolak sebelum dikonversi.
+- Generator mengubah initiation method menjadi dynamic, memasukkan **nominal QRIS exact**, menghapus convenience-fee tags yang tidak dipakai, menghitung ulang CRC16, lalu memvalidasi hasil sekali lagi.
+- Nominal QRIS per payment line wajib Rupiah bulat **Rp1–Rp10.000.000**. Split payment tetap dapat menggabungkan QRIS dengan Tunai/Transfer/metode lain; QR setiap baris mengikuti nominal QRIS pada baris tersebut.
+- Dynamic Mode **opt-in per cabang**. Owner/Manager harus memasukkan/decode source QRIS, menjalankan tes nominal kecil, memeriksa merchant + nominal pada aplikasi pembayaran, lalu acknowledge sebelum enable.
+- Kasir **wajib** menandai **“Saya sudah melihat notifikasi pembayaran masuk ke merchant”**. Opsi ini dikunci aktif sampai tersedia callback PJP/acquirer resmi; POS tidak menganggap scan QR sebagai bukti settlement.
+- **Payment Assurance** menyimpan mode, nominal, merchant, source fingerprint/CRC, session, status konfirmasi, kasir, dan waktu konfirmasi. Payload QR dinamis tidak masuk histori transaksi/cloud sale.
+- Payment modal memakai stable checkout ID selama satu attempt untuk memperkuat proteksi retry/double-click terhadap transaksi ganda.
+- Customer Display menampilkan QR dinamis, nominal, status pembayaran, atau fallback guidance secara transient. Detail Transaksi menampilkan audit Payment Assurance QRIS.
+- QRIS statis/fisik tetap berfungsi bila dynamic dinonaktifkan atau source gagal divalidasi. Tidak ada service fee/surcharge QRIS pelanggan yang ditambahkan.
+- Empat project QRIS dipelajari sebagai research. External converter, Puppeteer/portal scraping, OTP interception, unofficial GoBiz/QFM automation, mock QRIS, dan random amount suffix tanpa official mutation feed sengaja **tidak** dibawa ke production. Detail ada di `docs/QRIS-SOURCE-AUDIT-v6.4.0.md`.
+- Firebase tetap **Auth + Firestore Spark**, tanpa Functions/Storage/Blaze. v6.4.0 tidak menambah collection/index baru.
 
 ## AI Quota Resilience v6.3.1
 
@@ -270,13 +286,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v6.3.1.
+2. Ekstrak ZIP v6.4.0.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v6.3.1 AI Quota Resilience Patch
+Bumi Makmur POS v6.4.0 QRIS Dynamic & Payment Assurance
 ```
 
 6. Klik **Push origin**.
@@ -287,7 +303,7 @@ Bumi Makmur POS v6.3.1 AI Quota Resilience Patch
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.3.1
+→ Build Bumi Makmur POS v6.4.0
 → test-only
 ```
 
@@ -295,7 +311,7 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Firestore Rules + Indexes
 
-**v6.3.1 tidak mengubah Rules/Indexes.** Rules logic tetap ruleset `BUMI_MAKMUR_RULESET_VERSION=6.1.0`; perubahan index thumbnail berasal dari v6.3.0. Jika index exemption v6.3.0 belum pernah dipublikasikan, jalankan sekali:
+**v6.4.0 memperbarui Firestore Rules dan Indexes.** Ruleset sekarang `BUMI_MAKMUR_RULESET_VERSION=6.4.0` agar schema QRIS Dinamis pada `branchPaymentProfiles` dapat tersinkron aman. Index exemption juga ditambahkan untuk `branchPaymentProfiles.qrisImage` dan `branchPaymentProfiles.qrisPayload`. Setelah upload v6.4.0, jalankan sekali:
 
 ```text
 Actions
@@ -303,13 +319,13 @@ Actions
 → Run workflow
 ```
 
-Jika deployment index v6.3.0 sudah pernah hijau, langkah ini boleh dilewati untuk v6.3.1. Workflow tetap Spark-only dan hanya men-deploy `firestore:rules,firestore:indexes`.
+Langkah deploy ini **wajib untuk v6.4.0** meskipun rules/index v6.3.0 sebelumnya sudah hijau. Workflow tetap Spark-only dan hanya men-deploy `firestore:rules,firestore:indexes`.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.3.1
+→ Build Bumi Makmur POS v6.4.0
 → android-release
 ```
 
@@ -319,11 +335,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v6.3.1
+→ Build Bumi Makmur POS Desktop v6.4.0
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.3.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.4.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -340,27 +356,22 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.3.1
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v6.3.1
+## Release acceptance v6.4.0
 
-Full-pass source audit final pada 20 Agustus 2026 menghasilkan:
+Source release v6.4.0 menambahkan QRIS Dynamic & Payment Assurance tanpa mengubah prinsip Spark-only. Gate release mencakup regression QRIS, static/security audit, syntax/configuration validation, serta production build melalui CI bila dependency registry lokal tidak tersedia.
 
-- **253/253 automated core/regression tests PASS**.
-- Static project audit **PASS** untuk 121 file JS/JSX/MJS dan konfigurasi Spark/security.
-- Independent TypeScript transpile/syntax validation: **68 file, 0 diagnostics**.
-- Electron main/preload dan Cloudflare Pages Function Node syntax **PASS**.
-- GitHub Actions YAML dan JSON konfigurasi **PASS**.
-- Firebase Spark-only + secret guard **PASS**.
-- Production `npm install` lokal dicoba kembali tetapi registry npm tetap timeout dan `node_modules` tidak terbentuk; karena itu Vite production bundle tidak diklaim PASS secara lokal. GitHub Actions/Cloudflare Pages tetap final dependency-install + compilation gate.
-
-Acceptance flow produksi yang disarankan setelah push:
+Acceptance flow produksi setelah push:
 
 1. Backup JSON. **Jangan hapus antrean offline yang masih ada.**
-2. Jika Firestore index exemption foto dari v6.3.0 **belum pernah** dipublikasikan, jalankan **Deploy Firebase Spark Rules** sekali. v6.3.1 sendiri tidak mengubah rules/indexes.
-3. Login dengan akun yang membuat mutation tertunda dan tekan **Sinkronkan Sekarang** sampai antrean akun tersebut 0.
-4. Jalankan workflow Android `test-only` v6.3.1 sampai hijau; ini menjadi production Vite compilation gate pertama.
-5. Tunggu Cloudflare Pages hijau, lalu smoke test `Cari Foto Otomatis`, error quota, fallback link produk, Owner ↔ Karyawan, dan `Layar Pelanggan → Buka Layar 2`.
-6. Jalankan `android-release`; APK/AAB dipublikasikan ke GitHub Releases v6.3.1.
-7. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases v6.3.1.
-8. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, refund transaksi tempo, Kamera/Galeri, serta fallback foto tanpa Gemini.
+2. Jalankan workflow Android `test-only` v6.4.0 sampai core test, audit, dan Vite build hijau.
+3. Tunggu Cloudflare Pages hijau dan smoke test fungsi Web/PWA utama.
+4. Jalankan **Deploy Firebase Spark Rules** sekali untuk menerapkan ruleset v6.4.0 dan index exemption QRIS baru; langkah ini wajib sebelum mengaktifkan QRIS Dinamis di produksi.
+5. Pada setiap cabang, validasi source QRIS merchant, generate QR dinamis dengan nominal kecil, scan menggunakan aplikasi pembayaran, cocokkan **nama merchant + nominal**, lakukan pembayaran uji, dan pastikan notifikasi merchant benar-benar masuk sebelum enable dynamic.
+6. Uji QRIS statis, dinamis, fallback, split payment, Customer Display, audit Detail Transaksi, struk, refund/void, dan retry/double-click checkout.
+7. Uji Owner ↔ Karyawan, offline→reconnect sampai queue 0, barcode, Kamera/Galeri, AI quota fallback, PO partial, serial/warranty, dan printer.
+8. Jalankan `android-release`; smoke test fisik Infinix Note 40 Pro+ dan Huawei MatePad SE 11.
+9. Jalankan Windows `test-only`, lalu `windows-release`; uji installer, Kasir, QRIS, dan Layar Pelanggan kedua.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v6.3.1.md`, `BUILD-REPORT-Bumi-Makmur-POS-v6.3.1.md`, dan `RELEASE-NOTES-Bumi-Makmur-POS-v6.3.1.md` untuk gate lengkap. Binary native tidak diklaim lulus secara lokal karena dependency registry/Android SDK tidak tersedia pada container; GitHub Actions adalah production binary gate.
+QRIS v6.4.0 belum melakukan settlement otomatis dari PJP. Kasir tetap memverifikasi notifikasi merchant. Integrasi otomatis di masa depan hanya boleh memakai API/webhook resmi PJP/acquirer dengan signature verification, anti-replay, idempotency, dan reconciliation.
+
+Lihat `QA-REPORT-Bumi-Makmur-POS-v6.4.0.md`, `BUILD-REPORT-Bumi-Makmur-POS-v6.4.0.md`, `RELEASE-NOTES-Bumi-Makmur-POS-v6.4.0.md`, `docs/QRIS-SOURCE-AUDIT-v6.4.0.md`, dan `FINAL-RELEASE-CHECKLIST-v6.4.0.md` untuk gate lengkap.
