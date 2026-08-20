@@ -30,7 +30,9 @@ import InventoryImportModal from '../components/InventoryImportModal.jsx';
 import BulkBarcodeLabelsModal from '../components/BulkBarcodeLabelsModal.jsx';
 import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
 import AIProductCaptureModal from '../components/AIProductCaptureModal.jsx';
+import ProductPosImageEditor from '../components/ProductPosImageEditor.jsx';
 import { findProductByCode } from '../utils/barcode.js';
+import { PRODUCT_BARCODE_TYPES, barcodeForPrint, barcodeLabelForPrint, barcodeSearchText, normalizeBarcodeRows, productAllCodes } from '../utils/productBarcodes.js';
 
 const DEFAULT_MARKUPS = { retail: 30, wholesale: 20, project: 15 };
 const PRICE_TIERS = [
@@ -47,7 +49,7 @@ const TABS = [
 ];
 
 const blank = {
-  name: '', brand: '', specifications: '', category: 'Listrik', sku: '', barcode: '', baseUnit: 'pcs', stock: 0,
+  name: '', brand: '', specifications: '', category: 'Listrik', sku: '', barcode: '', factoryBarcode: '', internalBarcode: '', barcodes: [], posImage: null, baseUnit: 'pcs', stock: 0,
   minStock: 5, rack: '-', modalPrice: 0,
   prices: { retail: 0, wholesale: 0, project: 0 }, markups: DEFAULT_MARKUPS,
   variants: [], conversions: [], bundleItems: [], favorite: false,
@@ -56,7 +58,7 @@ const blank = {
 };
 
 const createVariantRow = (parentName = '', variantName = '', products = [], source = {}) => {
-  const usedCodes = products.flatMap(item => [item.sku, item.barcode]).filter(Boolean);
+  const usedCodes = products.flatMap(item => productAllCodes(item)).filter(Boolean);
   const sku = source.sku || generateVariantSku(parentName, variantName || 'Varian', usedCodes);
   const modalPrice = Number(source.modalPrice || 0);
   const prices = {
@@ -74,7 +76,10 @@ const createVariantRow = (parentName = '', variantName = '', products = [], sour
     id: source.id || '',
     variantName: source.variantName || variantName,
     sku,
+    factoryBarcode: source.factoryBarcode || '',
     internalBarcode: source.internalBarcode || source.barcode || sku,
+    barcodes: normalizeBarcodeRows(source.barcodes || [], { baseUnit: source.baseUnit || 'pcs' }),
+    posImage: source.posImage || null,
     stock: Number(source.stock || 0),
     minStock: Number(source.minStock || 0),
     rack: source.rack || '-',
@@ -125,11 +130,11 @@ export default function ProductsScreen() {
   const products = useMemo(() => catalogProducts.filter(product => {
     const term = search.trim().toLowerCase();
     const childText = product.isVariantGroup
-      ? product.children.map(child => `${child.variantName} ${child.sku} ${child.barcode} ${child.rack}`).join(' ').toLowerCase()
+      ? product.children.map(child => `${child.variantName} ${child.sku} ${barcodeSearchText(child)} ${child.rack}`).join(' ').toLowerCase()
       : '';
     const matchesSearch = !term || String(product.name || '').toLowerCase().includes(term) ||
       String(product.sku || '').toLowerCase().includes(term) ||
-      String(product.barcode || product.sharedBarcode || '').toLowerCase().includes(term) ||
+      barcodeSearchText(product).toLowerCase().includes(term) || String(product.sharedBarcode || '').toLowerCase().includes(term) ||
       String(product.rack || '').toLowerCase().includes(term) || childText.includes(term);
     const matchesArchive = showArchived || product.active !== false;
     const low = product.isVariantGroup
@@ -157,24 +162,27 @@ export default function ProductsScreen() {
   }, [activeProducts]);
 
   const printLabel = product => {
-    const code = product.barcode || product.sku;
+    const code = barcodeForPrint(product, 'internal');
+    const codeLabel = barcodeLabelForPrint(product, 'internal');
     printHtmlDocument(
       `Label ${product.name}`,
-      `<div class="center"><p class="bold">${escapeHtml(product.name)}</p>${product.variantName ? `<p class="small">Varian ${escapeHtml(product.variantName)} · Barcode internal</p>` : ''}<h2>${escapeHtml(formatRp(product.prices?.retail))}</h2><div class="line"></div><div style="display:flex;justify-content:center;max-width:100%;overflow:hidden">${barcodeSvgMarkup(code, { width: 1.45, height: 48, fontSize: 10 })}</div><p class="small">SKU ${escapeHtml(product.sku)} · ${escapeHtml(product.baseUnit)} · Rak ${escapeHtml(product.rack || '-')}</p>${product.sharedBarcode ? `<p class="small">Barcode kemasan: ${escapeHtml(product.sharedBarcode)}</p>` : ''}</div>`,
+      `<div class="center"><p class="bold">${escapeHtml(product.name)}</p>${product.variantName ? `<p class="small">Varian ${escapeHtml(product.variantName)} · ${escapeHtml(codeLabel)}</p>` : `<p class="small">${escapeHtml(codeLabel)}</p>`}<h2>${escapeHtml(formatRp(product.prices?.retail))}</h2><div class="line"></div><div style="display:flex;justify-content:center;max-width:100%;overflow:hidden">${barcodeSvgMarkup(code, { width: 1.45, height: 48, fontSize: 10 })}</div><p class="small">SKU ${escapeHtml(product.sku)} · ${escapeHtml(product.baseUnit)} · Rak ${escapeHtml(product.rack || '-')}</p>${product.factoryBarcode ? `<p class="small">Barcode pabrik: ${escapeHtml(product.factoryBarcode)}</p>` : ''}${product.sharedBarcode ? `<p class="small">Barcode bersama: ${escapeHtml(product.sharedBarcode)}</p>` : ''}</div>`,
       '58mm'
     );
   };
 
   const exportInventory = () => {
     const rows = [[
-      'Nama Produk', 'SKU', 'Barcode', 'Kategori', 'Satuan Dasar', 'Stok', 'Stok Minimum',
-      'Harga Modal', 'Harga Eceran', 'Rak', 'Jual Pecahan', 'Langkah Pecahan', 'Konversi'
+      'Nama Produk', 'SKU', 'Barcode', 'Barcode Pabrik', 'Barcode Internal', 'Barcode Tambahan', 'Kategori', 'Satuan Dasar', 'Stok', 'Stok Minimum',
+      'Harga Modal', 'Harga Eceran', 'Harga Grosir', 'Harga Proyek', 'Rak', 'Jual Pecahan', 'Langkah Pecahan', 'Konversi & Harga Kemasan', 'Produk Induk', 'Nama Varian', 'Barcode Bersama'
     ].map(csvCell).join(',')];
     activeProducts.forEach(product => rows.push([
-      product.name, product.sku, product.barcode, product.category, product.baseUnit,
-      product.stock, product.minStock, product.modalPrice, product.prices?.retail, product.rack,
+      product.name, product.sku, product.barcode, product.factoryBarcode || '', product.internalBarcode || '',
+      (product.barcodes || []).map(row => `${row.type || 'alternate'}:${row.code}@${row.unit || product.baseUnit}*${Number(row.factor || 1)}`).join('; '),
+      product.category, product.baseUnit, product.stock, product.minStock, product.modalPrice, product.prices?.retail, product.prices?.wholesale, product.prices?.project, product.rack,
       product.allowFractional ? 'Ya' : 'Tidak', product.quantityStep,
-      (product.conversions || []).map(item => `1 ${item.unit} = ${item.factor} ${product.baseUnit}${Number(item.prices?.retail || 0) > 0 ? ` @ ${formatRp(item.prices.retail)}` : ''}`).join('; ')
+      (product.conversions || []).map(item => `${item.unit}=${item.factor}${item.barcode ? `#${item.barcode}` : ''}@${Number(item.prices?.retail || 0)}|${Number(item.prices?.wholesale || 0)}|${Number(item.prices?.project || 0)}`).join('; '),
+      product.parentName || '', product.variantName || '', product.sharedBarcode || ''
     ].map(csvCell).join(',')));
     downloadFile(`Produk-dan-Stok-${branch?.name || 'Cabang'}-${localDateKey()}.csv`, `\uFEFF${rows.join('\n')}`, 'text/csv;charset=utf-8');
   };
@@ -221,7 +229,7 @@ export default function ProductsScreen() {
 
   const newProduct = () => setEditing({ ...blank, prices: { ...blank.prices }, markups: { ...DEFAULT_MARKUPS }, conversions: [], variants: [], bundleItems: [], variantMode: false, variantRows: [] });
 
-  const applyAiProductDraft = ({ analysis, packCost = 0, retailPack = 0, retailUnit = 0, initialPacks = 0, rack = '-' }) => {
+  const applyAiProductDraft = ({ analysis, packCost = 0, retailPack = 0, retailUnit = 0, initialPacks = 0, rack = '-', posImage = null }) => {
     const packQty = Math.max(0, Number(analysis.packQty || 0));
     const baseUnit = analysis.baseUnit || 'pcs';
     const baseStock = packQty > 0 ? Number(initialPacks || 0) * packQty : Number(initialPacks || 0);
@@ -239,7 +247,11 @@ export default function ProductsScreen() {
       category: analysis.category || db.categories[0] || 'Material',
       baseUnit,
       barcode: String(analysis.barcode || '').trim(),
-      sharedBarcode: String(analysis.barcode || '').trim(),
+      factoryBarcode: String(analysis.barcode || '').trim(),
+      internalBarcode: '',
+      barcodes: [],
+      sharedBarcode: '',
+      posImage,
       stock: baseStock,
       minStock: packQty > 1 ? packQty * 3 : Math.max(1, Number(blank.minStock || 5)),
       rack,
@@ -254,10 +266,12 @@ export default function ProductsScreen() {
     if (useVariant) {
       setEditing({
         ...common,
+        barcode: '', factoryBarcode: '', internalBarcode: '', posImage: null,
         variantMode: true,
         variantRows: [{
           variantName: String(analysis.variantName).trim(),
-          sku: '', internalBarcode: '', stock: baseStock,
+          sku: '', factoryBarcode: String(analysis.barcode || '').trim(), internalBarcode: '', barcodes: [], posImage,
+          stock: baseStock,
           minStock: packQty > 1 ? packQty * 3 : Math.max(1, Number(blank.minStock || 5)),
           rack, modalPrice,
           prices: { retail: Number(retailUnit || 0), wholesale: 0, project: 0 },
@@ -470,9 +484,10 @@ function PackagingUnitsEditor({ baseUnit, basePrices, rows, onChange, onPreset, 
         const packageRetail = Number(row.prices?.retail || 0);
         const saving = calculatedRetail > 0 && packageRetail > 0 ? calculatedRetail - packageRetail : 0;
         return <div key={`${row.unit || 'new'}-${index}`} className="rounded-2xl border border-gray-200 bg-white p-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(120px,.8fr)_minmax(130px,.8fr)_repeat(3,minmax(145px,1fr))_48px] gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(110px,.7fr)_minmax(120px,.7fr)_minmax(155px,1fr)_repeat(3,minmax(135px,1fr))_48px] gap-3 items-end">
             <Field label="Nama satuan"><Input value={row.unit || ''} onChange={event => update(index, { unit: event.target.value.toLowerCase() })} placeholder="pack / dus / box / roll"/></Field>
             <Field label={`Isi dalam ${baseUnit}`}><NumberInput inputMode="decimal" min="0.001" step="0.001" value={row.factor ?? ''} onValueChange={value => update(index, { factor: value })} placeholder="100"/></Field>
+            <Field label="Barcode Kemasan" hint={sharedAcrossVariants ? 'Untuk beberapa varian, barcode pack/dus wajib dimasukkan pada Barcode Tambahan masing-masing varian agar scan tidak ambigu.' : 'Opsional. Bisa ditembak scanner USB/Bluetooth langsung ke kolom ini.'}><div className="space-y-2"><Input value={row.barcode || ''} disabled={sharedAcrossVariants} onChange={event => update(index, { barcode: event.target.value.trim() })} placeholder={sharedAcrossVariants ? 'Gunakan Barcode Tambahan per varian' : 'Barcode dus / pack / roll'}/>{sharedAcrossVariants && row.barcode && <Button type="button" size="sm" variant="danger" onClick={() => update(index, { barcode: '' })}>Hapus barcode global</Button>}</div></Field>
             <Field label="Harga eceran khusus"><MoneyInput value={row.prices?.retail || 0} onValueChange={value => update(index, { prices: { retail: value } })} placeholder={String(calculatedRetail || 0)}/></Field>
             <Field label="Harga grosir khusus"><MoneyInput value={row.prices?.wholesale || 0} onValueChange={value => update(index, { prices: { wholesale: value } })}/></Field>
             <Field label="Harga proyek khusus"><MoneyInput value={row.prices?.project || 0} onValueChange={value => update(index, { prices: { project: value } })}/></Field>
@@ -492,6 +507,30 @@ function PackagingUnitsEditor({ baseUnit, basePrices, rows, onChange, onPreset, 
     <div className="flex flex-wrap gap-2 mt-3">
       {baseUnit === 'pcs' && <><Button type="button" size="sm" variant="secondary" onClick={() => onPreset('pack', 100)}>Preset pack 100 pcs</Button><Button type="button" size="sm" variant="secondary" onClick={() => onPreset('dus', 50)}>Preset dus 50 pcs</Button><Button type="button" size="sm" variant="secondary" onClick={() => onPreset('lusin', 12)}>Preset lusin 12 pcs</Button></>}
       {baseUnit === 'meter' && <Button type="button" size="sm" variant="secondary" onClick={() => onPreset('roll', 50)}>Preset roll 50 meter</Button>}
+    </div>
+  </Card>;
+}
+
+function BarcodeAliasesEditor({ rows = [], onChange, baseUnit = 'pcs', title = 'Barcode Tambahan', onScan = null }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const update = (index, patch) => onChange(safeRows.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
+  const add = () => onChange([...safeRows, { id: `BC-${Date.now()}`, code: '', type: 'alternate', unit: baseUnit, factor: 1, note: '' }]);
+  const remove = index => onChange(safeRows.filter((_, rowIndex) => rowIndex !== index));
+  return <Card className="p-4 border-indigo-200 bg-indigo-50/40">
+    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+      <div><p className="font-black text-gray-900">{title}</p><p className="text-xs text-gray-600 mt-1">Satu SKU boleh memiliki beberapa kode. Gunakan untuk label supplier, barcode alternatif, atau barcode dus/pack per varian. Isi Satuan + Isi agar scanner otomatis menambahkan jumlah stok dasar yang benar.</p></div>
+      <Button type="button" size="sm" onClick={add}><Plus size={16}/> Tambah Barcode</Button>
+    </div>
+    <div className="mt-3 space-y-2">
+      {safeRows.map((row, index) => <div key={row.id || index} className="grid grid-cols-1 sm:grid-cols-[150px_minmax(180px,1fr)_120px_110px_minmax(120px,.8fr)_48px] gap-2 items-end rounded-2xl border bg-white p-3">
+        <Field label="Jenis"><Select value={row.type || 'alternate'} onChange={event => update(index, { type: event.target.value })}>{PRODUCT_BARCODE_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</Select></Field>
+        <Field label="Kode Barcode"><div className="flex gap-2"><Input value={row.code || ''} onChange={event => update(index, { code: event.target.value.trim() })} placeholder="Scan / ketik kode"/>{onScan && <Button type="button" variant="secondary" onClick={() => onScan(index)} className="shrink-0"><ScanLine size={16}/></Button>}</div></Field>
+        <Field label="Satuan"><Input value={row.unit || baseUnit} onChange={event => update(index, { unit: event.target.value.toLowerCase() })} placeholder={baseUnit}/></Field>
+        <Field label={`Isi ${baseUnit}`}><NumberInput min="0.001" step="0.001" value={row.factor || 1} onValueChange={value => update(index, { factor: value })}/></Field>
+        <Field label="Catatan"><Input value={row.note || ''} onChange={event => update(index, { note: event.target.value })} placeholder="Supplier A / label lama"/></Field>
+        <button type="button" onClick={() => remove(index)} className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center" title="Hapus barcode"><Trash2 size={17}/></button>
+      </div>)}
+      {!safeRows.length && <div className="rounded-2xl border border-dashed bg-white p-4 text-center text-sm text-gray-500">Belum ada barcode tambahan. Barcode pabrik + internal sudah cukup untuk kebanyakan produk.</div>}
     </div>
   </Card>;
 }
@@ -537,6 +576,10 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
     ...blank, ...product,
     prices: { ...blank.prices, ...product.prices },
     markups: initialMarkups,
+    factoryBarcode: product.factoryBarcode || (!product.variantGroupId ? product.barcode || '' : ''),
+    internalBarcode: product.internalBarcode || product.sku || '',
+    barcodes: normalizeBarcodeRows(product.barcodes || [], { baseUnit: product.baseUnit || 'pcs' }),
+    posImage: product.posImage || product.groupPosImage || null,
     variants: product.variants || [], conversions: product.conversions || [], bundleItems: product.bundleItems || [],
     allowFractional: product.allowFractional === true,
     quantityStep: normalizeQuantityStep(product.quantityStep, product.allowFractional === true, recommendedQuantityStep(product.baseUnit, product.category))
@@ -555,7 +598,9 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
   const [bundleId, setBundleId] = useState('');
   const [bundleQty, setBundleQty] = useState(1);
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
+  const [barcodeScannerField, setBarcodeScannerField] = useState('factory');
   const [variantScannerIndex, setVariantScannerIndex] = useState(null);
+  const [variantScannerField, setVariantScannerField] = useState('factory');
 
 
   const changeBaseUnit = nextUnit => setForm(previous => ({
@@ -622,17 +667,19 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
     setForm(previous => ({
       ...previous,
       variantGroupId: previous.variantGroupId || generateVariantGroupId(previous.name || 'Produk'),
-      sharedBarcode: previous.sharedBarcode || previous.barcode || ''
+      sharedBarcode: previous.sharedBarcode || ''
     }));
     setVariantRows(previous => {
       if (previous.length) return previous;
       if (product.id && !product.isVariantGroupDraft) {
-        const generatedSku = generateVariantSku(form.name, 'Standar', products.filter(item => item.id !== product.id).flatMap(item => [item.sku, item.barcode]).filter(Boolean));
+        const generatedSku = generateVariantSku(form.name, 'Standar', products.filter(item => item.id !== product.id).flatMap(item => productAllCodes(item)).filter(Boolean));
         return [createVariantRow(form.name, 'Standar', products, {
           ...product,
           sku: generatedSku,
+          factoryBarcode: form.factoryBarcode || product.factoryBarcode || product.barcode || '',
           barcode: '',
           internalBarcode: generatedSku,
+          posImage: form.posImage || product.posImage || null,
           variantName: 'Standar'
         })];
       }
@@ -645,8 +692,8 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
     const next = { ...row, ...patch };
     if (Object.prototype.hasOwnProperty.call(patch, 'variantName') && !row.existing) {
       const used = [
-        ...products.filter(item => item.id !== row.id).flatMap(item => [item.sku, item.barcode]),
-        ...previous.filter((_, otherIndex) => otherIndex !== index).flatMap(item => [item.sku, item.internalBarcode])
+        ...products.filter(item => item.id !== row.id).flatMap(item => productAllCodes(item)),
+        ...previous.filter((_, otherIndex) => otherIndex !== index).flatMap(item => [item.sku, item.factoryBarcode, item.internalBarcode, ...(item.barcodes || []).map(barcode => barcode.code)])
       ].filter(Boolean);
       const wasAuto = !row.sku || row.internalBarcode === row.sku || /^BM-/.test(row.sku);
       if (wasAuto) {
@@ -674,7 +721,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
 
   const applyLedWattPreset = () => setVariantRows(previous => {
     const desired = ['6W', '10W', '12W', '15W'];
-    const used = products.filter(item => !previous.some(row => row.id === item.id)).flatMap(item => [item.sku, item.barcode]).filter(Boolean);
+    const used = products.filter(item => !previous.some(row => row.id === item.id)).flatMap(item => productAllCodes(item)).filter(Boolean);
     return desired.map(name => {
       const existing = previous.find(row => String(row.variantName || '').trim().toLowerCase() === name.toLowerCase());
       if (existing) return existing;
@@ -685,7 +732,7 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
   });
 
   const regenerateVariantCodes = () => setVariantRows(previous => {
-    const used = products.filter(item => !previous.some(row => row.id === item.id)).flatMap(item => [item.sku, item.barcode]).filter(Boolean);
+    const used = products.filter(item => !previous.some(row => row.id === item.id)).flatMap(item => productAllCodes(item)).filter(Boolean);
     return previous.map(row => {
       const sku = generateVariantSku(form.name, row.variantName || 'Varian', used);
       used.push(sku);
@@ -707,20 +754,27 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
       const variantName = String(row.variantName || '').trim();
       const sku = String(row.sku || '').trim().toUpperCase();
       const internalBarcode = String(row.internalBarcode || sku).trim().toUpperCase();
+      const factoryBarcode = String(row.factoryBarcode || '').trim();
+      const extraBarcodes = normalizeBarcodeRows(row.barcodes || [], { baseUnit: form.baseUnit });
       if (!variantName) return alert('Semua nama varian wajib diisi.');
       if (names.has(variantName.toLowerCase())) return alert(`Nama varian ${variantName} digunakan lebih dari sekali.`);
       if (!sku) return alert(`SKU varian ${variantName} wajib diisi.`);
       if (skus.has(sku)) return alert(`SKU ${sku} digunakan lebih dari sekali.`);
       if (!internalBarcode) return alert(`Barcode internal varian ${variantName} wajib diisi.`);
       if (internalCodes.has(internalBarcode)) return alert(`Barcode internal ${internalBarcode} digunakan lebih dari sekali.`);
-      for (const code of new Set([sku, internalBarcode])) {
+      const rowCodes = [sku, internalBarcode, factoryBarcode, ...extraBarcodes.map(item => item.code)].filter(Boolean);
+      for (const code of new Set(rowCodes.map(value => String(value).trim().toUpperCase()))) {
         const owner = codeOwners.get(code);
-        if (owner && owner !== variantName) return alert(`Kode ${code} sudah dipakai oleh varian ${owner}. SKU dan barcode internal antarvarian harus unik.`);
+        if (owner && owner !== variantName) return alert(`Kode ${code} sudah dipakai oleh varian ${owner}. Setiap barcode langsung harus menunjuk ke satu varian.`);
         codeOwners.set(code, variantName);
       }
       if (Number(row.modalPrice) < 0 || PRICE_TIERS.some(tier => Number(row.prices?.[tier.id] || 0) < 0)) return alert(`Harga varian ${variantName} tidak valid.`);
       if (!row.id && Number(row.stock || 0) < 0) return alert(`Stok awal varian ${variantName} tidak boleh negatif.`);
       names.add(variantName.toLowerCase()); skus.add(sku); internalCodes.add(internalBarcode);
+    }
+    const groupConversions = parsedConversions();
+    if (variantRows.length > 1 && groupConversions.some(row => String(row.barcode || '').trim())) {
+      return alert('Barcode pada Satuan Jual tidak boleh dipakai bersama oleh beberapa varian karena hasil scan akan ambigu. Kosongkan barcode konversi di bagian Satuan Jual, lalu masukkan barcode pack/dus pada Barcode Tambahan masing-masing varian beserta satuan dan faktor isinya.');
     }
     const ignoreIds = variantRows.map(row => row.id).filter(Boolean);
     const sharedBarcode = String(form.sharedBarcode || '').trim();
@@ -735,9 +789,17 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
       if (collision) return alert(`Barcode kemasan ${sharedBarcode} sudah dipakai oleh ${collision.name}.`);
     }
     for (const row of variantRows) {
-      for (const [label, code] of [['SKU', row.sku], ['Barcode internal', row.internalBarcode]]) {
+      const directCodes = [
+        ['SKU', row.sku],
+        ['Barcode internal', row.internalBarcode],
+        ['Barcode pabrik', row.factoryBarcode],
+        ...normalizeBarcodeRows(row.barcodes || [], { baseUnit: form.baseUnit }).map(item => ['Barcode tambahan', item.code])
+      ];
+      for (const [label, code] of directCodes) {
+        if (!String(code || '').trim()) continue;
         const collision = codeCollision(products, { code, branchId: form.branchId, ignoreIds, variantGroupId: form.variantGroupId });
         if (collision) return alert(`${label} ${code} sudah dipakai oleh ${collision.name}.`);
+        if (sharedBarcode && String(sharedBarcode).trim().toLowerCase() === String(code).trim().toLowerCase()) return alert(`${label} ${code} tidak boleh sama dengan Barcode Kemasan Bersama karena hasil scan akan ambigu.`);
       }
     }
     onSave({
@@ -746,13 +808,16 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
       variantGroupId: form.variantGroupId || generateVariantGroupId(parentName),
       parentName,
       sharedBarcode,
-      conversions: parsedConversions(),
+      conversions: groupConversions,
       quantityStep: normalizeQuantityStep(form.quantityStep, form.allowFractional, recommendedQuantityStep(form.baseUnit, form.category)),
       variantRows: variantRows.map(row => ({
         ...row,
         variantName: String(row.variantName).trim(),
         sku: String(row.sku).trim().toUpperCase(),
+        factoryBarcode: String(row.factoryBarcode || '').trim(),
         internalBarcode: String(row.internalBarcode || row.sku).trim().toUpperCase(),
+        barcodes: normalizeBarcodeRows(row.barcodes || [], { baseUnit: form.baseUnit }),
+        posImage: row.posImage || null,
         stock: Number(row.stock || 0),
         minStock: Number(row.minStock || 0),
         modalPrice: Number(row.modalPrice || 0),
@@ -768,15 +833,36 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
     if (!form.name.trim()) return alert('Nama barang wajib diisi.');
     if (Number(form.modalPrice) < 0) return alert('Harga modal tidak valid.');
     if (!form.id && Number(form.stock || 0) < 0) return alert('Stok awal tidak boleh negatif.');
-    if (products.some(item => item.id !== form.id && item.active !== false && String(item.barcode || '') && String(item.barcode || '') === String(form.barcode || ''))) return alert('Barcode ini sudah dipakai barang lain.');
+    const extraBarcodes = normalizeBarcodeRows(form.barcodes || [], { baseUnit: form.baseUnit });
+    const conversions = normalizeConversionRows(conversionRows, form.baseUnit);
+    const directCodes = [
+      ['SKU', form.sku], ['Barcode internal', form.internalBarcode], ['Barcode pabrik', form.factoryBarcode],
+      ...extraBarcodes.map(item => ['Barcode tambahan', item.code]),
+      ...conversions.filter(item => item.barcode).map(item => [`Barcode ${item.unit}`, item.barcode])
+    ];
+    const localCodes = new Map();
+    for (const [label, rawCode] of directCodes) {
+      const code = String(rawCode || '').trim();
+      if (!code) continue;
+      const key = code.toLowerCase();
+      const previous = localCodes.get(key);
+      const skuInternalPair = previous && new Set([previous, label]).size === 2 && [previous, label].every(value => ['SKU', 'Barcode internal'].includes(value));
+      if (previous && !skuInternalPair) return alert(`${code} dipakai lebih dari sekali sebagai ${previous} dan ${label}.`);
+      localCodes.set(key, previous || label);
+      const collision = codeCollision(products, { code, branchId: form.branchId, ignoreIds: form.id ? [form.id] : [] });
+      if (collision) return alert(`${label} ${code} sudah dipakai oleh ${collision.name}.`);
+    }
     const variants = variantText.split(',').map(value => value.trim()).filter(Boolean)
       .map((name, index) => {
         const previous = (form.variants || []).find(item => String(item.name || '').trim().toLowerCase() === name.toLowerCase());
         return previous ? { ...previous, name } : { id: `VAR-${Date.now()}-${index}`, name, barcode: '', factor: 1, priceDelta: 0 };
       });
-    const conversions = normalizeConversionRows(conversionRows, form.baseUnit);
     onSave({
       ...form,
+      factoryBarcode: String(form.factoryBarcode || '').trim(),
+      internalBarcode: String(form.internalBarcode || form.sku || '').trim().toUpperCase(),
+      barcodes: extraBarcodes,
+      barcode: String(form.factoryBarcode || form.barcode || form.internalBarcode || '').trim(),
       markups,
       variants,
       conversions,
@@ -809,8 +895,12 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
     onSubmit={submitVariantGroup}
     barcodeScannerOpen={barcodeScannerOpen}
     setBarcodeScannerOpen={setBarcodeScannerOpen}
+    barcodeScannerField={barcodeScannerField}
+    setBarcodeScannerField={setBarcodeScannerField}
     variantScannerIndex={variantScannerIndex}
     setVariantScannerIndex={setVariantScannerIndex}
+    variantScannerField={variantScannerField}
+    setVariantScannerField={setVariantScannerField}
     canReturnToStandard={!product.isVariantGroupDraft && !(product.variantRows || []).length}
     onReturnToStandard={() => setVariantMode(false)}
   />;
@@ -827,15 +917,17 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
         <Field label="Merek"><Input value={form.brand || ''} onChange={event => setForm({ ...form, brand: event.target.value })} placeholder="Contoh: Philips, Supreme, Broco"/></Field>
         <Field label="Spesifikasi Singkat" hint="Gunakan untuk watt, ampere, ukuran, warna cahaya, diameter, atau spesifikasi teknis lain."><Input value={form.specifications || ''} onChange={event => setForm({ ...form, specifications: event.target.value })} placeholder="Contoh: 10W · 6500K · E27"/></Field>
         <Card className="md:col-span-2 p-4 border-emerald-200 bg-emerald-50/60">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div className="flex gap-3"><Layers3 className="text-emerald-700 shrink-0"/><div><p className="font-black text-gray-900">Produk memiliki beberapa varian?</p><p className="text-xs text-gray-600 mt-1">Gunakan untuk Philips LED 6W, 10W, 12W, 15W. Setiap varian memiliki SKU, harga, stok, dan barcode internal sendiri; barcode kemasan boleh sama.</p></div></div><Button type="button" onClick={enableVariantMode} variant="secondary" className="shrink-0"><Layers3 size={17}/> Aktifkan Varian</Button></div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div className="flex gap-3"><Layers3 className="text-emerald-700 shrink-0"/><div><p className="font-black text-gray-900">Produk memiliki beberapa varian?</p><p className="text-xs text-gray-600 mt-1">Gunakan untuk Philips LED 6W, 10W, 12W, 15W. Setiap varian memiliki SKU, stok, harga, barcode pabrik/EAN, dan barcode internal sendiri. Barcode Kemasan Bersama tetap opsional untuk kemasan yang memang dipakai bersama.</p></div></div><Button type="button" onClick={enableVariantMode} variant="secondary" className="shrink-0"><Layers3 size={17}/> Aktifkan Varian</Button></div>
         </Card>
         <Field label="Kategori"><div className="flex gap-2"><Select value={form.category} onChange={event => setForm({ ...form, category: event.target.value })}>{sortCategories(categories).map(category => <option key={category}>{category}</option>)}</Select>{onAddCategory && <Button type="button" variant="secondary" className="shrink-0" onClick={() => setCategoryQuickOpen(true)}><FolderPlus size={17}/> Baru</Button>}</div></Field>
         <Field label="Satuan Dasar" hint="Pilih satuan terkecil yang mengurangi stok. Kabel umumnya memakai meter."><Select value={form.baseUnit} onChange={event => changeBaseUnit(event.target.value)}>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</Select></Field>
-        <Field label="SKU"><Input value={form.sku} onChange={event => setForm({ ...form, sku: event.target.value })} placeholder="Otomatis jika kosong"/></Field>
-        <Field label="Barcode" hint="Klik Scan untuk kamera, atau fokuskan kolom lalu tembak dengan scanner USB/Bluetooth.">
-          <div className="flex gap-2"><Input value={form.barcode} onChange={event => setForm({ ...form, barcode: event.target.value.trim() })} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }} inputMode="numeric" placeholder="Scan tanpa mengetik nomor"/><Button type="button" variant="secondary" onClick={() => setBarcodeScannerOpen(true)} className="shrink-0"><ScanLine size={18}/> Scan</Button></div>
-          {form.barcode && products.some(item => item.id !== form.id && item.active !== false && String(item.barcode || '') === String(form.barcode || '')) && <p className="text-xs font-bold text-red-600 mt-1">Barcode ini sudah dipakai barang lain.</p>}
+        <Field label="SKU"><Input value={form.sku} onChange={event => setForm(previous => ({ ...previous, sku: event.target.value.toUpperCase(), internalBarcode: (!previous.internalBarcode || previous.internalBarcode === previous.sku) ? event.target.value.toUpperCase() : previous.internalBarcode }))} placeholder="Otomatis jika kosong"/></Field>
+        <Field label="Barcode Internal / Stiker" hint="Default mengikuti SKU. Ini yang paling aman untuk label toko dan cetak barcode massal."><div className="flex gap-2"><Input value={form.internalBarcode || ''} onChange={event => setForm({ ...form, internalBarcode: event.target.value.toUpperCase() })} placeholder="BM-PHL-LED-10W"/><Button type="button" variant="secondary" onClick={() => { setBarcodeScannerField('internal'); setBarcodeScannerOpen(true); }} className="shrink-0"><ScanLine size={18}/> Scan</Button></div></Field>
+        <Field label="Barcode Pabrik / EAN" hint="Barcode asli pada kemasan produk. Boleh kosong jika produk tidak memiliki barcode pabrik.">
+          <div className="flex gap-2"><Input value={form.factoryBarcode || ''} onChange={event => setForm({ ...form, factoryBarcode: event.target.value.trim(), barcode: event.target.value.trim() || form.internalBarcode || form.barcode })} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }} inputMode="numeric" placeholder="Scan tanpa mengetik nomor"/><Button type="button" variant="secondary" onClick={() => { setBarcodeScannerField('factory'); setBarcodeScannerOpen(true); }} className="shrink-0"><ScanLine size={18}/> Scan</Button></div>
         </Field>
+        <div className="md:col-span-2"><BarcodeAliasesEditor rows={form.barcodes || []} onChange={rows => setForm(previous => ({ ...previous, barcodes: rows }))} baseUnit={form.baseUnit} onScan={index => { setBarcodeScannerField(`alias:${index}`); setBarcodeScannerOpen(true); }}/></div>
+        <div className="md:col-span-2"><ProductPosImageEditor value={form.posImage} onChange={posImage => setForm(previous => ({ ...previous, posImage }))} product={form}/></div>
         <Field label="Rak/Lokasi"><Input value={form.rack} onChange={event => setForm({ ...form, rack: event.target.value })}/></Field>
         <Field label={form.id ? 'Stok Saat Ini' : 'Stok Awal'} hint={form.id ? 'Gunakan tab Penyesuaian atau Pembelian untuk mengubah stok agar riwayat tetap tercatat.' : `Masukkan jumlah yang sudah ada dalam satuan ${form.baseUnit}.`}><NumberInput inputMode="decimal" min="0" step={stockStep} value={form.id ? Number(form.stock || 0) : (form.stock || '')} disabled={Boolean(form.id)} onValueChange={value => setForm({ ...form, stock: value })} onBlur={() => setForm(previous => ({ ...previous, stock: normalizeQuantity(previous.stock, { allowFractional: stockStep < 1, step: stockStep, min: 0 }) }))} placeholder="0"/></Field>
         <Field label="Stok Minimum"><NumberInput inputMode="decimal" min="0" step={stockStep} value={form.minStock || ''} onValueChange={value => setForm({ ...form, minStock: value })} onBlur={() => setForm(previous => ({ ...previous, minStock: normalizeQuantity(previous.minStock, { allowFractional: stockStep < 1, step: stockStep, min: 0 }) }))} placeholder="0"/></Field>
@@ -901,12 +993,17 @@ function ProductForm({ product, categories, units, products, onAddCategory, onCl
         </div>
       </div>
       {categoryQuickOpen && onAddCategory && <Modal title="Kategori Baru" onClose={() => setCategoryQuickOpen(false)} size="sm" footer={<><Button variant="secondary" onClick={() => setCategoryQuickOpen(false)}>Batal</Button><Button onClick={addCategoryInline} disabled={newCategoryName.trim().length < 2}>Simpan Kategori</Button></>}><Field label="Nama Kategori"><Input value={newCategoryName} onChange={event => setNewCategoryName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCategoryInline(); } }} placeholder="Contoh: Kabel & Aksesori" autoFocus/></Field></Modal>}
-      {barcodeScannerOpen && <BarcodeScannerModal title="Scan Barcode Barang Baru" onClose={() => setBarcodeScannerOpen(false)} onDetected={rawCode => {
+      {barcodeScannerOpen && <BarcodeScannerModal title={barcodeScannerField === 'internal' ? 'Scan Barcode Internal' : barcodeScannerField.startsWith('alias:') ? 'Scan Barcode Tambahan' : 'Scan Barcode Pabrik'} onClose={() => setBarcodeScannerOpen(false)} onDetected={rawCode => {
         const code = String(rawCode || '').trim();
         if (!code) return 'Barcode belum terbaca.';
-        const duplicate = products.find(item => item.id !== form.id && item.active !== false && String(item.barcode || '') === code);
-        if (duplicate) return `Barcode ${code} sudah dipakai oleh ${duplicate.name}.`;
-        setForm(previous => ({ ...previous, barcode: code }));
+        const duplicate = codeCollision(products, { code, branchId: form.branchId, ignoreIds: form.id ? [form.id] : [] });
+        if (duplicate) return `Barcode ini sudah dipakai barang lain: ${duplicate.name}.`;
+        if (barcodeScannerField === 'internal') setForm(previous => ({ ...previous, internalBarcode: code.toUpperCase() }));
+        else if (barcodeScannerField.startsWith('alias:')) {
+          const aliasIndex = Number(barcodeScannerField.split(':')[1]);
+          setForm(previous => ({ ...previous, barcodes: (previous.barcodes || []).map((row, index) => index === aliasIndex ? { ...row, code } : row) }));
+        } else setForm(previous => ({ ...previous, factoryBarcode: code, barcode: code }));
+        setBarcodeScannerOpen(false);
         return true;
       }}/>} 
     </Modal>
@@ -918,7 +1015,7 @@ function VariantGroupFormModal({
   form, setForm, categories, onAddCategory, units, products, variantRows, updateVariantRow, addVariantRow,
   removeVariantRow, regenerateVariantCodes, applyLedWattPreset, conversionRows, setConversionRows, applyConversionPreset,
   changeBaseUnit, toggleFractional, onClose, onSubmit, barcodeScannerOpen, setBarcodeScannerOpen,
-  variantScannerIndex, setVariantScannerIndex, canReturnToStandard, onReturnToStandard
+  barcodeScannerField, setBarcodeScannerField, variantScannerIndex, setVariantScannerIndex, variantScannerField, setVariantScannerField, canReturnToStandard, onReturnToStandard
 }) {
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [lifecycleProduct, setLifecycleProduct] = useState(null);
@@ -936,9 +1033,9 @@ function VariantGroupFormModal({
     } catch (error) { alert(error.message || 'Kategori gagal ditambahkan.'); }
   };
   const stockStep = normalizeQuantityStep(form.quantityStep, form.allowFractional, recommendedQuantityStep(form.baseUnit, form.category));
-  const scanSharedBarcode = () => { setVariantScannerIndex(null); setBarcodeScannerOpen(true); };
-  const scanVariantBarcode = index => { setVariantScannerIndex(index); setBarcodeScannerOpen(true); };
-  const usedCodesOutsideGroup = products.filter(item => item.variantGroupId !== form.variantGroupId).flatMap(item => [item.sku, item.barcode, item.sharedBarcode]).filter(Boolean);
+  const scanSharedBarcode = () => { setVariantScannerIndex(null); setVariantScannerField('shared'); setBarcodeScannerField?.('shared'); setBarcodeScannerOpen(true); };
+  const scanVariantBarcode = (index, field = 'factory') => { setVariantScannerIndex(index); setVariantScannerField(field); setBarcodeScannerField?.(field); setBarcodeScannerOpen(true); };
+  const usedCodesOutsideGroup = products.filter(item => item.variantGroupId !== form.variantGroupId).flatMap(item => productAllCodes(item, { includeShared: true })).filter(Boolean);
   return <Modal
     title={form.variantGroupId ? 'Produk Induk & Manajemen Varian' : 'Tambah Produk Induk & Varian'}
     onClose={onClose}
@@ -957,12 +1054,14 @@ function VariantGroupFormModal({
           <Field label="Spesifikasi Induk"><Input value={form.specifications || ''} onChange={event => setForm(previous => ({ ...previous, specifications: event.target.value }))} placeholder="Contoh: LED E27 · 6500K"/></Field>
           <Field label="Kategori"><div className="flex gap-2"><Select value={form.category} onChange={event => setForm(previous => ({ ...previous, category: event.target.value }))}>{sortCategories(categories).map(category => <option key={category}>{category}</option>)}</Select>{onAddCategory&&<Button type="button" variant="secondary" className="shrink-0" onClick={()=>setCategoryOpen(true)}><FolderPlus size={17}/> Baru</Button>}</div></Field>
           <Field label="Satuan Dasar"><Select value={form.baseUnit} onChange={event => changeBaseUnit(event.target.value)}>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</Select></Field>
-          <Field label="Barcode Kemasan Bersama" hint="Barcode pabrik yang sama pada semua watt/ukuran. Boleh kosong bila setiap varian memiliki barcode berbeda." className="md:col-span-2">
+          <Field label="Barcode Kemasan Bersama" hint="Barcode tambahan yang memang dipakai bersama oleh beberapa varian. Biarkan kosong bila setiap watt/ukuran memiliki EAN/barcode pabrik sendiri." className="md:col-span-2">
             <div className="flex gap-2"><Input value={form.sharedBarcode || ''} onChange={event => setForm(previous => ({ ...previous, sharedBarcode: event.target.value.trim() }))} placeholder="Scan barcode kemasan Philips"/><Button type="button" variant="secondary" onClick={scanSharedBarcode}><ScanLine size={17}/> Scan</Button></div>
           </Field>
           <Field label="Kelompok Varian" hint="ID internal otomatis; tidak perlu diubah." className="md:col-span-2"><Input value={form.variantGroupId || ''} disabled placeholder="Dibuat otomatis saat disimpan"/></Field>
         </div>
       </Card>
+
+      <ProductPosImageEditor value={form.posImage} onChange={posImage => setForm(previous => ({ ...previous, posImage }))} product={{ ...form, parentName: form.name }} title="Foto Produk Induk untuk Kasir"/>
 
       <Card className="p-4 border-violet-200 bg-violet-50/40">
         <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-end">
@@ -981,12 +1080,14 @@ function VariantGroupFormModal({
           const rowStep = stockStep;
           const skuConflict = row.sku && usedCodesOutsideGroup.some(code => String(code).toUpperCase() === String(row.sku).toUpperCase());
           const barcodeConflict = row.internalBarcode && usedCodesOutsideGroup.some(code => String(code).toUpperCase() === String(row.internalBarcode).toUpperCase());
+          const factoryBarcodeConflict = row.factoryBarcode && usedCodesOutsideGroup.some(code => String(code).toUpperCase() === String(row.factoryBarcode).toUpperCase());
           return <Card key={row.id || `new-${index}`} className="p-4 border-gray-200 overflow-hidden">
             <div className="flex items-center justify-between gap-3 mb-4"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">{index + 1}</div><div><p className="font-black text-gray-900">{row.variantName || `Varian ${index + 1}`}</p><p className="text-xs text-gray-500">{row.existing ? 'Stok lama tetap aman; ubah lewat Pembelian/Penyesuaian.' : 'Varian baru dapat langsung diberi stok awal.'}</p></div></div><button type="button" onClick={() => removeVariantRow(index)} disabled={variantRows.length <= 1} className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center disabled:opacity-30" title="Hapus varian"><Trash2 size={17}/></button></div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
               <Field label="Nama Varian"><Input value={row.variantName} onChange={event => updateVariantRow(index, { variantName: event.target.value })} placeholder="6W / 10W / 12W / Warm White"/></Field>
               <Field label="SKU Otomatis" hint="Boleh diedit, tetapi harus unik."><div className="flex gap-2"><Input value={row.sku} onChange={event => updateVariantRow(index, { sku: event.target.value.toUpperCase() })} className={skuConflict ? 'border-red-400' : ''}/><Button type="button" variant="secondary" onClick={() => navigator.clipboard?.writeText(row.sku)} title="Salin SKU"><Copy size={16}/></Button></div>{skuConflict && <p className="text-xs text-red-600 font-bold mt-1">SKU sudah digunakan produk lain.</p>}</Field>
-              <Field label="Barcode Internal / Stiker" hint="Default sama dengan SKU dan dapat dicetak sebagai Code 128."><div className="flex gap-2"><Input value={row.internalBarcode} onChange={event => updateVariantRow(index, { internalBarcode: event.target.value.toUpperCase() })} className={barcodeConflict ? 'border-red-400' : ''}/><Button type="button" variant="secondary" onClick={() => scanVariantBarcode(index)}><ScanLine size={16}/></Button></div>{barcodeConflict && <p className="text-xs text-red-600 font-bold mt-1">Barcode internal sudah digunakan.</p>}</Field>
+              <Field label="Barcode Pabrik / EAN" hint="Barcode asli tiap watt/ukuran. Philips 6W, 10W, 12W, dan 15W dapat memiliki kode berbeda."><div className="flex gap-2"><Input value={row.factoryBarcode || ''} onChange={event => updateVariantRow(index, { factoryBarcode: event.target.value.trim() })} className={factoryBarcodeConflict ? 'border-red-400' : ''} placeholder="Scan barcode pabrik"/><Button type="button" variant="secondary" onClick={() => scanVariantBarcode(index, 'factory')}><ScanLine size={16}/></Button></div>{factoryBarcodeConflict && <p className="text-xs text-red-600 font-bold mt-1">Barcode pabrik sudah digunakan.</p>}</Field>
+              <Field label="Barcode Internal / Stiker" hint="Default sama dengan SKU. Dipakai untuk label internal dan cetak barcode massal."><div className="flex gap-2"><Input value={row.internalBarcode} onChange={event => updateVariantRow(index, { internalBarcode: event.target.value.toUpperCase() })} className={barcodeConflict ? 'border-red-400' : ''}/><Button type="button" variant="secondary" onClick={() => scanVariantBarcode(index, 'internal')}><ScanLine size={16}/></Button></div>{barcodeConflict && <p className="text-xs text-red-600 font-bold mt-1">Barcode internal sudah digunakan.</p>}</Field>
               <Field label="Rak / Lokasi"><Input value={row.rack} onChange={event => updateVariantRow(index, { rack: event.target.value })}/></Field>
               <Field label={row.existing ? 'Stok Saat Ini' : 'Stok Awal'}><NumberInput min="0" step={rowStep} disabled={row.existing} value={row.stock || ''} onValueChange={value => updateVariantRow(index, { stock: value })} onBlur={() => updateVariantRow(index, { stock: normalizeQuantity(row.stock, { allowFractional: rowStep < 1, step: rowStep, min: 0 }) })}/></Field>
               <Field label="Stok Minimum"><NumberInput min="0" step={rowStep} value={row.minStock || ''} onValueChange={value => updateVariantRow(index, { minStock: value })} onBlur={() => updateVariantRow(index, { minStock: normalizeQuantity(row.minStock, { allowFractional: rowStep < 1, step: rowStep, min: 0 }) })}/></Field>
@@ -1015,7 +1116,9 @@ function VariantGroupFormModal({
                 prices: { ...row.prices, project: value },
                 markups: { ...row.markups, project: calculateMarkupPercent(row.modalPrice, value) }
               })}/></Field>
-              <div className="md:col-span-2 flex flex-wrap gap-4 items-center rounded-xl border bg-gray-50 px-3 py-2"><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.available} onChange={event => updateVariantRow(index, { available: event.target.checked })}/> Tersedia di Kasir</label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.favorite} onChange={event => updateVariantRow(index, { favorite: event.target.checked })}/> Favorit</label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.active} onChange={event => updateVariantRow(index, { active: event.target.checked })}/> Aktif</label></div>
+              <div className="md:col-span-2 xl:col-span-4"><BarcodeAliasesEditor rows={row.barcodes || []} onChange={barcodes => updateVariantRow(index, { barcodes })} baseUnit={form.baseUnit} title={`Barcode Tambahan · ${row.variantName || `Varian ${index + 1}`}`} onScan={aliasIndex => { setVariantScannerIndex(index); setVariantScannerField(`alias:${aliasIndex}`); setBarcodeScannerOpen(true); }}/></div>
+              <div className="md:col-span-2 xl:col-span-4"><ProductPosImageEditor value={row.posImage} onChange={posImage => updateVariantRow(index, { posImage })} product={{ ...form, parentName: form.name, name: form.name, variantName: row.variantName }} title={`Foto Kasir · ${row.variantName || `Varian ${index + 1}`}`} compact/></div>
+              <div className="md:col-span-2 xl:col-span-4 flex flex-wrap gap-4 items-center rounded-xl border bg-gray-50 px-3 py-2"><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.available} onChange={event => updateVariantRow(index, { available: event.target.checked })}/> Tersedia di Kasir</label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.favorite} onChange={event => updateVariantRow(index, { favorite: event.target.checked })}/> Favorit</label><label className="flex gap-2 items-center text-sm font-bold"><input type="checkbox" checked={row.active} onChange={event => updateVariantRow(index, { active: event.target.checked })}/> Aktif</label></div>
             </div>
           </Card>;
         })}
@@ -1025,7 +1128,7 @@ function VariantGroupFormModal({
         <div className="flex items-start gap-3"><Ruler className="text-blue-700 shrink-0"/><div><p className="font-black text-gray-800">Satuan, Eceran, dan Kemasan Berlaku untuk Semua Varian</p><p className="text-xs text-gray-500 mt-1">Contoh varian kabel ukuran berbeda dapat tetap memakai meter dan kelipatan 0,5 meter. Untuk lampu, gunakan pcs.</p></div></div>
         <label className="mt-4 flex gap-3 items-center p-3 rounded-xl bg-white border"><input type="checkbox" checked={form.allowFractional} disabled={form.serialTracking} onChange={event => toggleFractional(event.target.checked)}/><div><p className="font-bold text-sm">Boleh dijual eceran / pecahan</p><p className="text-xs text-gray-500">Aktifkan hanya bila seluruh varian memang dapat dijual pecahan.</p></div></label>
         {form.allowFractional && <Field label={`Kelipatan Penjualan (${form.baseUnit})`} className="mt-3"><Select value={String(form.quantityStep)} onChange={event => setForm(previous => ({ ...previous, quantityStep: Number(event.target.value) }))}>{QUANTITY_STEP_PRESETS.map(step => <option key={step} value={step}>{quantityStepLabel(step, form.baseUnit)} ({formatQuantity(step)} {form.baseUnit})</option>)}</Select></Field>}
-        <div className="mt-3"><PackagingUnitsEditor baseUnit={form.baseUnit} basePrices={variantRows[0]?.prices || { retail: 0, wholesale: 0, project: 0 }} rows={conversionRows} onChange={setConversionRows} onPreset={applyConversionPreset} sharedAcrossVariants/></div>
+        <div className="mt-3"><PackagingUnitsEditor baseUnit={form.baseUnit} basePrices={variantRows[0]?.prices || { retail: 0, wholesale: 0, project: 0 }} rows={conversionRows} onChange={setConversionRows} onPreset={applyConversionPreset} sharedAcrossVariants={variantRows.length > 1}/></div>
       </Card>
     </div>
     {categoryOpen&&onAddCategory&&<Modal title="Kategori Baru" onClose={()=>setCategoryOpen(false)} size="sm" footer={<><Button variant="secondary" onClick={()=>setCategoryOpen(false)}>Batal</Button><Button onClick={addCategory} disabled={categoryName.trim().length<2}>Simpan Kategori</Button></>}><Field label="Nama Kategori"><Input value={categoryName} onChange={event=>setCategoryName(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addCategory();}}} placeholder="Contoh: Lampu & Penerangan" autoFocus/></Field></Modal>}
@@ -1039,7 +1142,13 @@ function VariantGroupFormModal({
       } else {
         const collision = codeCollision(products, { code, branchId: form.branchId, ignoreIds: variantRows.map(row => row.id).filter(Boolean), variantGroupId: form.variantGroupId });
         if (collision) return `Barcode ${code} sudah dipakai oleh ${collision.name}.`;
-        updateVariantRow(variantScannerIndex, { internalBarcode: code });
+        if (String(form.sharedBarcode || '').trim().toLowerCase() === code.toLowerCase()) return 'Barcode varian tidak boleh sama dengan Barcode Kemasan Bersama.';
+        if (variantScannerField === 'internal') updateVariantRow(variantScannerIndex, { internalBarcode: code.toUpperCase() });
+        else if (variantScannerField.startsWith('alias:')) {
+          const aliasIndex = Number(variantScannerField.split(':')[1]);
+          const aliases = variantRows[variantScannerIndex]?.barcodes || [];
+          updateVariantRow(variantScannerIndex, { barcodes: aliases.map((row, index) => index === aliasIndex ? { ...row, code } : row) });
+        } else updateVariantRow(variantScannerIndex, { factoryBarcode: code });
       }
       setBarcodeScannerOpen(false); setVariantScannerIndex(null); return true;
     }}/>} 

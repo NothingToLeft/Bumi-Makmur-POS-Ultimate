@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v6.2.0 — Data Integrity & Professional Operations
+# Bumi Makmur POS FreeSync v6.3.0 — Product Visual & Multi-Barcode
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.2.0 memfokuskan kualitas produksi pada **urutan data deterministik**, **timestamp Firestore yang aman**, **akurasi pembayaran/kembalian**, dan **PDF Tutup Harian profesional Bumi Makmur 2**, sambil mempertahankan AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan Unified AutoSync.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.3.0 menambahkan **barcode pabrik + internal per varian**, **multi-barcode per SKU/satuan**, **label barcode massal dengan EAN-13 asli**, serta **foto produk ringan khusus halaman Kasir** dari kamera, galeri, atau pencarian otomatis Gemini + Google Search grounding. Seluruh hardening data v6.2.0, Unified AutoSync, AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan PDF closing profesional tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,6 +11,22 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.2
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
+
+
+## Product Visual & Multi-Barcode v6.3.0
+
+- Setiap varian/SKU memiliki **Barcode Pabrik / EAN** dan **Barcode Internal / Stiker** sendiri. Contoh Philips LED 6W, 10W, 12W, dan 15W tidak lagi bergantung pada satu barcode bersama.
+- Satu SKU dapat mempunyai beberapa barcode tambahan bertipe **Supplier, Kemasan/Satuan Jual, atau Alternatif**, lengkap dengan satuan dan faktor isi. Scan barcode `dus × 12` membawa kuantitas dasar yang benar ke Kasir.
+- **Barcode Kemasan Bersama** tetap tersedia sebagai fallback kelompok varian. Scanner selalu memprioritaskan barcode langsung milik varian; barcode bersama hanya meminta pemilihan varian bila memang ambigu.
+- Barcode satuan jual global tidak diizinkan pada grup multi-varian karena dapat membuat scanner salah SKU. Gunakan Barcode Tambahan pada masing-masing varian untuk pack/dus yang unik.
+- Cetak Barcode Massal menyediakan mode **Internal**, **Pabrik/EAN**, dan **Otomatis (Pabrik → Internal)**. Barcode pabrik 13 digit dengan checksum valid dicetak menggunakan pola **EAN-13 asli**; kode internal tetap kompatibel melalui Code 39.
+- Import CSV/XLSX mengenali barcode pabrik, internal, tambahan, dan kemasan. Shared barcode tidak pernah dipakai sebagai identity-match ketika update import sehingga satu varian tidak dapat diam-diam menimpa sibling. Collision direct-vs-shared juga ditolak.
+- Form Produk menyediakan **Foto Produk untuk Kasir** pada produk induk dan setiap varian: Ambil Foto, Pilih Galeri, Cari Foto Otomatis, atau Hapus. Input manual tetap selalu tersedia.
+- Foto hanya berfungsi sebagai **visual aid pada kartu Kasir**. Foto tidak dimasukkan ke struk, invoice, laporan, PO, PDF, transaksi historis, atau dokumen closing. Varian dapat override foto induk; bila tidak ada gambar, Kasir menampilkan placeholder ringan.
+- Foto diproses lokal menjadi thumbnail WebP/JPEG/PNG maksimum 256 px, ditargetkan sekitar 52 KB dan dibatasi maksimal 90 KB per thumbnail. Foto induk grup varian hanya disimpan pada satu child document agar Firestore tidak menduplikasi gambar yang sama pada setiap varian.
+- Pencarian foto otomatis memakai **Gemini Google Search grounding langsung dari perangkat**. Gemini API key tetap lokal, tidak masuk Firestore, backup, source, atau Cloudflare Function. Cloudflare Pages Function gratis hanya memverifikasi halaman sumber dan mengambil gambar terpilih sekali untuk dikompres lokal.
+- Helper gambar memblokir localhost/private-network/custom-port, memvalidasi redirect, ukuran HTML/gambar, MIME JPEG/PNG/WebP, dan hanya mengambil gambar yang dapat diverifikasi kembali pada halaman sumber.
+- `firestore.indexes.json` mengecualikan `products.posImage.dataUrl` dan `products.groupPosImage.dataUrl` dari single-field index untuk mengurangi pemborosan index. **Setelah upload v6.3.0, jalankan Actions → Deploy Firebase Spark Rules satu kali untuk menerapkan index exemption.** Firestore Rules tetap ruleset `6.1.0`; yang berubah pada v6.3.0 adalah indexes.
 
 ## Data Integrity & Professional Operations v6.2.0
 
@@ -244,13 +260,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v6.2.0.
+2. Ekstrak ZIP v6.3.0.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v6.2.0 Data Integrity & Professional Operations
+Bumi Makmur POS v6.3.0 Product Visual & Multi-Barcode
 ```
 
 6. Klik **Push origin**.
@@ -261,21 +277,29 @@ Bumi Makmur POS v6.2.0 Data Integrity & Professional Operations
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.2.0
+→ Build Bumi Makmur POS v6.3.0
 → test-only
 ```
 
 Pastikan core tests, audit statis, dan Vite build hijau.
 
-### 2. Firestore Rules
+### 2. Firestore Rules + Indexes
 
-**v6.2.0 tidak mengubah Firestore Rules.** Ruleset produksi tetap `BUMI_MAKMUR_RULESET_VERSION=6.1.0`. Jika workflow tersebut sebelumnya sudah hijau, tidak perlu deploy ulang.
+**Rules logic tetap ruleset `BUMI_MAKMUR_RULESET_VERSION=6.1.0`, tetapi v6.3.0 mengubah `firestore.indexes.json`.** Jalankan sekali:
+
+```text
+Actions
+→ Deploy Firebase Spark Rules
+→ Run workflow
+```
+
+Workflow tetap Spark-only dan hanya men-deploy `firestore:rules,firestore:indexes`. Deploy ini menerapkan index exemption thumbnail Kasir.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.2.0
+→ Build Bumi Makmur POS v6.3.0
 → android-release
 ```
 
@@ -285,11 +309,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v6.2.0
+→ Build Bumi Makmur POS Desktop v6.3.0
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.2.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.3.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -306,20 +330,22 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.2.0
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v6.2.0
+## Release acceptance v6.3.0
 
-Full-pass source audit final pada 19 Agustus 2026 menghasilkan:
+Full-pass source audit final pada 20 Agustus 2026 menghasilkan:
 
-- **196/196 automated core/regression tests PASS**.
+- **249/249 automated core/regression tests PASS**.
 - Static project audit **PASS**.
-- Electron/Android helper Node syntax **PASS**.
+- TypeScript transpile/syntax pass seluruh source: **0 diagnostics**.
+- Electron main/preload dan Cloudflare Function Node syntax **PASS**.
 - GitHub Actions YAML dan JSON konfigurasi **PASS**.
-- Firebase Spark-only guard **PASS**.
+- Firebase Spark-only + secret guard **PASS**.
+- Production `npm install` lokal tidak dapat diselesaikan karena registry tidak merespons dalam batas waktu container; GitHub Actions/Cloudflare tetap final compilation gate.
 
 Acceptance flow produksi yang disarankan setelah push:
 
 1. Backup JSON. **Jangan hapus antrean offline yang masih ada.**
-2. Pastikan ruleset produksi v6.1.0 sebelumnya sudah hijau; v6.2.0 tidak membutuhkan deploy Rules baru.
+2. Jalankan **Deploy Firebase Spark Rules** sekali setelah upload v6.3.0 untuk menerapkan index exemption foto; rules logic tetap v6.1.0.
 3. Login dengan akun yang membuat mutation tertunda dan tekan **Sinkronkan Sekarang** sampai antrean akun tersebut 0.
 4. Jalankan Android workflow `test-only` sampai hijau.
 5. Deploy Web, lalu uji Owner ↔ Karyawan dan `Layar Pelanggan → Buka Layar 2`.
@@ -327,4 +353,4 @@ Acceptance flow produksi yang disarankan setelah push:
 7. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
 8. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v6.2.0.md` untuk coverage timeline, reporting, timestamp, dan regression suite. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.
+Lihat `QA-REPORT-Bumi-Makmur-POS-v6.3.0.md` untuk coverage barcode, foto Kasir, image-search security, data integrity, dan regression suite. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.

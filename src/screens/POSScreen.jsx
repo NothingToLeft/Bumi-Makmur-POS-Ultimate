@@ -12,12 +12,22 @@ import ReceiptDocument from '../components/ReceiptDocument.jsx';
 import { findProductByCode, isEditableTarget } from '../utils/barcode.js';
 import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
 import { sortProductsByName } from '../utils/productCatalog.js';
+import { barcodeSearchText } from '../utils/productBarcodes.js';
+import { resolveProductPosImage } from '../services/productMedia.js';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
 const generalCustomerId = customers => (customers || []).find(item => item.id === 'CUS-GENERAL')?.id
   || (customers || []).find(item => /^umum(?:\s|\()/i.test(String(item.name || '').trim()))?.id
   || '';
+
+function PosProductVisual({ product, groupFallback = null }) {
+  const src = resolveProductPosImage(product, groupFallback);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  if (!src || failed) return <Package size={30} className="text-gray-400"/>;
+  return <img src={src} alt={product.name || 'Produk'} loading="lazy" decoding="async" onError={() => setFailed(true)} className="w-full h-full object-contain"/>;
+}
 
 export default function POSScreen() {
   const { db, scoped, completeSale, holdSale, findOpenShift, setCustomerDisplay, currentUser, branch, authorizeManagerPin } = usePos();
@@ -60,11 +70,19 @@ export default function POSScreen() {
     return () => window.removeEventListener('bm-load-bill', handleLoad);
   }, [scoped.customers]);
 
+  const groupPosImages = useMemo(() => {
+    const map = new Map();
+    for (const product of scoped.products || []) {
+      if (product?.variantGroupId && product?.groupPosImage && !map.has(product.variantGroupId)) map.set(product.variantGroupId, product.groupPosImage);
+    }
+    return map;
+  }, [scoped.products]);
+
   const filtered = useMemo(() => sortProductsByName(scoped.products.filter(product => {
     const term = search.toLowerCase();
     return product.active !== false && product.available !== false &&
       (category === 'Semua' || product.category === category) && (!favoritesOnly || product.favorite) &&
-      (!term || product.name.toLowerCase().includes(term) || String(product.parentName || '').toLowerCase().includes(term) || String(product.variantName || '').toLowerCase().includes(term) || String(product.sku || '').toLowerCase().includes(term) || String(product.barcode || '').toLowerCase().includes(term) || String(product.sharedBarcode || '').toLowerCase().includes(term));
+      (!term || product.name.toLowerCase().includes(term) || String(product.parentName || '').toLowerCase().includes(term) || String(product.variantName || '').toLowerCase().includes(term) || String(product.sku || '').toLowerCase().includes(term) || barcodeSearchText(product).toLowerCase().includes(term) || String(product.sharedBarcode || '').toLowerCase().includes(term));
   })), [scoped.products, search, category, favoritesOnly]);
 
   const defaultCustomerId = generalCustomerId(scoped.customers);
@@ -107,7 +125,7 @@ export default function POSScreen() {
 
   const addProduct = (product, options = {}) => {
     const conversion = product.conversions?.find(item => item.unit === options.unit);
-    const factor = conversion ? Number(conversion.factor) : 1;
+    const factor = Math.max(0.000001, Number(options.factor || conversion?.factor || 1));
     const unit = options.unit || product.baseUnit;
     const quantityStep = unit === product.baseUnit ? normalizeQuantityStep(product.quantityStep, product.allowFractional === true) : 1;
     const qty = normalizeQuantity(options.qty || quantityStep, { allowFractional: quantityStep < 1, step: quantityStep, min: quantityStep });
@@ -145,7 +163,10 @@ export default function POSScreen() {
     const tierPrice = priceFor(result.product, saleType);
     const options = { ...result.options };
     if (options.unit) {
-      options.price = priceForSaleUnit(result.product, options.unit, saleType);
+      const conversion = (result.product.conversions || []).find(item => item.unit === options.unit);
+      options.price = conversion
+        ? priceForSaleUnit(result.product, options.unit, saleType)
+        : Math.round(tierPrice * Math.max(0.000001, Number(options.factor || 1)));
     } else if (options.variant) {
       const variant = result.product.variants?.find(item => item.name === options.variant);
       options.price = tierPrice + Number(variant?.priceDelta || 0);
@@ -340,7 +361,7 @@ export default function POSScreen() {
           {scanNotice && <div className={`text-xs font-bold px-3 py-2 rounded-xl ${scanNotice.includes('tidak ditemukan') ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>{scanNotice}</div>}
           <div className="flex gap-2 overflow-x-auto no-scrollbar"><button onClick={() => setFavoritesOnly(value => !value)} className={`min-h-[40px] px-3 rounded-full border font-bold text-xs flex items-center gap-1 ${favoritesOnly ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-white text-gray-600 border-gray-200'}`}><Star size={15} fill={favoritesOnly?'currentColor':'none'}/> Favorit</button>{['Semua', ...db.categories].map(item => <button key={item} onClick={() => setCategory(item)} className={`min-h-[40px] px-4 rounded-full border font-bold text-xs whitespace-nowrap ${category === item ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-white text-gray-600 border-gray-200'}`}>{item}</button>)}</div>
         </div>
-        <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar pb-28 md:pb-4"><div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">{filtered.map(product => <button key={product.id} onClick={() => (product.allowFractional || product.variants?.length > 1 || product.conversions?.length > 0) ? setChoosingProduct(product) : addProduct(product)} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left card-element active:scale-[.98]"><div className="aspect-square rounded-xl bg-gray-100 img-placeholder flex items-center justify-center mb-2 relative"><Package size={30} className="text-gray-400"/>{product.favorite && <Star size={16} fill="currentColor" className="absolute top-2 right-2 text-yellow-500"/>}{product.bundleItems?.length > 0 && <Badge tone="purple">Paket</Badge>}</div><p className="font-bold text-xs text-gray-800 line-clamp-2 min-h-[32px]">{product.name}</p><p className="font-bold text-emerald-600 mt-2">{formatRp(priceFor(product,saleType))}</p><div className="flex justify-between text-[10px] text-gray-500 mt-1"><span>{formatQuantity(product.stock)} {product.baseUnit}</span><span>{product.rack}</span></div></button>)}</div></div>
+        <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar pb-28 md:pb-4"><div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">{filtered.map(product => <button key={product.id} onClick={() => (product.allowFractional || product.variants?.length > 1 || product.conversions?.length > 0) ? setChoosingProduct(product) : addProduct(product)} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 text-left card-element active:scale-[.98]"><div className="aspect-square rounded-xl bg-gray-100 img-placeholder flex items-center justify-center mb-2 relative overflow-hidden"><PosProductVisual product={product} groupFallback={product.variantGroupId ? groupPosImages.get(product.variantGroupId) : null}/>{product.favorite && <Star size={16} fill="currentColor" className="absolute top-2 right-2 text-yellow-500 drop-shadow-sm"/>}{product.bundleItems?.length > 0 && <div className="absolute left-2 top-2"><Badge tone="purple">Paket</Badge></div>}</div><p className="font-bold text-xs text-gray-800 line-clamp-2 min-h-[32px]">{product.name}</p><p className="font-bold text-emerald-600 mt-2">{formatRp(priceFor(product,saleType))}</p><div className="flex justify-between text-[10px] text-gray-500 mt-1"><span>{formatQuantity(product.stock)} {product.baseUnit}</span><span>{product.rack}</span></div></button>)}</div></div>
         {cart.length > 0 && !mobileCart && <div className="md:hidden absolute left-4 right-4 bottom-[76px] z-30"><button onClick={() => setMobileCart(true)} className="w-full bg-emerald-800 text-white min-h-[64px] rounded-2xl shadow-xl px-4 flex justify-between items-center"><div className="flex gap-3 items-center"><ShoppingCart/><div className="text-left"><p className="text-[10px] text-emerald-200">{cart.reduce((sum,line)=>sum+line.qty,0)} item</p><p className="font-bold">{formatRp(totals.total)}</p></div></div><span className="font-bold text-sm">Lihat Keranjang</span></button></div>}
       </div>
       <div className="hidden md:block w-[340px] lg:w-[390px] border-l border-gray-200 shrink-0">{cartPanel}</div>

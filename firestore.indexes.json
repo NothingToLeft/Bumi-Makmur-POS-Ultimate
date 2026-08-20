@@ -29,5 +29,16 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "products",
+      "fieldPath": "posImage.dataUrl",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "products",
+      "fieldPath": "groupPosImage.dataUrl",
+      "indexes": []
+    }
+  ]
 }

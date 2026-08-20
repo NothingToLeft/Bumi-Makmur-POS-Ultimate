@@ -49,6 +49,20 @@ jobs:
           }
           echo "Firestore Rules v6.1.0 tervalidasi sebelum deploy."
 
+      - name: Verify product photo index exemptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const indexes = JSON.parse(fs.readFileSync('firestore.indexes.json', 'utf8'));
+          for (const fieldPath of ['posImage.dataUrl', 'groupPosImage.dataUrl']) {
+            const ok = (indexes.fieldOverrides || []).some(item => item.collectionGroup === 'products' && item.fieldPath === fieldPath && Array.isArray(item.indexes) && item.indexes.length === 0);
+            if (!ok) throw new Error(`Index exemption hilang: products.${fieldPath}`);
+          }
+          console.log('Index exemption foto Kasir tervalidasi.');
+          NODE
+
       - name: Authenticate Google Cloud
         uses: google-github-actions/auth@v3
         with:

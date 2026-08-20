@@ -1,4 +1,4 @@
-# Firebase Spark — Setup Gratis Bumi Makmur POS v6.0.3
+# Firebase Spark — Setup Gratis Bumi Makmur POS v6.3.0
 
 Project tetap memakai **Firebase Spark/free tier**. Jangan upgrade Blaze dan jangan aktifkan layanan berbayar.
 
@@ -43,13 +43,13 @@ Secret service account hanya digunakan GitHub Actions untuk deploy Firestore Rul
 
 Tidak perlu Firebase Functions, Storage, Hosting, atau billing Blaze.
 
-## 5. Deploy Rules — WAJIB setelah upload v6.0.3
+## 5. Deploy Rules + Indexes — WAJIB sekali setelah upload v6.3.0
 
 ```text
 GitHub → Actions → Deploy Firebase Spark Rules → Run workflow
 ```
 
-Tunggu workflow hijau **sebelum** menganggap cloud sehat. v6.0.3 menampilkan peringatan khusus bila aplikasi menerima `permission-denied`, sehingga status tidak lagi terlihat hijau palsu ketika antrean gagal dikirim.
+Tunggu workflow hijau sebelum validasi produksi. **Firestore Rules tetap marker v6.1.0**, tetapi v6.3.0 menambah index exemption untuk thumbnail Kasir sehingga workflow perlu dijalankan satu kali setelah source v6.3.0 diunggah.
 
 Rules mencakup:
 
@@ -67,6 +67,22 @@ Rules mencakup:
 
 Workflow **hanya** men-deploy `firestore:rules,firestore:indexes`.
 
+
+### Index foto Kasir v6.3.0
+
+`firestore.indexes.json` menonaktifkan single-field index pada:
+
+```text
+products.posImage.dataUrl
+products.groupPosImage.dataUrl
+```
+
+Tujuannya agar string thumbnail base64 tidak ikut membengkakkan index Firestore. Ini **bukan Firebase Storage** dan tidak membutuhkan Blaze. Workflow yang sama tetap hanya menjalankan `firestore:rules,firestore:indexes`.
+
+Foto induk grup varian disimpan hanya pada satu child product dan digunakan sebagai fallback visual oleh sibling. Thumbnail varian hanya disimpan bila varian memang memiliki foto sendiri.
+
+Gemini API key untuk pencarian foto tidak pernah diperlukan workflow Firebase dan tidak boleh dimasukkan ke GitHub secret tambahan untuk fitur ini. API key tetap pada perangkat pengguna.
+
 ## 6. Authorized domains
 
 Firebase → Authentication → Settings → Authorized domains:
@@ -79,7 +95,7 @@ bumi-makmur-pos-ultimate.pages.dev
 ## 7. Jika muncul `Missing or insufficient permissions`
 
 1. Jangan hapus antrean offline.
-2. Pastikan repository sudah berisi source v6.0.3.
+2. Pastikan repository sudah berisi source v6.3.0.
 3. Jalankan workflow **Deploy Firebase Spark Rules** sampai hijau.
 4. Keluar dan login lagi hanya bila diagnostik menyebut sesi/credential, bukan sekadar rules.
 5. Buka `Pengaturan → Cloud & Backup → Sinkronkan Sekarang`.

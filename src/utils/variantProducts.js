@@ -1,3 +1,5 @@
+import { productAllCodes } from './productBarcodes.js';
+
 const normalize = value => String(value ?? '').trim();
 const normalizeCode = value => normalize(value).toUpperCase();
 
@@ -73,6 +75,7 @@ export function groupVariantProducts(products = []) {
   for (const [variantGroupId, children] of grouped) {
     const activeChildren = children.filter(child => child.active !== false);
     const representative = activeChildren[0] || children[0];
+    const imageOwner = activeChildren.find(child => child?.groupPosImage) || children.find(child => child?.groupPosImage) || representative;
     const prices = activeChildren.map(child => Number(child.prices?.retail || 0));
     output.push({
       id: `GROUP-${variantGroupId}`,
@@ -81,6 +84,7 @@ export function groupVariantProducts(products = []) {
       name: variantParentName(representative),
       parentName: variantParentName(representative),
       sharedBarcode: normalize(representative?.sharedBarcode),
+      posImage: imageOwner?.groupPosImage || null,
       category: representative?.category || 'Lainnya',
       baseUnit: representative?.baseUnit || 'pcs',
       rack: [...new Set(activeChildren.map(child => child.rack).filter(Boolean))].join(', ') || '-',
@@ -100,6 +104,7 @@ export function groupVariantProducts(products = []) {
 export function buildVariantGroupDraft(children = []) {
   const ordered = children.slice().sort((a, b) => normalize(a.variantName).localeCompare(normalize(b.variantName), 'id'));
   const first = ordered[0] || {};
+  const imageOwner = ordered.find(child => child?.groupPosImage) || first;
   return {
     ...first,
     id: first.id || '',
@@ -108,6 +113,7 @@ export function buildVariantGroupDraft(children = []) {
     variantGroupId: first.variantGroupId || generateVariantGroupId(first.parentName || first.name),
     name: variantParentName(first),
     sharedBarcode: first.sharedBarcode || '',
+    posImage: imageOwner.groupPosImage || null,
     barcode: '',
     sku: '',
     stock: 0,
@@ -118,7 +124,10 @@ export function buildVariantGroupDraft(children = []) {
       id: child.id,
       variantName: child.variantName || '',
       sku: child.sku || '',
-      internalBarcode: child.barcode || child.sku || '',
+      factoryBarcode: child.factoryBarcode || '',
+      internalBarcode: child.internalBarcode || child.barcode || child.sku || '',
+      barcodes: Array.isArray(child.barcodes) ? child.barcodes.map(row => ({ ...row })) : [],
+      posImage: child.posImage || null,
       stock: Number(child.stock || 0),
       minStock: Number(child.minStock || 0),
       rack: child.rack || '-',
@@ -144,9 +153,10 @@ export function codeCollision(products = [], { code = '', branchId = '', ignoreI
   return products.find(product => {
     if (!product || ignored.has(product.id) || product.active === false) return false;
     if (branchId && product.branchId !== branchId) return false;
-    const directCodes = [product.sku, product.barcode].map(normalizeCode).filter(Boolean);
+    const directCodes = productAllCodes(product, { includeShared: false }).map(normalizeCode).filter(Boolean);
     if (directCodes.includes(normalized)) return true;
     if (normalizeCode(product.sharedBarcode) !== normalized) return false;
+    // Satu shared barcode memang boleh dipakai oleh sibling pada group varian yang sama.
     return !shared || !variantGroupId || product.variantGroupId !== variantGroupId;
   }) || null;
 }

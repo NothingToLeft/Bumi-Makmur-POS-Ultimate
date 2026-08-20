@@ -1,4 +1,4 @@
-name: Build Bumi Makmur POS Desktop v6.2.0
+name: Build Bumi Makmur POS Desktop v6.3.0
 
 on:
   workflow_dispatch:
@@ -104,14 +104,14 @@ jobs:
             "$hash  $($file.Name)"
           }
           $lines | Set-Content -Encoding utf8 release/windows/SHA256SUMS-Windows.txt
-          Copy-Item RELEASE-NOTES-Bumi-Makmur-POS-v6.2.0.md release/windows/RELEASE-NOTES.md -Force
+          Copy-Item RELEASE-NOTES-Bumi-Makmur-POS-v6.3.0.md release/windows/RELEASE-NOTES.md -Force
 
       - name: Upload Windows installers to Actions artifact
         if: ${{ inputs.build_mode == 'windows-release' }}
         uses: actions/upload-artifact@v6
         continue-on-error: true
         with:
-          name: Bumi-Makmur-POS-Desktop-v6.2.0-Windows
+          name: Bumi-Makmur-POS-Desktop-v6.3.0-Windows
           path: |
             release/windows/*.exe
             release/windows/*.msi

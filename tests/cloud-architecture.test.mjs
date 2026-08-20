@@ -8,12 +8,22 @@ test('v5.6 memakai Firebase Spark Auth dan Firestore tanpa layanan berbayar', as
   const pkg = JSON.parse(await read('package.json'));
   const firebase = await read('src/services/firebase.js');
   const firebaseJson = JSON.parse(await read('firebase.json'));
-  assert.equal(pkg.version, '6.2.0');
+  assert.equal(pkg.version, '6.3.0');
   assert.ok(pkg.dependencies.firebase);
   assert.match(firebase, /persistentLocalCache/);
   assert.match(firebase, /persistentMultipleTabManager/);
   assert.deepEqual(Object.keys(firebaseJson).sort(), ['firestore']);
-  await assert.rejects(access(new URL('../functions', import.meta.url)));
+  assert.equal(Boolean(pkg.dependencies?.['firebase-functions']), false);
+  const productMedia = await read('src/services/productMedia.js');
+  const imageSearchFunction = await read('functions/api/product-image-search.js');
+  assert.match(productMedia, /google_search/);
+  assert.match(productMedia, /generativelanguage\.googleapis\.com/);
+  assert.match(productMedia, /x-goog-api-key/);
+  assert.match(imageSearchFunction, /onRequestPost/);
+  assert.match(imageSearchFunction, /safeFetch/);
+  assert.match(imageSearchFunction, /isBlockedHostname/);
+  assert.doesNotMatch(imageSearchFunction, /google_search|generativelanguage\.googleapis\.com|x-goog-api-key|apiKey/);
+  assert.doesNotMatch(imageSearchFunction, /firebase-functions|firebase\/functions/);
   await assert.rejects(access(new URL('../storage.rules', import.meta.url)));
 });
 
@@ -21,7 +31,7 @@ test('web app shell mendukung reload offline tanpa memaksa splash atau reload be
   const main = await read('src/main.jsx');
   const sw = await read('public/sw.js');
   assert.match(main, /serviceWorker\.register\('\/sw\.js'\)/);
-  assert.match(sw, /freesync-v6\.2\.0/);
+  assert.match(sw, /freesync-v6\.3\.0/);
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /stale-while-revalidate/i);
   assert.doesNotMatch(sw, /location\.reload/);

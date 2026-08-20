@@ -47,6 +47,8 @@ import { toEpochMs } from '../utils/temporal.js';
 import { buildClosingSummary } from '../services/dailyClosingReport.js';
 import { buildProductLifecycleSummary } from '../utils/productLifecycle.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
+import { normalizeBarcodeRows, productAllCodes } from '../utils/productBarcodes.js';
+import { preparePosImageForStorage } from '../services/productMedia.js';
 import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, classifySyncError, FIRESTORE_RULESET_VERSION, normalizeSyncDiagnostics, summarizePendingMutations } from '../utils/syncDiagnostics.js';
 import { validateBackupPayload } from '../utils/backupValidation.js';
 import { publishCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
@@ -1320,11 +1322,41 @@ export function PosProvider({ children }) {
 
     const results = [];
     for (const row of validRows) {
-      const existing = next.products.find(item => item.branchId === targetBranchId && (
-        (row.id && item.id === row.id) ||
-        (row.sku && String(item.sku || '').trim().toLowerCase() === String(row.sku).trim().toLowerCase()) ||
-        (row.barcode && String(item.barcode || '').trim().toLowerCase() === String(row.barcode).trim().toLowerCase())
+      const normalizedImportCode = value => String(value || '').trim().toLowerCase();
+      const importCodes = [
+        row.sku, row.barcode, row.factoryBarcode, row.internalBarcode,
+        ...(row.barcodes || []).map(item => item?.code),
+        ...(row.conversions || []).map(item => item?.barcode)
+      ].map(normalizedImportCode).filter(Boolean);
+      const idMatch = row.id ? next.products.find(item => item.branchId === targetBranchId && item.id === row.id) : null;
+      const directMatches = next.products.filter(item => item.branchId === targetBranchId && importCodes.some(code =>
+        productAllCodes(item, { includeShared: false }).some(value => normalizedImportCode(value) === code)
       ));
+      const directMatchIds = [...new Set(directMatches.map(item => item.id))];
+      if (directMatchIds.length > 1) throw new Error(`Baris impor ${row.rowNumber || ''} memiliki kode yang menunjuk ke lebih dari satu produk. Periksa SKU/barcode sebelum melanjutkan.`);
+      const directMatch = directMatches[0] || null;
+      if (idMatch && directMatch && idMatch.id !== directMatch.id) throw new Error(`Baris impor ${row.rowNumber || ''}: ID produk dan barcode menunjuk ke produk yang berbeda.`);
+      const existing = idMatch || directMatch || null;
+
+      for (const code of new Set(importCodes)) {
+        const collision = next.products.find(item => item.branchId === targetBranchId && item.id !== existing?.id && (
+          productAllCodes(item, { includeShared: false }).some(value => normalizedImportCode(value) === code) ||
+          normalizedImportCode(item.sharedBarcode) === code
+        ));
+        if (collision) throw new Error(`Kode ${code} pada baris impor ${row.rowNumber || ''} sudah dipakai oleh ${collision.parentName || collision.name}.`);
+      }
+      const incomingSharedBarcode = String(row.sharedBarcode || existing?.sharedBarcode || '').trim();
+      if (incomingSharedBarcode) {
+        const sharedKey = normalizedImportCode(incomingSharedBarcode);
+        if (importCodes.includes(sharedKey)) throw new Error(`Barcode Bersama ${incomingSharedBarcode} tidak boleh sama dengan SKU/barcode langsung pada baris impor ${row.rowNumber || ''}.`);
+        const desiredGroup = normalizedImportCode(row.parentName || row.name);
+        const directOwner = next.products.find(item => item.branchId === targetBranchId && item.id !== existing?.id &&
+          productAllCodes(item, { includeShared: false }).some(value => normalizedImportCode(value) === sharedKey));
+        if (directOwner) throw new Error(`Barcode Bersama ${incomingSharedBarcode} sudah dipakai langsung oleh ${directOwner.name}.`);
+        const foreignSharedOwner = next.products.find(item => item.branchId === targetBranchId && item.id !== existing?.id &&
+          normalizedImportCode(item.sharedBarcode) === sharedKey && normalizedImportCode(item.parentName || item.name) !== desiredGroup);
+        if (foreignSharedOwner) throw new Error(`Barcode Bersama ${incomingSharedBarcode} sudah dipakai oleh produk induk ${foreignSharedOwner.parentName || foreignSharedOwner.name}.`);
+      }
       const profile = { name: row.name, baseUnit: row.baseUnit || 'pcs', allowFractional: row.allowFractional === true, quantityStep: row.quantityStep };
       const importedStock = validateBaseQuantity(profile, row.stock || 0, 'Stok impor');
       const previousStock = Number(existing?.stock || 0);
@@ -1337,11 +1369,19 @@ export function PosProvider({ children }) {
         const sibling = next.products.find(item => item.branchId === targetBranchId && item.productType === 'variant' && String(item.parentName || '').trim().toLowerCase() === parentName.toLowerCase());
         variantGroupId = sibling?.variantGroupId || generateId('VGRP');
       }
+      const importedSku = String(row.sku || existing?.sku || generateId('SKU')).trim().toUpperCase();
+      const importedFactoryBarcode = String(row.factoryBarcode || row.barcode || existing?.factoryBarcode || '').trim();
+      const importedInternalBarcode = String(row.internalBarcode || existing?.internalBarcode || importedSku).trim().toUpperCase();
+      const importedExtraBarcodes = normalizeBarcodeRows(row.barcodes || existing?.barcodes || [], { baseUnit: row.baseUnit || existing?.baseUnit || 'pcs' });
       const item = {
         ...(existing || {}),
         id: existing?.id || row.id || generateId('PRD'), branchId: targetBranchId,
         name: String(row.name || '').trim(), category: String(row.category || 'Lainnya').trim(),
-        sku: String(row.sku || '').trim().toUpperCase(), barcode: String(row.barcode || '').trim(),
+        sku: importedSku,
+        factoryBarcode: importedFactoryBarcode,
+        internalBarcode: importedInternalBarcode,
+        barcode: importedFactoryBarcode || importedInternalBarcode,
+        barcodes: importedExtraBarcodes,
         baseUnit: row.baseUnit || 'pcs', stock: nextStock, minStock: quantity(minimumStock), rack: row.rack || '-',
         modalPrice: money(row.modalPrice), initialModalPrice: existing?.initialModalPrice ?? money(row.modalPrice),
         prices: { retail: money(row.prices?.retail), wholesale: money(row.prices?.wholesale ?? row.prices?.retail), project: money(row.prices?.project ?? row.prices?.retail) },
@@ -1353,7 +1393,7 @@ export function PosProvider({ children }) {
         available: row.available !== false, active: row.active !== false, trackStock: row.trackStock !== false,
         parentName: parentName || undefined, variantName: variantName || undefined,
         variantGroupId: variantGroupId || undefined, productType: parentName && variantName ? 'variant' : (existing?.productType || undefined),
-        sharedBarcode: String(row.sharedBarcode || existing?.sharedBarcode || '').trim(),
+        sharedBarcode: incomingSharedBarcode,
         updatedAt: nowISO(), importedAt: nowISO(), importedBy: currentUserRef.current.id
       };
       appendProductPriceHistory(next, existing, item, existing ? 'Impor pembaruan produk' : 'Impor produk baru', currentUserRef.current?.id);
@@ -1390,43 +1430,48 @@ export function PosProvider({ children }) {
       const externalCollision = code => next.products.find(product => {
         if (!product || product.active === false || product.branchId !== targetBranchId || ignoreIds.has(product.id)) return false;
         const target = normalized(code);
-        return target && [product.sku, product.barcode, product.sharedBarcode].some(value => normalized(value) === target);
+        return target && productAllCodes(product, { includeShared: true }).some(value => normalized(value) === target);
       });
       if (sharedBarcode) {
         const collision = externalCollision(sharedBarcode);
         if (collision) throw new Error(`Barcode kemasan ${sharedBarcode} sudah dipakai oleh ${collision.name}.`);
       }
       const seenNames = new Set();
-      const seenSkus = new Set();
-      const seenInternalBarcodes = new Set();
       const seenCodes = new Map();
       const allowFractional = data.allowFractional === true;
       const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional, recommendedQuantityStep(data.baseUnit, data.category));
       const conversions = normalizeConversionRows(data.conversions || [], data.baseUnit || 'pcs');
+      if (rows.length > 1 && conversions.some(row => String(row.barcode || '').trim())) {
+        throw new Error('Barcode Satuan Jual global tidak boleh dipakai oleh beberapa varian. Masukkan barcode pack/dus pada Barcode Tambahan masing-masing varian agar scan selalu menunjuk ke varian yang benar.');
+      }
       if (data.serialTracking === true && allowFractional) throw new Error('Produk berserial tidak dapat dijual pecahan. Gunakan satuan dasar per unit/pcs.');
       if (data.serialTracking === true && conversions.some(row => !Number.isInteger(Number(row.factor || 0)))) throw new Error('Konversi kemasan produk berserial harus berisi jumlah unit bulat.');
+      const hasGroupImagePatch = Object.prototype.hasOwnProperty.call(data, 'posImage');
+      const existingGroupImage = next.products.find(product => product.variantGroupId === variantGroupId && product.groupPosImage)?.groupPosImage || null;
+      const groupPosImage = preparePosImageForStorage(hasGroupImagePatch ? data.posImage : existingGroupImage);
       const saved = [];
-      for (const row of rows) {
+      for (const [rowIndex, row] of rows.entries()) {
         const variantName = String(row.variantName || '').trim();
         const sku = String(row.sku || '').trim().toUpperCase();
-        const internalBarcode = String(row.internalBarcode || row.barcode || sku).trim().toUpperCase();
+        const factoryBarcode = String(row.factoryBarcode || '').trim();
+        const internalBarcode = String(row.internalBarcode || sku).trim().toUpperCase();
+        const extraBarcodes = normalizeBarcodeRows(row.barcodes || [], { baseUnit: data.baseUnit || 'pcs' });
         if (!variantName) throw new Error('Semua nama varian wajib diisi.');
         if (!sku) throw new Error(`SKU varian ${variantName} wajib diisi.`);
         if (!internalBarcode) throw new Error(`Barcode internal varian ${variantName} wajib diisi.`);
-        if (sharedBarcode && normalized(sharedBarcode) === normalized(internalBarcode)) throw new Error(`Barcode internal ${variantName} harus berbeda dari barcode kemasan bersama agar pemindaian tidak ambigu.`);
         if (seenNames.has(normalized(variantName))) throw new Error(`Nama varian ${variantName} digunakan lebih dari sekali.`);
-        if (seenSkus.has(normalized(sku))) throw new Error(`SKU ${sku} digunakan lebih dari sekali.`);
-        if (seenInternalBarcodes.has(normalized(internalBarcode))) throw new Error(`Barcode internal ${internalBarcode} digunakan lebih dari sekali.`);
-        for (const code of new Set([normalized(sku), normalized(internalBarcode)])) {
+        const directCodes = [sku, internalBarcode, factoryBarcode, ...extraBarcodes.map(item => item.code), ...conversions.map(item => item.barcode)].filter(Boolean);
+        for (const rawCode of directCodes) {
+          const code = normalized(rawCode);
+          if (!code) continue;
+          if (sharedBarcode && code === normalized(sharedBarcode)) throw new Error(`Kode ${rawCode} pada varian ${variantName} sama dengan barcode kemasan bersama. Barcode langsung tiap varian harus unik agar scan tidak ambigu.`);
           const owner = seenCodes.get(code);
-          if (owner && owner !== variantName) throw new Error(`Kode ${code.toUpperCase()} sudah dipakai oleh varian ${owner}.`);
+          if (owner && owner !== variantName) throw new Error(`Kode ${rawCode} sudah dipakai oleh varian ${owner}.`);
           seenCodes.set(code, variantName);
+          const collision = externalCollision(rawCode);
+          if (collision) throw new Error(`Kode ${rawCode} sudah dipakai oleh ${collision.name}.`);
         }
-        const skuCollision = externalCollision(sku);
-        if (skuCollision) throw new Error(`SKU ${sku} sudah dipakai oleh ${skuCollision.name}.`);
-        const barcodeCollision = externalCollision(internalBarcode);
-        if (barcodeCollision) throw new Error(`Barcode internal ${internalBarcode} sudah dipakai oleh ${barcodeCollision.name}.`);
-        seenNames.add(normalized(variantName)); seenSkus.add(normalized(sku)); seenInternalBarcodes.add(normalized(internalBarcode));
+        seenNames.add(normalized(variantName));
 
         const existing = next.products.find(product => product.id === row.id);
         const productName = `${parentName} ${variantName}`.trim();
@@ -1438,7 +1483,11 @@ export function PosProvider({ children }) {
           id: row.id || generateId('PRD'), branchId: targetBranchId,
           name: productName, parentName, variantName, variantGroupId, productType: 'variant', sharedBarcode,
           brand: String(data.brand || '').trim(), specifications: String(data.specifications || '').trim(),
-          category: data.category || 'Lainnya', sku, barcode: internalBarcode,
+          category: data.category || 'Lainnya', sku,
+          factoryBarcode, internalBarcode, barcode: factoryBarcode || internalBarcode, barcodes: extraBarcodes,
+          posImage: preparePosImageForStorage(Object.prototype.hasOwnProperty.call(row, 'posImage') ? row.posImage : (existing?.posImage || null)),
+          // Foto induk disimpan sekali pada child pertama agar tidak menggandakan puluhan KB ke setiap dokumen varian.
+          groupPosImage: rowIndex === 0 ? groupPosImage : null,
           baseUnit: data.baseUnit || 'pcs', stock: quantity(initialStock), minStock: quantity(minimumStock),
           rack: row.rack || '-', modalPrice: money(row.modalPrice), initialModalPrice: existing?.initialModalPrice ?? money(row.modalPrice),
           prices: {
@@ -1471,18 +1520,23 @@ export function PosProvider({ children }) {
     if (!productName) throw new Error('Nama produk wajib diisi.');
     const existing = next.products.find(product => product.id === data.id);
     const targetBranchId = data.branchId || branchId;
-    const sku = String(data.sku || generateId('SKU')).trim();
-    const barcode = String(data.barcode || '').trim();
+    const sku = String(data.sku || generateId('SKU')).trim().toUpperCase();
+    const factoryBarcode = String(data.factoryBarcode || data.barcode || '').trim();
+    const internalBarcode = String(data.internalBarcode || sku).trim().toUpperCase();
+    const extraBarcodes = normalizeBarcodeRows(data.barcodes || [], { baseUnit: data.baseUnit || 'pcs' });
     const normalizedCode = value => String(value || '').trim().toLowerCase();
-    const duplicateSku = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && [product.sku, product.barcode, product.sharedBarcode].some(value => normalizedCode(value) === normalizedCode(sku)));
-    if (duplicateSku) throw new Error(`SKU ${sku} sudah dipakai sebagai kode produk ${duplicateSku.name}.`);
-    if (barcode) {
-      const duplicateBarcode = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && [product.barcode, product.sku, product.sharedBarcode].some(value => normalizedCode(value) === normalizedCode(barcode)));
-      if (duplicateBarcode) throw new Error(`Barcode ${barcode} sudah dipakai oleh produk ${duplicateBarcode.name}.`);
-    }
     const allowFractional = data.allowFractional === true;
     const quantityStep = normalizeQuantityStep(data.quantityStep, allowFractional, recommendedQuantityStep(data.baseUnit, data.category));
     const productConversions = normalizeConversionRows(data.conversions || [], data.baseUnit || 'pcs');
+    const candidateCodes = [sku, internalBarcode, factoryBarcode, ...extraBarcodes.map(item => item.code), ...productConversions.map(item => item.barcode)].filter(Boolean);
+    const seenOwnCodes = new Set();
+    for (const rawCode of candidateCodes) {
+      const code = normalizedCode(rawCode);
+      if (!code || seenOwnCodes.has(code)) continue;
+      seenOwnCodes.add(code);
+      const duplicate = next.products.find(product => product.id !== data.id && product.branchId === targetBranchId && product.active !== false && productAllCodes(product, { includeShared: true }).some(value => normalizedCode(value) === code));
+      if (duplicate) throw new Error(`Kode ${rawCode} sudah dipakai oleh produk ${duplicate.name}.`);
+    }
     if (data.serialTracking === true && allowFractional) throw new Error('Produk berserial tidak dapat dijual pecahan. Gunakan satuan dasar per unit/pcs.');
     if (data.serialTracking === true && productConversions.some(row => !Number.isInteger(Number(row.factor || 0)))) throw new Error('Konversi kemasan produk berserial harus berisi jumlah unit bulat.');
     const quantityProfile = { name: productName, baseUnit: data.baseUnit || 'pcs', allowFractional, quantityStep };
@@ -1492,7 +1546,9 @@ export function PosProvider({ children }) {
     const item = {
       id: data.id || generateId('PRD'), branchId: targetBranchId,
       name: productName, brand: String(data.brand || '').trim(), specifications: String(data.specifications || '').trim(), category: data.category || 'Lainnya', sku,
-      barcode, baseUnit: data.baseUnit || 'pcs', stock: quantity(initialStock),
+      factoryBarcode, internalBarcode, barcode: factoryBarcode || internalBarcode, barcodes: extraBarcodes,
+      posImage: preparePosImageForStorage(Object.prototype.hasOwnProperty.call(data, 'posImage') ? data.posImage : (existing?.posImage || null)),
+      baseUnit: data.baseUnit || 'pcs', stock: quantity(initialStock),
       minStock: quantity(minimumStock), rack: data.rack || '-', modalPrice: money(data.modalPrice),
       initialModalPrice: existing?.initialModalPrice ?? money(data.modalPrice),
       prices: {

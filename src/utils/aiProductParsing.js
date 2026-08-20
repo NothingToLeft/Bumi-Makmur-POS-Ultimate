@@ -1,3 +1,5 @@
+import { productAllCodes } from './productBarcodes.js';
+
 export const normalizeProductText = value => String(value || '').replace(/\s+/g, ' ').trim();
 export const normalizeProductCode = value => String(value || '').replace(/[^0-9A-Za-z._/-]/g, '').trim();
 
@@ -158,7 +160,7 @@ export function findBestProductMatch(analysis, products = []) {
   const active = products.filter(product => product.active !== false && product.productType !== 'parent');
   const barcode = normalizeProductCode(analysis?.barcode);
   if (barcode) {
-    const exact = active.find(product => [product.barcode, product.sharedBarcode, product.sku, ...(product.conversions || []).map(row => row.barcode)]
+    const exact = active.find(product => productAllCodes(product, { includeShared: true })
       .some(code => normalizeProductCode(code) === barcode));
     if (exact) return { product: exact, score: 1, reason: 'barcode' };
   }

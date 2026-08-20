@@ -3,6 +3,7 @@ import { Bot, Camera, CheckCircle2, ImagePlus, Loader2, PackageSearch, Sparkles,
 import { Badge, Button, Card, Field, Input, Modal, MoneyInput, NumberInput, Select } from './ui.jsx';
 import { analyzeProductPhoto, findBestProductMatch, getAiDeviceSettings } from '../services/aiProductAssistant.js';
 import { formatRp } from '../utils/helpers.js';
+import { createCashierThumbnailFromDataUrl } from '../services/productMedia.js';
 
 const emptyResult = {
   productName: '', brand: '', model: '', category: '', variantName: '', specifications: '', size: '', color: '', material: '',
@@ -15,6 +16,7 @@ export default function AIProductCaptureModal({ mode = 'create', products = [], 
   const analysisRequestRef = useRef(0);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState('');
+  const [cashierPhoto, setCashierPhoto] = useState(null);
   const [result, setResult] = useState(emptyResult);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
@@ -52,6 +54,15 @@ export default function AIProductCaptureModal({ mode = 'create', products = [], 
       setPreview(response.optimized?.dataUrl || '');
       setResult({ ...emptyResult, ...response.result });
       setAiError(response.aiError || '');
+      if (mode === 'create' && response.optimized?.dataUrl) {
+        try {
+          const query = [response.result.brand, response.result.productName, response.result.variantName].filter(Boolean).join(' ');
+          const thumbnail = await createCashierThumbnailFromDataUrl(response.optimized.dataUrl, { sourceType: 'ai-capture', query });
+          if (requestId === analysisRequestRef.current) setCashierPhoto(thumbnail);
+        } catch {
+          if (requestId === analysisRequestRef.current) setCashierPhoto(null);
+        }
+      }
       const found = findBestProductMatch(response.result, products);
       setProductId(found?.product?.id || '');
       if (!found?.product && mode === 'receive') setReceivePrice('');
@@ -95,7 +106,8 @@ export default function AIProductCaptureModal({ mode = 'create', products = [], 
       retailPack: Math.max(0, Number(retailPack || 0)),
       retailUnit: Math.max(0, Number(retailUnit || 0)),
       initialPacks: Math.max(0, Number(initialPacks || 0)),
-      rack: String(rack || '-').trim() || '-'
+      rack: String(rack || '-').trim() || '-',
+      posImage: cashierPhoto
     });
   };
 

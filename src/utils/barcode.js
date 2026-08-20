@@ -1,34 +1,43 @@
 import { priceForSaleUnit } from './fractionalUnits.js';
+import { productBarcodeEntries } from './productBarcodes.js';
+
 const normalize = value => String(value ?? '').trim().toLowerCase();
 
 function directMatch(product, code) {
-  if (normalize(product.barcode) === code || normalize(product.sku) === code) {
-    return { product, options: { directCode: true } };
-  }
+  const entry = productBarcodeEntries(product).find(item => normalize(item.code) === code);
+  if (!entry) return null;
 
-  const variant = (product.variants || []).find(item => normalize(item?.barcode) === code);
-  if (variant) {
+  if (entry.source === 'variant') {
+    const variant = (product.variants || []).find(item => normalize(item?.barcode) === code);
     return {
       product,
       options: {
-        variant: variant.name || '',
-        price: Number(product.prices?.retail ?? 0) + Number(variant.priceDelta || 0)
+        variant: variant?.name || entry.variant || '',
+        price: Number(product.prices?.retail ?? 0) + Number(variant?.priceDelta || 0)
       }
     };
   }
 
-  const conversion = (product.conversions || []).find(item => normalize(item?.barcode) === code);
-  if (conversion) {
+  if (entry.source === 'conversion') {
     return {
       product,
       options: {
-        unit: conversion.unit,
-        price: priceForSaleUnit(product, conversion.unit, 'retail')
+        unit: entry.unit,
+        price: priceForSaleUnit(product, entry.unit, 'retail')
       }
     };
   }
 
-  return null;
+  const customUnit = entry.source === 'barcodes' && (String(entry.unit || product.baseUnit) !== String(product.baseUnit) || Number(entry.factor || 1) !== 1);
+  return {
+    product,
+    options: customUnit ? {
+      directCode: true,
+      unit: entry.unit || product.baseUnit,
+      factor: Math.max(0.000001, Number(entry.factor || 1)),
+      barcodeType: entry.type
+    } : {}
+  };
 }
 
 export function findProductsByCode(products = [], rawCode = '') {
@@ -41,7 +50,7 @@ export function findProductsByCode(products = [], rawCode = '') {
 
   return active
     .filter(product => normalize(product.sharedBarcode) === code)
-    .map(product => ({ product, options: { sharedBarcode: true } }));
+    .map(product => ({ product, options: { sharedBarcode: true, matchedBarcode: String(product.sharedBarcode || '') } }));
 }
 
 export function findProductByCode(products = [], rawCode = '') {

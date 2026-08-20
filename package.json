@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "6.2.0",
+  "version": "6.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -48,7 +48,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v6.2.0 Data Integrity & Professional Operations: deterministic timeline sorting lintas Web/Android/Windows, normalisasi timestamp Firestore, pelanggan Umum yang konsisten, analitik pembayaran tunai bersih setelah kembalian/refund, operational health yang mengecualikan void, serta PDF Tutup Harian profesional berbranding Bumi Makmur 2. Unified AutoSync Firebase Spark tetap dipertahankan; PDF dan secret API key tetap lokal.",
+  "description": "Bumi Makmur POS v6.3.0 Product Visual & Multi-Barcode: barcode pabrik dan internal per varian, multi-barcode per SKU/satuan, label massal fleksibel, foto produk ringan khusus Kasir, dan pencarian foto otomatis Gemini + Google Search melalui Cloudflare Pages Free; seluruh hardening data v6.2 tetap dipertahankan. Unified AutoSync Firebase Spark tetap dipertahankan; PDF dan secret API key tetap lokal.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",
