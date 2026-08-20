@@ -43,11 +43,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'BUMI_MAKMUR_RULESET_VERSION=6.0.4' firestore.rules || {
-            echo "::error::firestore.rules bukan ruleset v6.0.4 yang diharapkan."
+          grep -Fq 'BUMI_MAKMUR_RULESET_VERSION=6.1.0' firestore.rules || {
+            echo "::error::firestore.rules bukan ruleset v6.1.0 yang diharapkan."
             exit 1
           }
-          echo "Firestore Rules v6.0.4 tervalidasi sebelum deploy."
+          echo "Firestore Rules v6.1.0 tervalidasi sebelum deploy."
 
       - name: Authenticate Google Cloud
         uses: google-github-actions/auth@v3

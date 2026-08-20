@@ -15,7 +15,7 @@ Firebase Console → Firestore Database → Create database → Production mode.
 Ruleset release ini memiliki marker:
 
 ```text
-BUMI_MAKMUR_RULESET_VERSION=6.0.3
+BUMI_MAKMUR_RULESET_VERSION=6.1.0
 ```
 
 ## 3. GitHub Secrets
@@ -87,3 +87,12 @@ bumi-makmur-pos-ultimate.pages.dev
 7. Pastikan antrean akun aktif turun ke 0 dan status cloud sehat. Total queue perangkat menjadi 0 setelah seluruh akun yang memiliki perubahan tertunda sempat login dan sinkron.
 
 Jika rules sudah hijau tetapi permission masih muncul, ekspor Diagnostik Sinkronisasi dan periksa `storeId`, `branchId`, role, serta nama koleksi yang ditolak.
+
+
+## Kebijakan sinkronisasi v6.1.0
+
+- Semua data bisnis utama dan konfigurasi non-rahasia disinkronkan otomatis ke Firestore.
+- Database lokal tetap dipakai sebagai cache/offline mirror agar kasir dapat bekerja tanpa internet.
+- File PDF tidak diunggah ke Firebase; PDF dibuat lokal/on-demand dari data transaksi/shift.
+- Gemini API key, kredensial, cache, dan state sementara perangkat tidak pernah disimpan di Firestore.
+- Tidak memakai Firebase Storage, Cloud Functions, atau Blaze.

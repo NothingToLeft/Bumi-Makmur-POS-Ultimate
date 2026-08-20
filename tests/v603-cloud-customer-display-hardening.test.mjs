@@ -5,9 +5,9 @@ import { buildSyncStatus, classifySyncError, FIRESTORE_RULESET_VERSION } from '.
 
 const read = async path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('v6.0.4 menandai permission-denied sebagai masalah rules dan tidak menampilkan cloud sehat palsu', () => {
+test('v6.1.0 menandai permission-denied sebagai masalah rules dan tidak menampilkan cloud sehat palsu', () => {
   const diagnostic = classifySyncError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' }, { collection: 'shifts' });
-  assert.equal(FIRESTORE_RULESET_VERSION, '6.0.4');
+  assert.equal(FIRESTORE_RULESET_VERSION, '6.1.0');
   assert.equal(diagnostic.category, 'permission');
   assert.equal(diagnostic.permanent, true);
   assert.match(diagnostic.action, /Deploy Firebase Spark Rules/);
@@ -23,9 +23,9 @@ test('v6.0.4 menandai permission-denied sebagai masalah rules dan tidak menampil
   }
 });
 
-test('Firestore Rules v6.0.4 mencakup seluruh koleksi bisnis yang muncul pada diagnostik', async () => {
+test('Firestore Rules v6.1.0 mencakup seluruh koleksi bisnis yang muncul pada diagnostik', async () => {
   const rules = await read('firestore.rules');
-  assert.match(rules, /BUMI_MAKMUR_RULESET_VERSION=6\.0\.4/);
+  assert.match(rules, /BUMI_MAKMUR_RULESET_VERSION=6\.1\.0/);
   for (const collection of ['shifts', 'warrantyClaims', 'quotations', 'serialNumbers', 'supplierPriceHistory']) {
     assert.match(rules, new RegExp(`match \\/stores\\/\\{storeId\\}\\/${collection}\\/\\{id\\}`));
   }

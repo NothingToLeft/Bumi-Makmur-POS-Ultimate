@@ -30,6 +30,20 @@ export function saveAiDeviceSettings(patch = {}) {
   return next;
 }
 
+export const AI_SYNCABLE_KEYS = Object.freeze(['enabled', 'provider', 'model', 'useNativeOcr', 'sendImageToAi', 'rememberLastPhoto']);
+
+export function pickSyncableAiSettings(settings = {}) {
+  return Object.fromEntries(AI_SYNCABLE_KEYS.map(key => [key, settings[key] ?? DEFAULT_AI_SETTINGS[key]]));
+}
+
+export function applyCloudAiPreferences(preferences = {}) {
+  const current = getAiDeviceSettings();
+  const synced = pickSyncableAiSettings(preferences);
+  const next = { ...current, ...synced, apiKey: current.apiKey };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+  return next;
+}
+
 export function clearAiApiKey() {
   return saveAiDeviceSettings({ apiKey: '' });
 }

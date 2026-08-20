@@ -33,7 +33,7 @@ const required = [
   'package.json', 'src/App.jsx', 'src/store/PosContext.jsx', 'src/services/firebase.js',
   'firestore.rules', 'firestore.indexes.json', 'public/manifest.webmanifest', 'public/sw.js',
   'public/_redirects', 'public/_headers', '.github/workflows/build-android.yml', '.github/workflows/build-windows.yml', 'electron/main.cjs', 'electron/preload.cjs',
-  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.4.md'
+  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.0.md'
 ];
 for (const item of required) {
   try { await access(path.join(root, item)); } catch { errors.push(`File wajib hilang: ${item}`); }
@@ -112,13 +112,13 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '6.0.4') errors.push(`Versi package harus 6.0.4, ditemukan ${pkg.version}`);
+if (pkg.version !== '6.1.0') errors.push(`Versi package harus 6.1.0, ditemukan ${pkg.version}`);
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 
 const rules = await readFile(path.join(root, 'firestore.rules'), 'utf8');
 
 const deployWorkflow = await readFile(path.join(root, '.github/workflows/deploy-firebase.yml'), 'utf8');
-if (!deployWorkflow.includes('BUMI_MAKMUR_RULESET_VERSION=6.0.4')) errors.push('Workflow deploy Firebase belum memverifikasi marker ruleset v6.0.4');
+if (!deployWorkflow.includes('BUMI_MAKMUR_RULESET_VERSION=6.1.0')) errors.push('Workflow deploy Firebase belum memverifikasi marker ruleset v6.1.0');
 if (!deployWorkflow.includes('firestore:rules,firestore:indexes')) errors.push('Workflow deploy Firebase tidak dibatasi ke Firestore Rules/Indexes');
 if (/--only[^\n]*(?:functions|storage)|firebase deploy[^\n]*(?:functions|storage)/i.test(deployWorkflow)) errors.push('Workflow Firebase mencoba deploy layanan di luar Spark-only Firestore');
 for (const collection of ['products', 'sales', 'purchases', 'purchaseOrders', 'customers', 'receivables', 'payables', 'refunds', 'publicReceipts', 'branchPaymentProfiles', 'supplierPriceHistory', 'quotations', 'serialNumbers', 'warrantyClaims', 'shifts', 'cashMovements', 'feedback']) {

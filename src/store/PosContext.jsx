@@ -3,6 +3,7 @@ import { APP_VERSION, MAIN_BRANCH_ID, can, createSeedDb } from '../data/defaults
 import { generateId, safeJSONParse, downloadFile, localDateKey } from '../utils/helpers.js';
 import { friendlyCloudError } from '../utils/cloudErrors.js';
 import { normalizeLoginAppearance } from '../utils/loginAppearance.js';
+import { applyCloudAiPreferences } from '../services/aiProductAssistant.js';
 import { auth, firebaseConfigured, DEFAULT_STORE_CODE, STORE_ID } from '../services/firebase.js';
 import { bootstrapCloudStore, connectCloudAccount, connectEmployeeWithNamePin, deleteCloudEmployee, getCloudSessionProfile, signOutCloudAccount, upsertCloudEmployee } from '../services/cloudAuth.js';
 import {
@@ -195,6 +196,11 @@ export function PosProvider({ children }) {
       localStorage.setItem(SYNC_DIAGNOSTICS_KEY, JSON.stringify(normalized));
     }
   }, []);
+
+  // Preferensi AI non-rahasia mengikuti konfigurasi cloud. API key tetap lokal.
+  useEffect(() => {
+    if (db?.configs?.aiProductAssistant) applyCloudAiPreferences(db.configs.aiProductAssistant);
+  }, [db?.configs?.aiProductAssistant]);
 
   const recordSyncDiagnostic = useCallback((errorOrEntry, context = {}) => {
     const entry = errorOrEntry?.category && errorOrEntry?.at

@@ -1,4 +1,4 @@
-// BUMI_MAKMUR_RULESET_VERSION=6.0.4
+// BUMI_MAKMUR_RULESET_VERSION=6.1.0
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -252,7 +252,12 @@ service cloud.firestore {
     }
 
     match /stores/{storeId}/mutationReceipts/{mutationId} {
-      allow read: if activeMember(storeId) && (ownerOrManager(storeId) || resource.data.userId == request.auth.uid);
+      // persistOperations selalu melakukan GET idempotensi sebelum CREATE.
+      // Untuk dokumen yang belum ada, rule berbasis resource.data akan selalu
+      // gagal pada Kasir dan memblokir seluruh transaksi. Izinkan GET per-ID
+      // untuk anggota aktif, tetapi tetap blok LIST dan batasi CREATE ke UID sendiri.
+      allow get: if activeMember(storeId);
+      allow list: if false;
       allow create: if activeMember(storeId)
         && request.resource.data.id == mutationId
         && request.resource.data.userId == request.auth.uid;
