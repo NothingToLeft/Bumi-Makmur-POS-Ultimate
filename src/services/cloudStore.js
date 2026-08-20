@@ -31,6 +31,7 @@ import {
   cleanUndefined,
   rebaseOperationAgainstRemoteData,
   rebaseOperationsAgainstRemote,
+  operationRequiresRemotePrecondition,
   stableJson
 } from './syncEngine.js';
 
@@ -42,6 +43,7 @@ export {
   cleanUndefined,
   rebaseOperationAgainstRemoteData,
   rebaseOperationsAgainstRemote,
+  operationRequiresRemotePrecondition,
   stableJson
 };
 
@@ -334,9 +336,21 @@ export async function refreshOperationsAgainstCloud(operations, storeId = STORE_
   requireCloud();
   if (!operations?.length) return [];
   const refs = operations.map(operation => operationRef(operation, storeId));
-  const snapshots = await Promise.all(refs.map(ref => getDocFromServer(ref)));
+  // Sama seperti persistOperations: CREATE baru tidak membutuhkan GET target.
+  // Ini penting saat sebuah mutation campuran mengalami conflict pada UPDATE;
+  // rebase tidak boleh gagal hanya karena ia ikut mencoba membaca SALE/SHIFT/
+  // stockMovement baru yang memang belum ada di cloud.
+  const snapshots = await Promise.all(operations.map((operation, index) => (
+    operationRequiresRemotePrecondition(operation)
+      ? getDocFromServer(refs[index])
+      : Promise.resolve(null)
+  )));
   const refreshed = [];
   operations.forEach((operation, index) => {
+    if (!operationRequiresRemotePrecondition(operation)) {
+      refreshed.push(cleanUndefined(operation));
+      return;
+    }
     const next = rebaseOperationAgainstRemoteData(operation, currentData(snapshots[index]));
     if (next) refreshed.push(next);
   });
@@ -357,11 +371,26 @@ export async function persistOperations(operations, storeId = STORE_ID, context 
     if (receiptSnapshot.exists()) return Number(receiptSnapshot.data()?.count || operations.length);
 
     const refs = operations.map(operation => operationRef(operation, storeId));
-    const snapshots = [];
-    for (const ref of refs) snapshots.push(await transaction.get(ref));
-
+    // Penting untuk Firestore Rules + transaksi Kasir:
+    // operasi CREATE mempunyai beforeData=null. Membaca dokumen target yang belum
+    // ada sebelum CREATE memaksa rule `read` dievaluasi terhadap resource yang
+    // tidak ada. Rule branch-scoped yang benar untuk dokumen existing kemudian
+    // menolak GET tersebut sebelum rule CREATE sempat dievaluasi. Ini yang membuat
+    // SHIFT_START/CASH/SALE offline Kasir tertahan walau payload create-nya valid.
+    //
+    // Karena ID baru dibuat acak dan rule CREATE/UPDATE tetap menjadi boundary
+    // keamanan server-side, CREATE tidak perlu pre-read. UPDATE/DELETE tetap dibaca
+    // agar conflict detection dan rebase offline-first tetap utuh.
+    const snapshots = new Array(operations.length).fill(null);
     if (context.direct !== true) {
+      for (let index = 0; index < operations.length; index += 1) {
+        const operation = operations[index];
+        if (!operationRequiresRemotePrecondition(operation)) continue;
+        snapshots[index] = await transaction.get(refs[index]);
+      }
+
       operations.forEach((operation, index) => {
+        if (!operationRequiresRemotePrecondition(operation)) return;
         const remote = currentData(snapshots[index]);
         const expected = cleanUndefined(operation.beforeData ?? null);
         if (stableJson(remote) !== stableJson(expected)) {

@@ -1375,7 +1375,7 @@ export function PosProvider({ children }) {
       const variantGroupId = String(data.variantGroupId || generateId('VGRP')).trim();
       const sharedBarcode = String(data.sharedBarcode || '').trim();
       const rows = Array.isArray(data.variantRows) ? data.variantRows : [];
-      if (rows.length < 2) throw new Error('Produk varian minimal memiliki dua varian.');
+      if (rows.length < 1) throw new Error('Produk varian minimal memiliki satu varian.');
       const deletedIds = new Set(data.deletedVariantIds || []);
       const groupExistingIds = new Set(next.products.filter(product => product.variantGroupId === variantGroupId).map(product => product.id));
       const ignoreIds = new Set([...groupExistingIds, ...rows.map(row => row.id).filter(Boolean)]);

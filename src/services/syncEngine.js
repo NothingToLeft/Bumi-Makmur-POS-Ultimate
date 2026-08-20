@@ -50,6 +50,15 @@ function withoutId(value) {
   return cleanUndefined(rest);
 }
 
+// CREATE operations use beforeData=null. They must not be pre-read inside
+// Firestore transactions: a get() for a not-yet-existing branch-scoped document
+// can be rejected by read rules before the valid create rule is evaluated.
+// UPDATE/DELETE still require a remote precondition read for conflict detection.
+export function operationRequiresRemotePrecondition(operation) {
+  if (!operation) return false;
+  return operation.type === 'delete' || operation.beforeData != null;
+}
+
 export function buildDiffOperations(before, after) {
   const operations = [];
   const beforeSettings = cleanUndefined(Object.fromEntries(SETTINGS_KEYS.map(key => [key, before[key]])));

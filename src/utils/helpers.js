@@ -33,7 +33,7 @@ export const calculateMarkupPercent = (cost, sellingPrice) => {
 
 export const generateId = prefix => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return `${prefix}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    return `${prefix}-${crypto.randomUUID().replaceAll('-', '').slice(0, 16).toUpperCase()}`;
   }
   return `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 };

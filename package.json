@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "6.1.0",
+  "version": "6.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -48,7 +48,7 @@
     "electron": "43.2.0",
     "electron-builder": "26.15.3"
   },
-  "description": "Bumi Makmur POS v6.1.0 Unified AutoSync: seluruh data bisnis dan konfigurasi non-rahasia disinkronkan otomatis ke Firebase Spark dengan cache offline lokal; PDF, secret API key, cache, dan state sementara tetap lokal. Memperbaiki preflight mutation receipt Kasir yang sebelumnya dapat memicu permission-denied, serta mempertahankan seluruh fitur v6 Business Suite.",
+  "description": "Bumi Makmur POS v6.1.1 Sync Transaction Hardening: memperbaiki sinkronisasi Kasir yang tertahan karena Firestore transaction melakukan GET pada dokumen CREATE yang belum ada; create baru kini langsung divalidasi oleh rule CREATE, sedangkan update/delete tetap memakai conflict precondition. Seluruh data bisnis tetap AutoSync ke Firebase Spark; PDF dan secret API key tetap lokal.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",
