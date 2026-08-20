@@ -2,6 +2,7 @@ import { access, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { scanTextForPotentialSecrets } from './secret-scan-utils.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const errors = [];
@@ -39,7 +40,11 @@ const required = [
   'QA-REPORT-Bumi-Makmur-POS-v6.4.0.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.4.0.md',
   'FINAL-RELEASE-CHECKLIST-v6.4.0.md', 'docs/IMPLEMENTATION-NOTES-v6.4.0.md',
   'docs/QRIS-PAYMENT-ASSURANCE-API-v6.4.0.md', 'docs/QRIS-SOURCE-AUDIT-v6.4.0.md',
-  'docs/FOLDER-STRUCTURE-v6.4.0.md', 'THIRD-PARTY-NOTICES.md'
+  'docs/FOLDER-STRUCTURE-v6.4.0.md', 'THIRD-PARTY-NOTICES.md',
+  'RELEASE-NOTES-Bumi-Makmur-POS-v6.4.1.md', 'CHANGELOG-Bumi-Makmur-POS-v6.4.1.md',
+  'QA-REPORT-Bumi-Makmur-POS-v6.4.1.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.4.1.md',
+  'FINAL-RELEASE-CHECKLIST-v6.4.1.md', 'docs/IMPLEMENTATION-NOTES-v6.4.1.md',
+  'docs/FOLDER-STRUCTURE-v6.4.1.md'
 ];
 for (const item of required) {
   try { await access(path.join(root, item)); } catch { errors.push(`File wajib hilang: ${item}`); }
@@ -104,21 +109,15 @@ for (const file of allFiles.filter(file => file.endsWith('.json'))) {
   try { JSON.parse(await readFile(file, 'utf8')); } catch (error) { errors.push(`${relative(file)}: JSON invalid — ${error.message}`); }
 }
 
-const secretPatterns = [
-  /-----BEGIN (?:RSA |EC |)PRIVATE KEY-----/,
-  /"private_key"\s*:\s*"-----BEGIN/,
-  /AIza[0-9A-Za-z_-]{30,}/,
-  /ANDROID_KEYSTORE_BASE64\s*=\s*[A-Za-z0-9+/]{100,}/
-];
 for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|apk)$/.test(file))) {
   const source = await readFile(file, 'utf8').catch(() => '');
-  for (const pattern of secretPatterns) {
-    if (pattern.test(source)) errors.push(`${relative(file)}: kemungkinan secret/private key terdeteksi`);
+  for (const issue of scanTextForPotentialSecrets(relative(file), source)) {
+    errors.push(`${relative(file)}: ${issue}`);
   }
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '6.4.0') errors.push(`Versi package harus 6.4.0, ditemukan ${pkg.version}`);
+if (pkg.version !== '6.4.1') errors.push(`Versi package harus 6.4.1, ditemukan ${pkg.version}`);
 if (pkg.dependencies?.['firebase-functions']) errors.push('Dependency firebase-functions tidak boleh digunakan; backend Firebase harus tetap Spark-only.');
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 

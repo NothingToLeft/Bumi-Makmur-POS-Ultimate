@@ -1,3 +1,12 @@
+# Changelog Bumi Makmur POS
+
+## v6.4.1 — CI Secret Scan Hotfix
+
+- Memperbaiki `npm run build` release yang gagal karena Firebase Web API key pada `.env.production` salah dianggap private secret.
+- GitHub Actions menginjeksi `VITE_FIREBASE_*` langsung ke proses build dan tidak lagi menulis `.env.production` ke workspace.
+- Menambahkan structured secret scanner + regression test; Gemini/private credentials tetap diblokir.
+- Seluruh QRIS Dynamic & Payment Assurance v6.4.0 tetap dipertahankan tanpa migrasi Firestore baru.
+
 # Changelog
 
 ## v6.4.0 — QRIS Dynamic & Payment Assurance

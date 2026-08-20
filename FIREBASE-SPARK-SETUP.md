@@ -1,4 +1,4 @@
-# Firebase Spark — Setup Gratis Bumi Makmur POS v6.4.0
+# Firebase Spark — Setup Gratis Bumi Makmur POS v6.4.1
 
 Project tetap memakai **Firebase Spark/free tier**. Jangan upgrade Blaze dan jangan aktifkan layanan berbayar.
 
@@ -43,13 +43,13 @@ Secret service account hanya digunakan GitHub Actions untuk deploy Firestore Rul
 
 Tidak perlu Firebase Functions, Storage, Hosting, atau billing Blaze.
 
-## 5. Deploy Rules + Indexes — WAJIB sekali setelah upload v6.4.0
+## 5. Deploy Rules + Indexes — wajib bila ruleset v6.4.0 belum pernah hijau
 
 ```text
 GitHub → Actions → Deploy Firebase Spark Rules → Run workflow
 ```
 
-Tunggu workflow hijau sebelum validasi produksi. **v6.4.0 menaikkan Firestore Rules ke marker v6.4.0** agar field QRIS Dinamis pada `branchPaymentProfiles` diizinkan dan tetap branch-scoped. Release ini juga menambah index exemption `branchPaymentProfiles.qrisImage` dan `branchPaymentProfiles.qrisPayload`, sehingga workflow wajib dijalankan setelah source v6.4.0 diunggah.
+Tunggu workflow hijau sebelum validasi produksi. **Ruleset QRIS tetap marker v6.4.0** agar field QRIS Dinamis pada `branchPaymentProfiles` diizinkan dan tetap branch-scoped. v6.4.1 tidak mengubah rules/index; deploy ulang hanya diperlukan bila rules v6.4.0 belum pernah berhasil dipublikasikan.
 
 Rules mencakup:
 
@@ -100,7 +100,7 @@ bumi-makmur-pos-ultimate.pages.dev
 ## 7. Jika muncul `Missing or insufficient permissions`
 
 1. Jangan hapus antrean offline.
-2. Pastikan repository sudah berisi source v6.4.0.
+2. Pastikan repository sudah berisi source v6.4.1.
 3. Jalankan workflow **Deploy Firebase Spark Rules** sampai hijau.
 4. Keluar dan login lagi hanya bila diagnostik menyebut sesi/credential, bukan sekadar rules.
 5. Buka `Pengaturan → Cloud & Backup → Sinkronkan Sekarang`.
@@ -110,7 +110,7 @@ bumi-makmur-pos-ultimate.pages.dev
 Jika rules sudah hijau tetapi permission masih muncul, ekspor Diagnostik Sinkronisasi dan periksa `storeId`, `branchId`, role, serta nama koleksi yang ditolak.
 
 
-## Kebijakan sinkronisasi v6.4.0
+## Kebijakan sinkronisasi v6.4.1 (ruleset v6.4.0)
 
 - Semua data bisnis utama dan konfigurasi non-rahasia disinkronkan otomatis ke Firestore.
 - Database lokal tetap dipakai sebagai cache/offline mirror agar kasir dapat bekerja tanpa internet.

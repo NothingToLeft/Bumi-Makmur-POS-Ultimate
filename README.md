@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v6.4.0 — QRIS Dynamic & Payment Assurance
+# Bumi Makmur POS FreeSync v6.4.1 — QRIS Dynamic & Payment Assurance
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.4.0 menambahkan **QRIS Dinamis lokal + Payment Assurance** di atas QRIS statis yang sudah ada: payload merchant divalidasi ketat, nominal transaksi dimasukkan otomatis, CRC dihitung ulang, Customer Display dapat menampilkan QR, split payment tetap didukung, dan transaksi QRIS wajib menunggu konfirmasi notifikasi merchant selama belum ada callback PJP/acquirer resmi. Payload QR dinamis tidak disimpan pada histori transaksi. Seluruh AI Quota Resilience v6.3.1, Product Visual & Multi-Barcode v6.3.0, hardening data v6.2.0, Unified AutoSync, AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan PDF closing profesional tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.4.1 mempertahankan seluruh fitur v6.4.0 dan memperbaiki pipeline release agar Firebase Web configuration tidak lagi memicu false-positive secret scan. v6.4.0 menambahkan **QRIS Dinamis lokal + Payment Assurance** di atas QRIS statis yang sudah ada: payload merchant divalidasi ketat, nominal transaksi dimasukkan otomatis, CRC dihitung ulang, Customer Display dapat menampilkan QR, split payment tetap didukung, dan transaksi QRIS wajib menunggu konfirmasi notifikasi merchant selama belum ada callback PJP/acquirer resmi. Payload QR dinamis tidak disimpan pada histori transaksi. Seluruh AI Quota Resilience v6.3.1, Product Visual & Multi-Barcode v6.3.0, hardening data v6.2.0, Unified AutoSync, AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan PDF closing profesional tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -13,6 +13,13 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.4
 
 
 
+
+## CI Secret Scan Hotfix v6.4.1
+
+- GitHub Actions tidak lagi menulis `.env.production` sebelum build; Firebase Web configuration diinjeksi langsung sebagai process environment hanya pada build step.
+- Static audit memakai structured secret scanner. Firebase Web API key runtime hanya diberi exception sangat sempit pada `VITE_FIREBASE_API_KEY`; `AIza...` di source lain tetap dianggap kebocoran.
+- `.env.production` lokal tetap fail-closed terhadap unknown/duplicate/malformed key dan Gemini/private credentials.
+- Tidak ada perubahan Firestore schema/rules, QRIS Dynamic, Payment Assurance, atau data transaksi. Ruleset produksi tetap `6.4.0`.
 
 ## QRIS Dynamic & Payment Assurance v6.4.0
 
@@ -286,13 +293,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v6.4.0.
+2. Ekstrak ZIP v6.4.1.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v6.4.0 QRIS Dynamic & Payment Assurance
+Bumi Makmur POS v6.4.1 QRIS Dynamic & Payment Assurance
 ```
 
 6. Klik **Push origin**.
@@ -303,7 +310,7 @@ Bumi Makmur POS v6.4.0 QRIS Dynamic & Payment Assurance
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.4.0
+→ Build Bumi Makmur POS v6.4.1
 → test-only
 ```
 
@@ -311,7 +318,7 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Firestore Rules + Indexes
 
-**v6.4.0 memperbarui Firestore Rules dan Indexes.** Ruleset sekarang `BUMI_MAKMUR_RULESET_VERSION=6.4.0` agar schema QRIS Dinamis pada `branchPaymentProfiles` dapat tersinkron aman. Index exemption juga ditambahkan untuk `branchPaymentProfiles.qrisImage` dan `branchPaymentProfiles.qrisPayload`. Setelah upload v6.4.0, jalankan sekali:
+**Ruleset QRIS tetap `BUMI_MAKMUR_RULESET_VERSION=6.4.0`.** v6.4.1 tidak mengubah Firestore Rules/Indexes. Jika rules v6.4.0 belum pernah berhasil dideploy, setelah upload v6.4.1 jalankan sekali:
 
 ```text
 Actions
@@ -319,13 +326,13 @@ Actions
 → Run workflow
 ```
 
-Langkah deploy ini **wajib untuk v6.4.0** meskipun rules/index v6.3.0 sebelumnya sudah hijau. Workflow tetap Spark-only dan hanya men-deploy `firestore:rules,firestore:indexes`.
+Langkah deploy ini **wajib bila produksi masih memakai rules sebelum v6.4.0**. Jika rules v6.4.0 sudah hijau sebelumnya, v6.4.1 tidak membutuhkan deploy ulang. Workflow tetap Spark-only dan hanya men-deploy `firestore:rules,firestore:indexes`.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.4.0
+→ Build Bumi Makmur POS v6.4.1
 → android-release
 ```
 
@@ -335,11 +342,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v6.4.0
+→ Build Bumi Makmur POS Desktop v6.4.1
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.4.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.4.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -356,16 +363,16 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.4.0
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v6.4.0
+## Release acceptance v6.4.1
 
-Source release v6.4.0 menambahkan QRIS Dynamic & Payment Assurance tanpa mengubah prinsip Spark-only. Gate release mencakup regression QRIS, static/security audit, syntax/configuration validation, serta production build melalui CI bila dependency registry lokal tidak tersedia.
+Source release v6.4.1 mempertahankan QRIS Dynamic & Payment Assurance v6.4.0 dan memperbaiki release-build secret handling tanpa mengubah prinsip Spark-only. Gate release mencakup regression QRIS, structured secret audit, syntax/configuration validation, serta production build melalui CI bila dependency registry lokal tidak tersedia.
 
 Acceptance flow produksi setelah push:
 
 1. Backup JSON. **Jangan hapus antrean offline yang masih ada.**
-2. Jalankan workflow Android `test-only` v6.4.0 sampai core test, audit, dan Vite build hijau.
+2. Jalankan workflow Android `test-only` v6.4.1 sampai core test, audit, dan Vite build hijau.
 3. Tunggu Cloudflare Pages hijau dan smoke test fungsi Web/PWA utama.
-4. Jalankan **Deploy Firebase Spark Rules** sekali untuk menerapkan ruleset v6.4.0 dan index exemption QRIS baru; langkah ini wajib sebelum mengaktifkan QRIS Dinamis di produksi.
+4. Pastikan **Deploy Firebase Spark Rules** ruleset v6.4.0 sudah pernah hijau; jalankan sekali bila belum. v6.4.1 tidak menambah perubahan rules/index baru.
 5. Pada setiap cabang, validasi source QRIS merchant, generate QR dinamis dengan nominal kecil, scan menggunakan aplikasi pembayaran, cocokkan **nama merchant + nominal**, lakukan pembayaran uji, dan pastikan notifikasi merchant benar-benar masuk sebelum enable dynamic.
 6. Uji QRIS statis, dinamis, fallback, split payment, Customer Display, audit Detail Transaksi, struk, refund/void, dan retry/double-click checkout.
 7. Uji Owner ↔ Karyawan, offline→reconnect sampai queue 0, barcode, Kamera/Galeri, AI quota fallback, PO partial, serial/warranty, dan printer.
@@ -374,4 +381,4 @@ Acceptance flow produksi setelah push:
 
 QRIS v6.4.0 belum melakukan settlement otomatis dari PJP. Kasir tetap memverifikasi notifikasi merchant. Integrasi otomatis di masa depan hanya boleh memakai API/webhook resmi PJP/acquirer dengan signature verification, anti-replay, idempotency, dan reconciliation.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v6.4.0.md`, `BUILD-REPORT-Bumi-Makmur-POS-v6.4.0.md`, `RELEASE-NOTES-Bumi-Makmur-POS-v6.4.0.md`, `docs/QRIS-SOURCE-AUDIT-v6.4.0.md`, dan `FINAL-RELEASE-CHECKLIST-v6.4.0.md` untuk gate lengkap.
+Lihat `QA-REPORT-Bumi-Makmur-POS-v6.4.1.md`, `BUILD-REPORT-Bumi-Makmur-POS-v6.4.1.md`, `RELEASE-NOTES-Bumi-Makmur-POS-v6.4.1.md`, `docs/IMPLEMENTATION-NOTES-v6.4.1.md`, serta dokumentasi QRIS v6.4.0 untuk gate lengkap.

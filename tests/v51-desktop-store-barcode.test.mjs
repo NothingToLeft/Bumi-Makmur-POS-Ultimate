@@ -9,7 +9,7 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   const main = await read('electron/main.cjs');
   const preload = await read('electron/preload.cjs');
   const workflow = await read('.github/workflows/build-windows.yml');
-  assert.equal(pkg.version, '6.4.0');
+  assert.equal(pkg.version, '6.4.1');
   assert.equal(pkg.main, 'electron/main.cjs');
   assert.ok(pkg.devDependencies.electron);
   assert.ok(pkg.devDependencies['electron-builder']);
@@ -28,7 +28,8 @@ test('v5.1 menyediakan installer Windows EXE dan MSI dengan Electron terisolasi'
   assert.match(pkg.scripts['desktop:dist:nsis'], /--publish never/);
   assert.match(pkg.scripts['desktop:dist:msi'], /--publish never/);
   assert.match(workflow, /VITE_FIREBASE_PROJECT_ID/);
-  assert.match(workflow, /\.env\.production/);
+  assert.doesNotMatch(workflow, /Set-Content[^\n]*\.env\.production|cat\s*>\s*\.env\.production/i);
+  assert.match(workflow, /Build Windows EXE and MSI without implicit publishing[\s\S]*VITE_FIREBASE_API_KEY/);
   assert.match(workflow, /release\/windows\/\*\.exe/);
   assert.match(workflow, /release\/windows\/\*\.msi/);
 });

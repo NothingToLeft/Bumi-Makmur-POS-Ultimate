@@ -1,7 +1,14 @@
-# Dokumentasi Aktif — Bumi Makmur POS v6.4.0
+# Dokumentasi Aktif — Bumi Makmur POS v6.4.1
 
 Dokumen utama:
 
+- `../CHANGELOG-Bumi-Makmur-POS-v6.4.1.md` — hotfix CI secret scan.
+- `../RELEASE-NOTES-Bumi-Makmur-POS-v6.4.1.md` — release notes patch.
+- `../QA-REPORT-Bumi-Makmur-POS-v6.4.1.md` — QA patch.
+- `../BUILD-REPORT-Bumi-Makmur-POS-v6.4.1.md` — build validation patch.
+- `../FINAL-RELEASE-CHECKLIST-v6.4.1.md` — checklist patch.
+- `IMPLEMENTATION-NOTES-v6.4.1.md` — root cause dan arsitektur hotfix.
+- `FOLDER-STRUCTURE-v6.4.1.md` — perubahan struktur source patch.
 - `../README.md` — setup, fitur, deployment, dan release acceptance.
 - `../CHANGELOG-Bumi-Makmur-POS-v6.4.0.md` — perubahan major release QRIS.
 - `../RELEASE-NOTES-Bumi-Makmur-POS-v6.4.0.md` — catatan release operasional.
