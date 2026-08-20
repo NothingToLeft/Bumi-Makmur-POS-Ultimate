@@ -1,3 +1,4 @@
+import { toEpochMs } from './temporal.js';
 export const formatRp = number => {
   const value = Number(number);
   if (!Number.isFinite(value)) return 'Rp 0';
@@ -39,8 +40,9 @@ export const generateId = prefix => {
 };
 
 export const localDateKey = (input = new Date()) => {
-  const date = input instanceof Date ? input : new Date(input);
-  if (Number.isNaN(date.getTime())) return '';
+  const epoch = toEpochMs(input);
+  if (!epoch) return '';
+  const date = new Date(epoch);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');

@@ -1,5 +1,6 @@
 import { normalizeQuantityStep, recommendedQuantityStep } from './fractionalUnits.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from './productCatalog.js';
+import { COLLECTION_RECENCY_FIELDS, sortCollectionNewest } from './temporal.js';
 
 const clone = value => value == null
   ? value
@@ -7,6 +8,13 @@ const clone = value => value == null
 
 const roundQuantity = value => Math.round((Number(value) || 0) * 1000) / 1000;
 const isFractionalNumber = value => Math.abs(Number(value || 0) - Math.round(Number(value || 0))) > 0.000001;
+const sortByName = rows => [...(rows || [])].sort((first, second) => String(first?.name || first?.id || '').localeCompare(String(second?.name || second?.id || ''), 'id', { numeric: true, sensitivity: 'base' }));
+const sortCustomers = rows => [...(rows || [])].sort((first, second) => {
+  const firstGeneral = first?.id === 'CUS-GENERAL' || /^umum(?:\s|\()/i.test(String(first?.name || '').trim());
+  const secondGeneral = second?.id === 'CUS-GENERAL' || /^umum(?:\s|\()/i.test(String(second?.name || '').trim());
+  if (firstGeneral !== secondGeneral) return firstGeneral ? -1 : 1;
+  return String(first?.name || first?.id || '').localeCompare(String(second?.name || second?.id || ''), 'id', { numeric: true, sensitivity: 'base' });
+});
 
 export function normalizeDbShape(input, seed, version = '') {
   const source = input && typeof input === 'object' ? input : {};
@@ -59,5 +67,22 @@ export function normalizeDbShape(input, seed, version = '') {
   });
   next.products = sortProductsByName(next.products);
   next.categories = sortCategories(next.categories || []);
+  next.branches = sortByName(next.branches);
+  next.users = sortByName(next.users);
+  next.suppliers = sortByName(next.suppliers);
+  next.customers = sortCustomers(next.customers);
+
+  // Firestore does not guarantee collection iteration order unless an orderBy
+  // clause is used. The POS must therefore never depend on insertion/snapshot
+  // order for operational history. Normalize all timeline collections here so
+  // Web, Android, Windows, offline cache, and realtime updates show the same
+  // deterministic chronology. Individual screens may still apply a user-selected
+  // order, but the default database shape is always newest-first.
+  for (const collectionName of Object.keys(COLLECTION_RECENCY_FIELDS)) {
+    if (Array.isArray(next[collectionName])) {
+      next[collectionName] = sortCollectionNewest(collectionName, next[collectionName]);
+    }
+  }
+
   return next;
 }

@@ -1,3 +1,4 @@
+import { toEpochMs } from './temporal.js';
 const money = value => Math.round(Number(value || 0));
 const qty = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 
@@ -22,17 +23,18 @@ function refundCostRecovery(refund, sale, productMap) {
 
 export function buildClosingSummary({ shift, sales = [], refunds = [], expenses = [], receivables = [], products = [], branch = {}, configs = {} }) {
   if (!shift) throw new Error('Data shift tidak tersedia.');
-  const startedAt = new Date(shift.startAt || 0).getTime();
-  const endedAt = new Date(shift.endAt || Date.now()).getTime();
+  const startedAt = toEpochMs(shift.startAt);
+  const endedAt = toEpochMs(shift.endAt) || Date.now();
+  if (!startedAt) throw new Error('Waktu mulai shift tidak valid.');
   const inRange = value => {
-    const time = new Date(value || 0).getTime();
-    return Number.isFinite(time) && time >= startedAt && time <= endedAt;
+    const time = toEpochMs(value);
+    return time > 0 && time >= startedAt && time <= endedAt;
   };
   const sameBranchInRange = row => row?.branchId === shift.branchId && inRange(row.createdAt);
   const allShiftSales = sales.filter(sameBranchInRange);
-  const shiftSales = allShiftSales.filter(sale => sale.status !== 'VOIDED');
+  const shiftSales = allShiftSales.filter(sale => !['VOID', 'VOIDED'].includes(String(sale.status || '').toUpperCase()));
   // VOID dikeluarkan bersama transaksi asalnya agar omzet tidak dikurangi dua kali.
-  const shiftRefunds = refunds.filter(sameBranchInRange).filter(row => row.type !== 'VOID');
+  const shiftRefunds = refunds.filter(sameBranchInRange).filter(row => String(row.type || '').toUpperCase() !== 'VOID');
   const shiftExpenses = expenses.filter(sameBranchInRange);
   const shiftReceivables = receivables.filter(sameBranchInRange);
   const saleMap = new Map(sales.map(sale => [sale.id, sale]));
@@ -56,10 +58,20 @@ export function buildClosingSummary({ shift, sales = [], refunds = [], expenses 
   const taxes = shiftSales.reduce((sum, sale) => sum + money(sale.tax), 0);
 
   const methods = {};
-  shiftSales.forEach(sale => (sale.payments || []).forEach(payment => {
-    const name = String(payment.name || payment.type || 'Lainnya');
-    methods[name] = money(methods[name]) + money(payment.amount);
-  }));
+  shiftSales.forEach(sale => {
+    let remainingChange = Math.max(0, money(sale.change));
+    for (const payment of sale.payments || []) {
+      const name = String(payment.name || payment.type || 'Lainnya');
+      const isCash = String(payment.type || '').toLowerCase() === 'cash' || /tunai/i.test(name);
+      let appliedAmount = money(payment.amount);
+      if (isCash && remainingChange > 0) {
+        const changeFromThisPayment = Math.min(appliedAmount, remainingChange);
+        appliedAmount -= changeFromThisPayment;
+        remainingChange -= changeFromThisPayment;
+      }
+      methods[name] = money(methods[name]) + appliedAmount;
+    }
+  });
   shiftRefunds.forEach(refund => {
     const name = String(refund.method || 'Tunai');
     const payout = refund.payoutAmount !== undefined
@@ -81,7 +93,7 @@ export function buildClosingSummary({ shift, sales = [], refunds = [], expenses 
     startAt: shift.startAt,
     endAt: shift.endAt,
     transactionCount: shiftSales.length,
-    voidCount: allShiftSales.filter(sale => sale.status === 'VOIDED').length,
+    voidCount: allShiftSales.filter(sale => ['VOID', 'VOIDED'].includes(String(sale.status || '').toUpperCase())).length,
     refundCount: shiftRefunds.length,
     soldItemQty,
     refundItemQty,

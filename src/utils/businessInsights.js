@@ -1,11 +1,9 @@
+import { toEpochMs } from './temporal.js';
 const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const dayMs = 86400000;
 
 const validSale = sale => sale && !['VOIDED', 'VOID'].includes(String(sale.status || '').toUpperCase());
-const validTime = value => {
-  const time = new Date(value || 0).getTime();
-  return Number.isFinite(time) && time > 0 ? time : 0;
-};
+const validTime = value => toEpochMs(value);
 
 export function salesVelocityByProduct(sales = [], days = 30, now = new Date()) {
   const safeDays = Math.max(1, Number(days) || 30);

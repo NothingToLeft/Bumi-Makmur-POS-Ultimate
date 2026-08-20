@@ -31,7 +31,7 @@ test('zoom kamera dibatasi sesuai kapabilitas perangkat', () => {
 test('v5.8 mempertahankan ZXing gratis sebagai scanner multi-format dengan kontrol kamera profesional', async () => {
   const pkg = JSON.parse(await read('package.json'));
   const scanner = await read('src/components/BarcodeScannerModal.jsx');
-  assert.equal(pkg.version, '6.1.1');
+  assert.equal(pkg.version, '6.2.0');
   assert.equal(pkg.dependencies['@zxing/browser'], '0.2.1');
   assert.match(scanner, /import\('@zxing\/browser'\)/);
   assert.match(scanner, /BrowserMultiFormatReader/);

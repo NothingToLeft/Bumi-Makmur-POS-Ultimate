@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v6.1.1 — Unified AutoSync
+# Bumi Makmur POS FreeSync v6.2.0 — Data Integrity & Professional Operations
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.1.1 mempertahankan major release v6.0.0 untuk operasional toko listrik/material dengan **AI Product Capture**, **Smart Receiving**, dan **Tutup Harian PDF → WhatsApp**, di atas Business Suite v5.8.x. Seluruh Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Smart Barcode Scanner, dan FreeSync tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.2.0 memfokuskan kualitas produksi pada **urutan data deterministik**, **timestamp Firestore yang aman**, **akurasi pembayaran/kembalian**, dan **PDF Tutup Harian profesional Bumi Makmur 2**, sambil mempertahankan AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan Unified AutoSync.
 
 ## Platform dan arsitektur
 
@@ -12,15 +12,16 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.1
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
 
-## Unified AutoSync v6.1.1
+## Data Integrity & Professional Operations v6.2.0
 
-- Memperbaiki crash Owner pada **Pengaturan → Cloud & Backup** (`CloudUpload is not defined`).
-- Firestore Rules kompatibel dengan profil karyawan legacy yang belum mempunyai field `active`; akun `active: false` tetap ditolak.
-- Shift/cash Kasir tetap wajib memakai UID Firebase Auth yang sama dan cabang yang sama.
-- Ruleset produksi memakai marker `BUMI_MAKMUR_RULESET_VERSION=6.1.0`; jalankan workflow **Deploy Firebase Spark Rules** setelah upload source ini.
-- Static audit mempunyai guard JSX tambahan agar komponen yang dipakai tanpa import tidak lolos lagi.
-- Cache PWA, metadata closing PDF, workflow build, dan version metadata diselaraskan ke v6.1.1.
-- Tidak ada penghapusan data/fitur; queue offline v6.0.3 tetap dipertahankan.
+- Menormalkan timeline transaksi dan riwayat operasional agar **terbaru → terlama** secara deterministik setelah cache lokal, bootstrap Firestore, realtime snapshot, maupun commit lokal.
+- Menambahkan parser timestamp terpadu untuk ISO string, epoch detik/milidetik, JavaScript `Date`, Firebase `Timestamp`, dan serialized Firestore timestamp agar data legacy/cloud tidak menghasilkan urutan acak atau `Invalid Date`.
+- Halaman **Transaksi, Refund & Void** mendapat sorting Terbaru/Terlama/Nominal dan pencarian lebih luas; transaksi pada tanggal yang sama mengikuti jam sebenarnya.
+- Kasir sekarang memilih **Pelanggan Umum** secara eksplisit, bukan bergantung pada urutan `customers[0]` dari snapshot Firestore.
+- Akurasi kas diperbaiki: total Rp39.000 dibayar Rp50.000 tetap menampilkan kembalian Rp11.000, tetapi laporan kas mencatat penerimaan bersih Rp39.000. Refund mengurangi breakdown pembayaran dan `VOID`/`VOIDED` tidak ikut omzet.
+- PDF Tutup Harian dirombak menjadi A4 profesional merah-hitam dengan logo resmi Bumi Makmur 2, ringkasan omzet/laba/transaksi, pembayaran, kas, operasional, dan status selisih. PDF tetap lokal/on-demand dan tidak memenuhi Firebase.
+- Unified AutoSync, queue offline, Customer Display, AI Product Assistant, Smart Receiving, barcode, PO, varian, bundle, serial/garansi, backup, Android, Windows, dan Web tetap dipertahankan.
+- **Firestore Rules tidak berubah pada v6.2.0.** Ruleset produksi tetap `BUMI_MAKMUR_RULESET_VERSION=6.1.0`; jika ruleset v6.1.0 sudah dipublikasikan hijau, tidak perlu deploy ulang hanya karena upgrade v6.2.0.
 
 ## Cloud & Customer Display Stability v6.0.3
 
@@ -243,13 +244,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v6.1.1.
+2. Ekstrak ZIP v6.2.0.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v6.1.1 Cloud Compatibility and Runtime Stability
+Bumi Makmur POS v6.2.0 Data Integrity & Professional Operations
 ```
 
 6. Klik **Push origin**.
@@ -260,7 +261,7 @@ Bumi Makmur POS v6.1.1 Cloud Compatibility and Runtime Stability
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.1.1
+→ Build Bumi Makmur POS v6.2.0
 → test-only
 ```
 
@@ -268,13 +269,13 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Firestore Rules
 
-**v6.1.1 tidak mengubah Firestore Rules.** Jika workflow `Deploy Firebase Spark Rules` untuk marker `BUMI_MAKMUR_RULESET_VERSION=6.1.0` sebelumnya sudah hijau, tidak perlu deploy ulang. Jalankan ulang hanya bila rules v6.1.0 belum pernah berhasil dipublikasikan.
+**v6.2.0 tidak mengubah Firestore Rules.** Ruleset produksi tetap `BUMI_MAKMUR_RULESET_VERSION=6.1.0`. Jika workflow tersebut sebelumnya sudah hijau, tidak perlu deploy ulang.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.1.1
+→ Build Bumi Makmur POS v6.2.0
 → android-release
 ```
 
@@ -284,11 +285,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v6.1.1
+→ Build Bumi Makmur POS Desktop v6.2.0
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.1.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.2.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -305,7 +306,7 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.1.1
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v6.1.1
+## Release acceptance v6.2.0
 
 Full-pass source audit final pada 19 Agustus 2026 menghasilkan:
 
@@ -318,7 +319,7 @@ Full-pass source audit final pada 19 Agustus 2026 menghasilkan:
 Acceptance flow produksi yang disarankan setelah push:
 
 1. Backup JSON. **Jangan hapus antrean offline yang masih ada.**
-2. Jalankan **Deploy Firebase Spark Rules** dan pastikan ruleset v6.1.1 berhasil dipublikasikan.
+2. Pastikan ruleset produksi v6.1.0 sebelumnya sudah hijau; v6.2.0 tidak membutuhkan deploy Rules baru.
 3. Login dengan akun yang membuat mutation tertunda dan tekan **Sinkronkan Sekarang** sampai antrean akun tersebut 0.
 4. Jalankan Android workflow `test-only` sampai hijau.
 5. Deploy Web, lalu uji Owner ↔ Karyawan dan `Layar Pelanggan → Buka Layar 2`.
@@ -326,4 +327,4 @@ Acceptance flow produksi yang disarankan setelah push:
 7. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
 8. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v6.1.1.md` untuk daftar coverage dan batasan environment audit. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.
+Lihat `QA-REPORT-Bumi-Makmur-POS-v6.2.0.md` untuk coverage timeline, reporting, timestamp, dan regression suite. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.

@@ -2,10 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { BarChart3, Clock3, Download, Package, Percent, ReceiptText, RotateCcw, TrendingUp, WalletCards } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { downloadFile, formatRp, localDateKey } from '../utils/helpers.js';
-import { buildNetProductPerformance, calculateNetHpp, calculateNetPurchaseValue } from '../utils/accounting.js';
+import { buildNetPaymentBreakdown, buildNetProductPerformance, calculateNetHpp, calculateNetPurchaseValue } from '../utils/accounting.js';
 import { buildInventoryAging, buildSmartRestock, receivableAging } from '../utils/businessInsights.js';
 import { Badge, Button, Card, EmptyState, PageHeader, SummaryCard } from '../components/ui.jsx';
 import { formatQuantity } from '../utils/fractionalUnits.js';
+import { formatDateTimeId } from '../utils/temporal.js';
 
 const tabs = [['summary', 'Ringkasan'], ['payments', 'Pembayaran'], ['products', 'Produk'], ['inventory', 'Stok & Aging'], ['finance', 'Utang & Piutang'], ['shifts', 'Shift']];
 
@@ -50,9 +51,8 @@ function SummaryTab({ metrics, sales }) {
 }
 
 function PaymentsTab({ sales, refunds }) {
-  const rows = {};
-  sales.filter(s => s.status !== 'VOIDED' && s.status !== 'VOID').forEach(s => (s.payments || []).forEach(p => { rows[p.name] = (rows[p.name] || 0) + Number(p.amount || 0); }));
-  return <div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{Object.entries(rows).map(([name, total]) => <SummaryCard key={name} title={name} value={formatRp(total)} icon={WalletCards} tone="blue"/>)}</div><Card className="p-4"><p className="font-bold mb-3">Refund per Metode</p>{refunds.length === 0 ? <p className="text-sm text-gray-500">Belum ada refund.</p> : refunds.map(r => <div key={r.id} className="py-2 border-b last:border-0 flex justify-between"><div><Badge tone="red">{r.type}</Badge><span className="text-sm ml-2">{r.method}</span></div><b className="text-red-600">{formatRp(r.amount)}</b></div>)}</Card></div>;
+  const rows = buildNetPaymentBreakdown(sales, refunds);
+  return <div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{Object.entries(rows).map(([name, total]) => <SummaryCard key={name} title={name} value={formatRp(total)} icon={WalletCards} tone={total < 0 ? 'red' : 'blue'}/>)}</div><Card className="p-4"><p className="font-bold mb-3">Refund per Metode</p>{refunds.length === 0 ? <p className="text-sm text-gray-500">Belum ada refund.</p> : refunds.map(r => <div key={r.id} className="py-2 border-b last:border-0 flex justify-between"><div><Badge tone="red">{r.type}</Badge><span className="text-sm ml-2">{r.method}</span></div><b className="text-red-600">{formatRp(r.payoutAmount ?? r.amount)}</b></div>)}</Card></div>;
 }
 
 function ProductsTab({ sales, refunds }) {
@@ -88,5 +88,5 @@ function FinanceTab({ receivables, payables, expenses }) {
 }
 
 function ShiftTab({ shifts, movements }) {
-  return shifts.length === 0 ? <EmptyState icon={Clock3}/> : <div className="space-y-3">{shifts.map(s => { const rows = movements.filter(m => m.shiftId === s.id); const sales = rows.filter(m => m.type === 'SALE').reduce((a, m) => a + Number(m.amount || 0), 0); return <Card key={s.id} className="p-4"><div className="flex justify-between"><div><p className="font-bold">{s.userName}</p><p className="text-xs text-gray-500">{new Date(s.startAt).toLocaleString('id-ID')} {s.endAt ? `- ${new Date(s.endAt).toLocaleString('id-ID')}` : ''}</p></div><Badge tone={s.status === 'OPEN' ? 'blue' : 'gray'}>{s.status}</Badge></div><div className="grid grid-cols-3 gap-2 mt-3 text-sm"><div><p className="text-gray-500">Penjualan Tunai</p><b>{formatRp(sales)}</b></div><div><p className="text-gray-500">Expected</p><b>{formatRp(s.expectedEndingCash || 0)}</b></div><div><p className="text-gray-500">Selisih</p><b className={(s.difference || 0) < 0 ? 'text-red-600' : 'text-emerald-600'}>{formatRp(s.difference || 0)}</b></div></div></Card>; })}</div>;
+  return shifts.length === 0 ? <EmptyState icon={Clock3}/> : <div className="space-y-3">{shifts.map(s => { const rows = movements.filter(m => m.shiftId === s.id); const sales = rows.filter(m => m.type === 'SALE').reduce((a, m) => a + Number(m.amount || 0), 0); return <Card key={s.id} className="p-4"><div className="flex justify-between"><div><p className="font-bold">{s.userName}</p><p className="text-xs text-gray-500">{formatDateTimeId(s.startAt)} {s.endAt ? `- ${formatDateTimeId(s.endAt)}` : ''}</p></div><Badge tone={s.status === 'OPEN' ? 'blue' : 'gray'}>{s.status}</Badge></div><div className="grid grid-cols-3 gap-2 mt-3 text-sm"><div><p className="text-gray-500">Penjualan Tunai</p><b>{formatRp(sales)}</b></div><div><p className="text-gray-500">Expected</p><b>{formatRp(s.expectedEndingCash || 0)}</b></div><div><p className="text-gray-500">Selisih</p><b className={(s.difference || 0) < 0 ? 'text-red-600' : 'text-emerald-600'}>{formatRp(s.difference || 0)}</b></div></div></Card>; })}</div>;
 }

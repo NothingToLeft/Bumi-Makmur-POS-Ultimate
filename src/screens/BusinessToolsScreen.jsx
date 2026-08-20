@@ -5,6 +5,7 @@ import { Button, Card, EmptyState, Field, Input, Modal, MoneyInput, NumberInput,
 import ProductPicker from '../components/ProductPicker.jsx';
 import { conversionFactor, formatQuantity, normalizeQuantity, normalizeQuantityStep, priceForSaleUnit, recommendedQuantityStep } from '../utils/fractionalUnits.js';
 import { escapeHtml, formatRp, generateId, localDateKey, printHtmlDocument } from '../utils/helpers.js';
+import { formatDateId, formatDateTimeId, sortNewest, toEpochMs } from '../utils/temporal.js';
 
 const quoteStatuses = ['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'CONVERTED'];
 const warrantyStatuses = ['IN_STOCK', 'SOLD', 'WARRANTY', 'RETURNED'];
@@ -35,12 +36,15 @@ function QuotationsTab({ onNavigate }) {
   const effectiveQuoteStatus = row => row.status === 'CONVERTED' || row.status === 'REJECTED'
     ? row.status
     : (row.validUntil && String(row.validUntil).slice(0, 10) < localDateKey() ? 'EXPIRED' : row.status);
-  const rows = useMemo(() => (scoped.quotations || []).filter(row => {
+  const rows = useMemo(() => {
+    const filtered = (scoped.quotations || []).filter(row => {
     const effectiveStatus = row.status === 'CONVERTED' || row.status === 'REJECTED'
       ? row.status
       : (row.validUntil && String(row.validUntil).slice(0, 10) < localDateKey() ? 'EXPIRED' : row.status);
     return (status === 'Semua' || effectiveStatus === status) && (!search || `${row.quoteNo} ${row.customerName}`.toLowerCase().includes(search.toLowerCase()));
-  }).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))), [scoped.quotations, search, status]);
+  });
+    return sortNewest(filtered, ['updatedAt', 'createdAt']);
+  }, [scoped.quotations, search, status]);
 
   const printQuote = quote => {
     const branch = db.branches.find(row => row.id === quote.branchId);
@@ -142,21 +146,20 @@ function WarrantyTab() {
   const [serialEditing, setSerialEditing] = useState(null);
   const [claimSerial, setClaimSerial] = useState(null);
   const canManage = hasPermission('warranty.manage');
-  const rows = useMemo(() => (scoped.serialNumbers || []).filter(row => !search || `${row.serial} ${row.productName} ${row.customerName || ''}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))), [scoped.serialNumbers, search]);
+  const rows = useMemo(() => sortNewest((scoped.serialNumbers || []).filter(row => !search || `${row.serial} ${row.productName} ${row.customerName || ''}`.toLowerCase().includes(search.toLowerCase())), ['updatedAt', 'soldAt', 'createdAt']), [scoped.serialNumbers, search]);
   const claimsBySerial = useMemo(() => {
     const map = new Map();
     for (const claim of scoped.warrantyClaims || []) {
       const list = map.get(claim.serialId) || [];
       list.push(claim);
-      map.set(claim.serialId, list.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))));
+      map.set(claim.serialId, sortNewest(list, ['updatedAt', 'createdAt']));
     }
     return map;
   }, [scoped.warrantyClaims]);
   const warrantyLabel = row => {
     if (!row.warrantyEndsAt) return row.warrantyMonths > 0 ? `${row.warrantyMonths} bulan` : 'Tanpa garansi';
-    const end = new Date(row.warrantyEndsAt);
-    const expired = end.getTime() < Date.now();
-    return expired ? `Berakhir ${end.toLocaleDateString('id-ID')}` : `s.d. ${end.toLocaleDateString('id-ID')}`;
+    const expired = toEpochMs(row.warrantyEndsAt) < Date.now();
+    return expired ? `Berakhir ${formatDateId(row.warrantyEndsAt)}` : `s.d. ${formatDateId(row.warrantyEndsAt)}`;
   };
   return <div className="h-full overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
     <div className="flex flex-col sm:flex-row gap-3 mb-4"><SearchBox value={search} onChange={setSearch} placeholder="Cari serial, barang, atau pelanggan..."/>{canManage && <Button onClick={() => setSerialEditing({})} className="shrink-0"><Plus size={17}/> Daftarkan Serial</Button>}</div>
@@ -164,7 +167,7 @@ function WarrantyTab() {
       const claims = claimsBySerial.get(row.id) || [];
       const activeClaim = claims.find(claim => !['RESOLVED', 'REJECTED'].includes(claim.status));
       const latestClaim = claims[0];
-      const expired = row.warrantyEndsAt && new Date(row.warrantyEndsAt).getTime() < Date.now();
+      const expired = row.warrantyEndsAt && toEpochMs(row.warrantyEndsAt) < Date.now();
       return <Card key={row.id} className="p-4 min-w-0">
         <div className="flex justify-between gap-3"><div className="min-w-0"><p className="font-black break-all">{row.serial}</p><p className="font-bold text-sm mt-1">{row.productName}</p><p className="text-xs text-gray-500">{row.customerName || 'Belum dikaitkan pelanggan'} · {warrantyLabel(row)}</p>{row.saleId && <p className="text-[11px] text-blue-600 mt-1">Penjualan {row.saleId}</p>}</div><StatusBadge status={expired && row.status === 'SOLD' ? 'EXPIRED' : row.status}/></div>
         {latestClaim && <div className="mt-3 rounded-xl bg-orange-50 p-3"><p className="text-xs font-bold text-orange-800"><Wrench size={14} className="inline mr-1"/>Klaim {latestClaim.status}{claims.length > 1 ? ` · ${claims.length} riwayat` : ''}</p><p className="text-xs text-orange-700 mt-1">{latestClaim.issue}</p></div>}
@@ -206,7 +209,7 @@ function SerialForm({ value = {}, products, customers, sales, purchases, onClose
       <ProductPicker products={active} value={productId} onChange={changeProduct} label="Barang"/>
       {selectedProduct && !selectedProduct.serialTracking && <p className="text-xs text-orange-700 bg-orange-50 border border-orange-100 rounded-xl p-3">Produk ini belum mengaktifkan pelacakan serial. Serial tetap dapat disimpan untuk kompatibilitas data lama, tetapi sebaiknya aktifkan “Lacak nomor serial per unit” pada Produk.</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Nomor Serial"><Input value={serial} onChange={e => setSerial(e.target.value.toUpperCase())} autoFocus/></Field><Field label="Masa Garansi (bulan)"><NumberInput min={0} max={120} value={warrantyMonths} integer zeroAsEmpty onValueChange={value => setWarrantyMonths(value === '' ? 0 : value)}/></Field></div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Penerimaan / Faktur (opsional)"><Select value={purchaseId} onChange={e => setPurchaseId(e.target.value)}><option value="">Belum dikaitkan</option>{purchaseOptions.map(row => <option key={row.id} value={row.id}>{row.invoiceNo || row.id} · {new Date(row.createdAt).toLocaleDateString('id-ID')}</option>)}</Select></Field><Field label="Penjualan (opsional)"><Select value={saleId} onChange={e => changeSale(e.target.value)}><option value="">Belum dijual</option>{saleOptions.map(row => <option key={row.id} value={row.id}>{row.id} · {row.customerName || 'Umum'} · {new Date(row.createdAt).toLocaleDateString('id-ID')}</option>)}</Select></Field></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Penerimaan / Faktur (opsional)"><Select value={purchaseId} onChange={e => setPurchaseId(e.target.value)}><option value="">Belum dikaitkan</option>{purchaseOptions.map(row => <option key={row.id} value={row.id}>{row.invoiceNo || row.id} · {formatDateId(row.createdAt)}</option>)}</Select></Field><Field label="Penjualan (opsional)"><Select value={saleId} onChange={e => changeSale(e.target.value)}><option value="">Belum dijual</option>{saleOptions.map(row => <option key={row.id} value={row.id}>{row.id} · {row.customerName || 'Umum'} · {formatDateId(row.createdAt)}</option>)}</Select></Field></div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Field label="Status"><Select value={status} onChange={e => setStatus(e.target.value)}>{warrantyStatuses.map(row => <option key={row}>{row}</option>)}</Select></Field><Field label="Pelanggan"><Select value={selectedSale?.customerId || customerId} onChange={e => setCustomerId(e.target.value)} disabled={Boolean(selectedSale)}><option value="">Belum dikaitkan</option>{customers.filter(row => row.id !== 'CUS-GENERAL').map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</Select></Field></div>
     </div>
   </Modal>;

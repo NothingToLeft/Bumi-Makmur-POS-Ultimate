@@ -9,6 +9,7 @@ import { Badge, Button, Card, EmptyState, Modal, PageHeader } from '../component
 import { buildOperationalHealth, buildReorderCsv } from '../utils/operationsHealth.js';
 import { buildSmartRestock, buildSuggestedPurchaseOrders } from '../utils/businessInsights.js';
 import { downloadFile, formatRp, localDateKey, printHtmlDocument } from '../utils/helpers.js';
+import { formatDateTimeId } from '../utils/temporal.js';
 
 const escapeHtml = value => String(value ?? '')
   .replaceAll('&', '&amp;')
@@ -137,7 +138,7 @@ function FinanceAlerts({ health }) {
   return <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
     <FinanceList title="Piutang Lewat Jatuh Tempo" icon={CircleDollarSign} rows={health.overdueReceivables} total={health.overdueReceivableTotal}/>
     <FinanceList title="Utang Pemasok Lewat Jatuh Tempo" icon={BadgeDollarSign} rows={health.overduePayables} total={health.overduePayables.reduce((sum, row) => sum + Number(row.balance || 0), 0)}/>
-    <Card className="p-5 xl:col-span-2"><p className="font-black flex items-center gap-2"><Clock3 size={19} className="text-orange-600"/>Shift Terbuka Terlalu Lama</p><div className="mt-3">{health.staleShifts.length === 0 ? <GoodMessage text="Tidak ada shift yang melewati batas peringatan."/> : health.staleShifts.map(row => <div key={row.id} className="py-3 border-b flex justify-between gap-3"><div><p className="font-bold text-sm">{row.userName || row.userId}</p><p className="text-xs text-gray-500">Mulai {new Date(row.startAt).toLocaleString('id-ID')}</p></div><Badge tone="orange">{Math.floor(row.openHours)} jam</Badge></div>)}</div></Card>
+    <Card className="p-5 xl:col-span-2"><p className="font-black flex items-center gap-2"><Clock3 size={19} className="text-orange-600"/>Shift Terbuka Terlalu Lama</p><div className="mt-3">{health.staleShifts.length === 0 ? <GoodMessage text="Tidak ada shift yang melewati batas peringatan."/> : health.staleShifts.map(row => <div key={row.id} className="py-3 border-b flex justify-between gap-3"><div><p className="font-bold text-sm">{row.userName || row.userId}</p><p className="text-xs text-gray-500">Mulai {formatDateTimeId(row.startAt)}</p></div><Badge tone="orange">{Math.floor(row.openHours)} jam</Badge></div>)}</div></Card>
   </div>;
 }
 

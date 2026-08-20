@@ -1,14 +1,8 @@
+import { localDateKeyFromValue, toEpochMs } from './temporal.js';
 const asNumber = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const normalizeCode = value => String(value || '').trim().toLowerCase();
-const dateOnly = value => String(value || '').slice(0, 10);
-const localDateOnly = value => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return dateOnly(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+const dateOnly = value => localDateKeyFromValue(value, String(value || '').slice(0, 10));
+const localDateOnly = value => localDateKeyFromValue(value, String(value || '').slice(0, 10));
 
 export function computeSuggestedReorder(product, multiplier = 2) {
   if (!product || product.active === false || product.trackStock === false) return 0;
@@ -36,7 +30,7 @@ export function buildOperationalHealth(db, branchId, options = {}) {
   const today = localDateOnly(now);
   const shiftWarningHours = Math.max(6, asNumber(options.shiftWarningHours || db?.configs?.shiftWarningHours || 14));
   const branchProducts = (db?.products || []).filter(row => row.branchId === branchId && row.active !== false);
-  const branchSales = (db?.sales || []).filter(row => row.branchId === branchId && row.status !== 'VOID');
+  const branchSales = (db?.sales || []).filter(row => row.branchId === branchId && !['VOID', 'VOIDED'].includes(String(row.status || '').toUpperCase()));
   const branchReceivables = (db?.receivables || []).filter(row => row.branchId === branchId && asNumber(row.balance) > 0);
   const branchPayables = (db?.payables || []).filter(row => row.branchId === branchId && asNumber(row.balance) > 0);
   const branchShifts = (db?.shifts || []).filter(row => row.branchId === branchId && row.status === 'OPEN');
@@ -68,7 +62,7 @@ export function buildOperationalHealth(db, branchId, options = {}) {
     .filter(row => row.dueDate && dateOnly(row.dueDate) < today)
     .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
   const staleShifts = branchShifts
-    .map(row => ({ ...row, openHours: Math.max(0, (now.getTime() - new Date(row.startAt || row.createdAt || now).getTime()) / 3_600_000) }))
+    .map(row => { const startedAt = toEpochMs(row.startAt || row.createdAt) || now.getTime(); return { ...row, openHours: Math.max(0, (now.getTime() - startedAt) / 3_600_000) }; })
     .filter(row => row.openHours >= shiftWarningHours)
     .sort((a, b) => b.openHours - a.openHours);
 

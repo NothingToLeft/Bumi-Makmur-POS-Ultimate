@@ -1,7 +1,8 @@
+import { toEpochMs } from './temporal.js';
 const text = value => String(value ?? '').trim();
 const safeDate = value => {
-  const date = value ? new Date(value) : null;
-  return date && !Number.isNaN(date.getTime()) ? date : null;
+  const epoch = toEpochMs(value);
+  return epoch ? new Date(epoch) : null;
 };
 
 export const SYNC_DIAGNOSTIC_LIMIT = 80;

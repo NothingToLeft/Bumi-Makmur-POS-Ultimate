@@ -1,0 +1,29 @@
+BUMI MAKMUR POS v6.2.0 — LANGKAH SETELAH DOWNLOAD
+=================================================
+
+1. Extract ZIP ini.
+2. Replace isi repository GitHub dengan isi folder hasil extract.
+3. Commit dan push ke branch main.
+4. Tunggu Cloudflare Pages sampai build HIJAU.
+5. Buka GitHub > Actions > Build Bumi Makmur POS v6.2.0.
+6. Run workflow dengan run_mode = test-only.
+7. Pastikan workflow HIJAU.
+
+FIREBASE RULES
+--------------
+v6.2.0 tidak mengubah Firestore Rules.
+Jika ruleset v6.1.0 sudah sukses dipublikasikan, tidak perlu Deploy Firebase Spark Rules ulang.
+
+VALIDASI CEPAT
+--------------
+- Login Owner dan Karyawan.
+- Pastikan status cloud sehat dan queue 0.
+- Buat transaksi Tunai dengan kembalian.
+- Buka Transaksi: transaksi terbaru harus berada paling atas.
+- Tes QRIS, refund/void, stok, Customer Display, AI Foto Produk.
+- Tutup Shift, lihat PDF profesional, lalu share ke WhatsApp Business.
+
+CATATAN
+-------
+PDF tetap lokal dan tidak disimpan ke Firebase.
+Gemini API key tetap lokal per perangkat dan tidak disinkronkan ke Firestore.

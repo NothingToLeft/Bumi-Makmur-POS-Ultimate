@@ -1,5 +1,6 @@
 import { escapeHtml, formatRp } from '../utils/helpers.js';
 import { formatQuantity } from '../utils/fractionalUnits.js';
+import { formatDateTimeId } from '../utils/temporal.js';
 
 export const getReceiptLogo = (configs = {}) => configs.receiptShowLogo === false ? '' : (configs.receiptLogo || '/logo-bm.svg');
 
@@ -72,7 +73,7 @@ export const buildReceiptText = (sale, configs = {}) => {
     configs.phone ? `Telp: ${configs.phone}` : '',
     divider,
     `No. Nota: ${sale.id}`,
-    `Tanggal: ${new Date(sale.createdAt).toLocaleString('id-ID')}`,
+    `Tanggal: ${formatDateTimeId(sale.completedAt || sale.createdAt || sale.date)}`,
     `Pelanggan: ${sale.customerName || 'Umum'}`,
     divider,
     ...items,
@@ -205,7 +206,7 @@ export const createReceiptImageFile = async (sale, configs = {}) => {
   context.fillStyle = '#111827';
   context.fillText(`No: ${sale.id}`, 60, y);
   context.textAlign = 'right';
-  context.fillText(new Date(sale.createdAt).toLocaleString('id-ID'), width - 60, y);
+  context.fillText(formatDateTimeId(sale.completedAt || sale.createdAt || sale.date), width - 60, y);
   y += 36;
   context.textAlign = 'left';
   context.font = '22px Segoe UI, Arial, sans-serif';
@@ -288,7 +289,7 @@ export const buildReceiptPrintHtml = (sale, configs = {}) => {
         <p>${escapeHtml(configs.address || '')}</p>
         ${configs.receiptShowStorePhone !== false && configs.phone ? `<p>Telp: ${escapeHtml(configs.phone)}</p>` : ''}
         <div class="receipt-id">${escapeHtml(sale.id || '')}</div>
-        <p>${escapeHtml(new Date(sale.createdAt).toLocaleString('id-ID'))}</p>
+        <p>${escapeHtml(formatDateTimeId(sale.completedAt || sale.createdAt || sale.date))}</p>
       </header>
       <div class="meta">
         ${configs.receiptShowCustomer !== false ? `<div><span>Pelanggan</span><b>${escapeHtml(sale.customerName || 'Umum')}</b></div>` : ''}

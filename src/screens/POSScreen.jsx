@@ -15,6 +15,9 @@ import { sortProductsByName } from '../utils/productCatalog.js';
 
 const priceFor = (product, tier) => Number(product.prices?.[tier] ?? product.prices?.retail ?? 0);
 const roundTotal = (total, step) => step > 0 ? Math.round(total / step) * step : Math.round(total);
+const generalCustomerId = customers => (customers || []).find(item => item.id === 'CUS-GENERAL')?.id
+  || (customers || []).find(item => /^umum(?:\s|\()/i.test(String(item.name || '').trim()))?.id
+  || '';
 
 export default function POSScreen() {
   const { db, scoped, completeSale, holdSale, findOpenShift, setCustomerDisplay, currentUser, branch, authorizeManagerPin } = usePos();
@@ -22,7 +25,7 @@ export default function POSScreen() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Semua');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [customerId, setCustomerId] = useState(scoped.customers[0]?.id || '');
+  const [customerId, setCustomerId] = useState(() => generalCustomerId(scoped.customers));
   const [saleType, setSaleType] = useState('retail');
   const [globalDiscount, setGlobalDiscount] = useState(0);
   const [pointsRedeemed, setPointsRedeemed] = useState(0);
@@ -50,7 +53,7 @@ export default function POSScreen() {
     const handleLoad = event => {
       const bill = event.detail;
       if (!bill) return;
-      setCart(bill.items || []); setCustomerId(bill.customerId || scoped.customers[0]?.id || '');
+      setCart(bill.items || []); setCustomerId(bill.customerId || generalCustomerId(scoped.customers));
       setSaleType(bill.saleType || 'retail'); setNotes(bill.note || ''); setHeldSaleId(bill.id); setGlobalDiscount(Number(bill.globalDiscount || 0)); setPointsRedeemed(Number(bill.pointsRedeemed || 0));
     };
     window.addEventListener('bm-load-bill', handleLoad);
@@ -64,7 +67,12 @@ export default function POSScreen() {
       (!term || product.name.toLowerCase().includes(term) || String(product.parentName || '').toLowerCase().includes(term) || String(product.variantName || '').toLowerCase().includes(term) || String(product.sku || '').toLowerCase().includes(term) || String(product.barcode || '').toLowerCase().includes(term) || String(product.sharedBarcode || '').toLowerCase().includes(term));
   })), [scoped.products, search, category, favoritesOnly]);
 
-  const customer = scoped.customers.find(item => item.id === customerId) || scoped.customers[0];
+  const defaultCustomerId = generalCustomerId(scoped.customers);
+  const customer = scoped.customers.find(item => item.id === customerId) || scoped.customers.find(item => item.id === defaultCustomerId) || null;
+  useEffect(() => {
+    if (customerId && scoped.customers.some(item => item.id === customerId)) return;
+    setCustomerId(defaultCustomerId);
+  }, [customerId, defaultCustomerId, scoped.customers]);
   const branchPaymentProfile = scoped.paymentProfile || null;
   const paymentDisplayConfig = {
     ...db.configs,

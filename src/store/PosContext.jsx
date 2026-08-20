@@ -43,6 +43,7 @@ import {
 import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
 import { dataUrlByteLength } from '../utils/assetProcessing.js';
 import { normalizeDbShape } from '../utils/dbShape.js';
+import { toEpochMs } from '../utils/temporal.js';
 import { buildClosingSummary } from '../services/dailyClosingReport.js';
 import { buildProductLifecycleSummary } from '../utils/productLifecycle.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
@@ -621,7 +622,7 @@ export function PosProvider({ children }) {
           10000,
           'Firebase terlalu lama merespons. Data lokal tetap digunakan.'
         );
-        const localView = overlayPendingOnRemote(loaded);
+        const localView = normalizeDbShape(overlayPendingOnRemote(normalizeDbShape(loaded, seedRef.current, APP_VERSION)), seedRef.current, APP_VERSION);
         dbRef.current = localView;
         setDb(localView);
         setLocalReady(true);
@@ -642,7 +643,7 @@ export function PosProvider({ children }) {
           loaded,
           profile,
           remoteDb => {
-            const merged = overlayPendingOnRemote(remoteDb);
+            const merged = normalizeDbShape(overlayPendingOnRemote(normalizeDbShape(remoteDb, seedRef.current, APP_VERSION)), seedRef.current, APP_VERSION);
             dbRef.current = merged;
             setDb(merged);
             setLocalReady(true);
@@ -774,8 +775,14 @@ export function PosProvider({ children }) {
       throw new Error(`Hak akses ${requiredPermission || action} tidak tersedia untuk akun ini.`);
     }
     const before = normalizeDbShape(dbRef.current, seedRef.current, APP_VERSION);
-    const next = clone(before);
-    const result = mutator(next);
+    const draft = clone(before);
+    const result = mutator(draft);
+    // Every local mutation is normalized before it becomes visible. This keeps
+    // timeline order deterministic even while fully offline and makes local,
+    // cached, and Firestore-realtime views behave identically. Sorting arrays
+    // does not create spurious sync operations because buildDiffOperations
+    // compares entity maps by ID rather than array position.
+    const next = normalizeDbShape(draft, seedRef.current, APP_VERSION);
     const operations = buildDiffOperations(before, next);
     if (!operations.length) return result;
     const mutationBaseId = generateId('SYNC');
@@ -1784,7 +1791,7 @@ export function PosProvider({ children }) {
           return {
             price: money(item.baseUnitCost ?? calculateBaseUnitCost(item.price, factor)),
             remaining: Math.max(0, Number(item.qty || 0) - returned),
-            date: new Date(purchase.updatedAt || purchase.createdAt || 0).getTime() || 0
+            date: toEpochMs(purchase.updatedAt || purchase.createdAt)
           };
         }))
       .filter(candidate => candidate.remaining > 0)
@@ -2388,7 +2395,7 @@ export function PosProvider({ children }) {
     const status = payload.status || existing?.status || (sale ? 'SOLD' : 'IN_STOCK');
     const soldAt = status === 'SOLD' ? (payload.soldAt || existing?.soldAt || sale?.createdAt || nowISO()) : (existing?.soldAt || '');
     let warrantyEndsAt = payload.warrantyEndsAt || existing?.warrantyEndsAt || '';
-    if (soldAt && warrantyMonths > 0 && (!warrantyEndsAt || payload.warrantyMonths != null)) { const end = new Date(soldAt); end.setMonth(end.getMonth() + warrantyMonths); warrantyEndsAt = end.toISOString(); }
+    if (soldAt && warrantyMonths > 0 && (!warrantyEndsAt || payload.warrantyMonths != null)) { const soldEpoch = toEpochMs(soldAt); if (soldEpoch) { const end = new Date(soldEpoch); end.setMonth(end.getMonth() + warrantyMonths); warrantyEndsAt = end.toISOString(); } }
     const item = { ...(existing || {}), ...payload, id: payload.id || generateId('SER'), branchId, serial, productId: product.id, productName: product.name, warrantyMonths, status, purchaseId: purchase?.id || payload.purchaseId || existing?.purchaseId || '', saleId: sale?.id || payload.saleId || existing?.saleId || '', customerId: sale?.customerId || payload.customerId || existing?.customerId || '', customerName: sale?.customerName || payload.customerName || existing?.customerName || '', soldAt, warrantyStartAt: soldAt || existing?.warrantyStartAt || '', warrantyEndsAt, createdAt: existing?.createdAt || nowISO(), updatedAt: nowISO(), createdBy: existing?.createdBy || currentUser.id };
     const index = (next.serialNumbers || []).findIndex(row => row.id === item.id);
     if (index >= 0) next.serialNumbers[index] = item; else next.serialNumbers.unshift(item);

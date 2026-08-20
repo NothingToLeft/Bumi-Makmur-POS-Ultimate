@@ -4,11 +4,12 @@ import { usePos } from '../store/PosContext.jsx';
 import { isToday, formatRp } from '../utils/helpers.js';
 import { calculateNetHpp } from '../utils/accounting.js';
 import { Card, EmptyState, PageHeader, StatusBadge, SummaryCard } from '../components/ui.jsx';
+import { formatDateTimeId, formatTimeId, sortNewest } from '../utils/temporal.js';
 
 export default function DashboardScreen() {
   const { scoped, currentUser, branch } = usePos();
   const stats = useMemo(() => {
-    const sales = scoped.sales.filter(sale => isToday(sale.createdAt || sale.date) && !['VOIDED'].includes(sale.status));
+    const sales = scoped.sales.filter(sale => isToday(sale.createdAt || sale.date) && !['VOID', 'VOIDED'].includes(String(sale.status || '').toUpperCase()));
     const revenue = sales.reduce((sum, sale) => sum + Number(sale.total || 0) - Number(sale.refundedTotal || 0), 0);
     const refunds = scoped.refunds.filter(refund => sales.some(sale => sale.id === refund.saleId));
     const hpp = calculateNetHpp(sales, refunds);
@@ -19,7 +20,8 @@ export default function DashboardScreen() {
     return { sales, revenue, hpp, expenses, lowStock, openReceivables, openPayables, profit: revenue - hpp - expenses };
   }, [scoped]);
 
-  const activeShift = scoped.shifts.find(item => item.status === 'OPEN');
+  const recentSales = useMemo(() => sortNewest(scoped.sales, ['completedAt', 'createdAt', 'date']).slice(0, 6), [scoped.sales]);
+  const activeShift = sortNewest(scoped.shifts.filter(item => item.status === 'OPEN'), ['startAt', 'createdAt'])[0] || null;
   const pendingOrders = scoped.orders.filter(item => ['NEW', 'PROCESSING'].includes(item.status));
 
   return (
@@ -36,12 +38,12 @@ export default function DashboardScreen() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="p-5 lg:col-span-2">
             <div className="flex items-center justify-between mb-4"><div><h2 className="font-bold text-gray-800">Transaksi Terbaru</h2><p className="text-sm text-gray-500">Aktivitas penjualan pada cabang aktif</p></div><ReceiptText className="text-emerald-600"/></div>
-            {scoped.sales.length === 0 ? <EmptyState title="Belum ada transaksi" /> : <div className="divide-y divide-gray-100">{scoped.sales.slice(0,6).map(sale => <div key={sale.id} className="py-3 flex justify-between items-center gap-3"><div className="min-w-0"><p className="font-bold text-sm text-gray-800 truncate">{sale.id}</p><p className="text-xs text-gray-500 truncate">{sale.customerName || 'Umum'} · {new Date(sale.createdAt || sale.date).toLocaleString('id-ID')}</p></div><div className="text-right shrink-0"><p className="font-bold text-emerald-600">{formatRp(sale.total)}</p><StatusBadge status={sale.status}/></div></div>)}</div>}
+            {recentSales.length === 0 ? <EmptyState title="Belum ada transaksi" /> : <div className="divide-y divide-gray-100">{recentSales.map(sale => <div key={sale.id} className="py-3 flex justify-between items-center gap-3"><div className="min-w-0"><p className="font-bold text-sm text-gray-800 truncate">{sale.id}</p><p className="text-xs text-gray-500 truncate">{sale.customerName || 'Umum'} · {formatDateTimeId(sale.completedAt || sale.createdAt || sale.date)}</p></div><div className="text-right shrink-0"><p className="font-bold text-emerald-600">{formatRp(sale.total)}</p><StatusBadge status={sale.status}/></div></div>)}</div>}
           </Card>
 
           <div className="space-y-4">
             <Card className="p-5">
-              <div className="flex gap-3"><div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${activeShift ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}><Clock3/></div><div><p className="font-bold text-gray-800">Status Shift</p><p className="text-sm text-gray-500">{activeShift ? `Aktif sejak ${new Date(activeShift.startAt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}` : 'Belum ada shift aktif'}</p></div></div>
+              <div className="flex gap-3"><div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${activeShift ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}><Clock3/></div><div><p className="font-bold text-gray-800">Status Shift</p><p className="text-sm text-gray-500">{activeShift ? `Aktif sejak ${formatTimeId(activeShift.startAt)}` : 'Belum ada shift aktif'}</p></div></div>
             </Card>
             <Card className="p-5">
               <div className="flex gap-3"><div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center"><ShoppingBag/></div><div><p className="font-bold text-gray-800">Pesanan Online</p><p className="text-sm text-gray-500">{pendingOrders.length} perlu ditangani</p></div></div>

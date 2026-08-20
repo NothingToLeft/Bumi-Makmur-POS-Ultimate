@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Clock3, MonitorSmartphone, QrCode, Wifi, WifiOff } from 'lucide-react';
 import { formatRp } from '../utils/helpers.js';
 import { formatQuantity } from '../utils/fractionalUnits.js';
+import { formatTimeId, toEpochMs } from '../utils/temporal.js';
 import { readCustomerDisplaySnapshot, subscribeCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
 
 export default function DesktopCustomerDisplayScreen() {
@@ -18,7 +19,7 @@ export default function DesktopCustomerDisplayScreen() {
     () => (snapshot.cart || []).reduce((sum, item) => sum + Number(item.qty || 0), 0),
     [snapshot.cart]
   );
-  const updatedAt = snapshot.updatedAt ? new Date(snapshot.updatedAt).getTime() : 0;
+  const updatedAt = toEpochMs(snapshot.updatedAt);
   const stale = Boolean(updatedAt && clock - updatedAt > 15000);
   const connectionLabel = snapshot.online === false
     ? 'Kasir offline'
@@ -75,7 +76,7 @@ export default function DesktopCustomerDisplayScreen() {
         <div className="rounded-2xl bg-black/25 border border-white/10 p-5 text-center">
           <p className="font-black">Terima kasih telah berbelanja</p>
           <p className="text-sm text-red-100 mt-1">Mohon periksa kembali barang dan nota sebelum meninggalkan toko.</p>
-          <p className="text-[11px] text-red-200/70 mt-3">{connectionLabel}{snapshot.updatedAt ? ` · ${new Date(snapshot.updatedAt).toLocaleTimeString('id-ID')}` : ''}</p>
+          <p className="text-[11px] text-red-200/70 mt-3">{connectionLabel}{snapshot.updatedAt ? ` · ${formatTimeId(snapshot.updatedAt)}` : ''}</p>
         </div>
       </aside>
     </main>

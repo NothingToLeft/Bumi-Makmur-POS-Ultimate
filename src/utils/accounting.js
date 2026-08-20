@@ -77,3 +77,50 @@ export function calculateNetPurchaseValue(purchases = []) {
       return sum + Math.max(0, numeric(purchase.total) - returned);
     }, 0);
 }
+
+function isVoidSale(sale) {
+  return ['VOID', 'VOIDED'].includes(String(sale?.status || '').toUpperCase());
+}
+
+function paymentName(payment) {
+  return String(payment?.name || payment?.type || 'Lainnya');
+}
+
+function isCashPayment(payment) {
+  const type = String(payment?.type || '').toLowerCase();
+  const name = paymentName(payment).toLowerCase();
+  return type === 'cash' || name === 'tunai' || name.startsWith('tunai ');
+}
+
+/**
+ * Breakdown pembayaran yang benar-benar menjadi penerimaan usaha.
+ * Nominal tunai yang diberikan pelanggan bisa lebih besar dari tagihan karena
+ * kembalian. Nilai kembalian tidak boleh muncul sebagai omzet/penerimaan tunai.
+ * Refund VOID juga tidak dikurangi lagi karena transaksi VOID sudah dikeluarkan.
+ */
+export function buildNetPaymentBreakdown(sales = [], refunds = []) {
+  const rows = {};
+  for (const sale of sales || []) {
+    if (isVoidSale(sale)) continue;
+    let remainingChange = Math.max(0, numeric(sale?.change));
+    for (const payment of sale?.payments || []) {
+      const name = paymentName(payment);
+      let applied = Math.max(0, numeric(payment?.amount));
+      if (isCashPayment(payment) && remainingChange > 0) {
+        const change = Math.min(applied, remainingChange);
+        applied -= change;
+        remainingChange -= change;
+      }
+      rows[name] = numeric(rows[name]) + applied;
+    }
+  }
+  for (const refund of refunds || []) {
+    if (String(refund?.type || '').toUpperCase() === 'VOID') continue;
+    const name = String(refund?.method || 'Tunai');
+    const payout = refund?.payoutAmount !== undefined
+      ? Math.max(0, numeric(refund.payoutAmount))
+      : Math.max(0, numeric(refund?.amount) - numeric(refund?.receivableReduction));
+    rows[name] = numeric(rows[name]) - payout;
+  }
+  return Object.fromEntries(Object.entries(rows).filter(([, amount]) => Math.abs(numeric(amount)) > 0.000001));
+}

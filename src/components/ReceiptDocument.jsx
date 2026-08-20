@@ -2,11 +2,9 @@ import React from 'react';
 import { formatRp } from '../utils/helpers.js';
 import { formatQuantity } from '../utils/fractionalUnits.js';
 import { getReceiptLogo, getReceiptPaymentSummary, receiptPaymentLabel } from '../services/receiptShare.js';
+import { formatDateTimeId } from '../utils/temporal.js';
 
-const dateText = value => {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleString('id-ID');
-};
+const dateText = value => formatDateTimeId(value, { fallback: '-' });
 
 function MoneyRow({ label, value, strong = false, danger = false }) {
   return <div className={`receipt-pro-row ${strong ? 'is-strong' : ''} ${danger ? 'is-danger' : ''}`}>
