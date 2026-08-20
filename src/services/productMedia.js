@@ -1,12 +1,72 @@
 import { getAiDeviceSettings } from './aiProductAssistant.js';
+import { requestGeminiGenerateContent } from './geminiRuntime.js';
 
 const MAX_QUERY = 180;
 const TARGET_BYTES = 52000;
 const MAX_BYTES = 90000;
 const MAX_EDGE = 256;
 const MAX_GROUNDED_SOURCES = 6;
+const SEARCH_CACHE_KEY = 'bmpos-product-image-search-cache-v1';
+const SEARCH_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const SEARCH_CACHE_LIMIT = 24;
 
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+
+function localStorageAvailable() {
+  try { return typeof localStorage !== 'undefined'; } catch { return false; }
+}
+
+function normalizeCacheQuery(value = '') {
+  return clean(value).toLocaleLowerCase('id-ID').slice(0, MAX_QUERY);
+}
+
+function readSearchCache() {
+  if (!localStorageAvailable()) return [];
+  try {
+    const rows = JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY) || '[]');
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSearchCache(rows = []) {
+  if (!localStorageAvailable()) return;
+  try { localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(rows.slice(0, SEARCH_CACHE_LIMIT))); } catch {}
+}
+
+function readCachedCandidates(query, now = Date.now()) {
+  const key = normalizeCacheQuery(query);
+  if (!key) return null;
+  const rows = readSearchCache();
+  const valid = rows.filter(row => Number(row?.expiresAt || 0) > now);
+  if (valid.length !== rows.length) writeSearchCache(valid);
+  const hit = valid.find(row => row?.key === key);
+  if (!hit || !Array.isArray(hit.candidates) || !hit.candidates.length) return null;
+  return {
+    query: clean(hit.query || query),
+    candidates: hit.candidates,
+    note: `Menggunakan ${hit.candidates.length} kandidat foto yang tersimpan di perangkat agar kuota Gemini tidak terpakai lagi.` ,
+    cached: true
+  };
+}
+
+function cacheCandidates(query, candidates = [], note = '', now = Date.now()) {
+  if (!Array.isArray(candidates) || !candidates.length) return;
+  const key = normalizeCacheQuery(query);
+  if (!key) return;
+  const safeCandidates = candidates.slice(0, 6).map(item => ({
+    id: clean(item.id), imageUrl: safeExternalUrl(item.imageUrl), sourcePageUrl: safeExternalUrl(item.sourcePageUrl),
+    sourceTitle: clean(item.sourceTitle).slice(0, 140), sourceDomain: clean(item.sourceDomain).slice(0, 120),
+    sourceType: clean(item.sourceType || 'ai-web'),
+    confidence: Math.max(0, Math.min(1, Number(item.confidence || 0)))
+  })).filter(item => item.imageUrl && item.sourcePageUrl);
+  if (!safeCandidates.length) return;
+  const rows = readSearchCache().filter(row => row?.key !== key && Number(row?.expiresAt || 0) > now);
+  rows.unshift({ key, query: clean(query), candidates: safeCandidates, note: clean(note).slice(0, 300), savedAt: now, expiresAt: now + SEARCH_CACHE_TTL_MS });
+  writeSearchCache(rows);
+}
 
 export function buildProductImageQuery(product = {}) {
   return clean([
@@ -180,17 +240,14 @@ async function findGroundedProductSources(query, settings) {
   if (!apiKey) throw new Error('Gemini API key belum diatur pada Pengaturan → AI & Otomasi.');
   const model = clean(settings?.model || 'gemini-2.5-flash').slice(0, 80);
   const prompt = `Cari halaman produk yang paling cocok untuk: "${query}". Fokus pada website resmi merek, distributor resmi, atau official store; marketplace tepercaya boleh menjadi fallback. Gunakan Google Search. Jangan mengarang URL. Tujuan pencarian hanya membantu kasir mengenali produk secara visual. Prioritaskan sumber yang jelas menampilkan model, watt, ukuran, atau spesifikasi yang sama.`;
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({
+  const payload = await requestGeminiGenerateContent({
+    apiKey, model, scope: 'Pencarian foto AI',
+    body: {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       tools: [{ google_search: {} }],
       generationConfig: { temperature: 0.05, maxOutputTokens: 500 }
-    })
+    }
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error?.message || `Gemini Search gagal (${response.status}).`);
   const sources = extractGroundingSources(payload);
   if (!sources.length) throw new Error('Gemini belum menemukan halaman produk yang dapat diverifikasi. Tambahkan merek, model, watt/ukuran, atau gunakan foto manual.');
   return sources;
@@ -199,7 +256,7 @@ async function findGroundedProductSources(query, settings) {
 async function callProductImageHelper(payload) {
   const response = await fetch(`${publicAppBase()}/api/product-image-search`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-BM-Client': 'product-media-v630' },
+    headers: { 'Content-Type': 'application/json', 'X-BM-Client': 'product-media-v631' },
     body: JSON.stringify(payload)
   });
   const result = await response.json().catch(() => ({}));
@@ -207,24 +264,51 @@ async function callProductImageHelper(payload) {
   return result;
 }
 
-export async function searchProductImageCandidates(query, settings = getAiDeviceSettings()) {
-  const normalizedQuery = clean(query).slice(0, MAX_QUERY);
-  if (normalizedQuery.length < 3) throw new Error('Isi nama/merek/varian produk terlebih dahulu.');
-  if (typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('Pencarian foto otomatis memerlukan internet. Foto manual tetap dapat dipakai saat offline.');
-
-  // API key hanya dikirim langsung dari perangkat ke Gemini. Cloudflare helper tidak pernah menerima key.
-  const sources = await findGroundedProductSources(normalizedQuery, settings);
-  const payload = await callProductImageHelper({ action: 'search', query: normalizedQuery, sources });
-  const candidates = (Array.isArray(payload.candidates) ? payload.candidates : []).map((item, index) => ({
+function normalizeCandidatePayload(payload = {}, sourceType = 'ai-web') {
+  return (Array.isArray(payload.candidates) ? payload.candidates : []).map((item, index) => ({
     id: item.id || `IMG-${index + 1}`,
     imageUrl: safeExternalUrl(item.imageUrl),
     sourcePageUrl: safeExternalUrl(item.sourcePageUrl),
     sourceTitle: clean(item.sourceTitle),
     sourceDomain: clean(item.sourceDomain),
+    sourceType: clean(item.sourceType || sourceType),
     confidence: Math.max(0, Math.min(1, Number(item.confidence || 0)))
   })).filter(item => item.imageUrl && item.sourcePageUrl);
+}
+
+export async function searchProductImageCandidates(query, settings = getAiDeviceSettings()) {
+  const normalizedQuery = clean(query).slice(0, MAX_QUERY);
+  if (normalizedQuery.length < 3) throw new Error('Isi nama/merek/varian produk terlebih dahulu.');
+  const cached = readCachedCandidates(normalizedQuery);
+  if (cached) return cached;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('Pencarian foto otomatis memerlukan internet. Foto manual tetap dapat dipakai saat offline.');
+
+  // API key hanya dikirim langsung dari perangkat ke Gemini. Cloudflare helper tidak pernah menerima key.
+  const sources = await findGroundedProductSources(normalizedQuery, settings);
+  const payload = await callProductImageHelper({ action: 'search', query: normalizedQuery, sources });
+  const candidates = normalizeCandidatePayload(payload);
   if (!candidates.length) throw new Error('Foto yang cukup meyakinkan belum ditemukan. Coba tambahkan merek, model, watt/ukuran, atau gunakan foto manual.');
-  return { query: normalizedQuery, candidates, note: clean(payload.note) };
+  cacheCandidates(normalizedQuery, candidates, payload.note);
+  return { query: normalizedQuery, candidates, note: clean(payload.note), cached: false };
+}
+
+export async function searchProductImageCandidatesFromSourceUrl(query, sourcePageUrl) {
+  const normalizedQuery = clean(query).slice(0, MAX_QUERY);
+  if (normalizedQuery.length < 3) throw new Error('Isi nama/merek/varian produk terlebih dahulu.');
+  if (typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('Pencarian dari link produk memerlukan internet.');
+  const sourceUrl = safeExternalUrl(sourcePageUrl);
+  if (!sourceUrl) throw new Error('Tempel link halaman produk yang valid (https://...).');
+  const payload = await callProductImageHelper({ action: 'search', query: normalizedQuery, sources: [{ url: sourceUrl, title: '' }] });
+  const candidates = normalizeCandidatePayload(payload, 'web-link');
+  if (!candidates.length) throw new Error('Halaman tersebut belum menyediakan gambar produk yang dapat diverifikasi. Coba link produk lain atau gunakan foto manual.');
+  cacheCandidates(normalizedQuery, candidates, payload.note);
+  return { query: normalizedQuery, candidates, note: `Ditemukan ${candidates.length} kandidat dari link produk tanpa memakai kuota Gemini.`, sourceFallback: true };
+}
+
+export function buildProductWebSearchUrl(query) {
+  const normalizedQuery = clean(query).slice(0, MAX_QUERY);
+  if (!normalizedQuery) return '';
+  return `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(normalizedQuery)}`;
 }
 
 export async function fetchProductImageCandidateDataUrl(candidate = {}) {

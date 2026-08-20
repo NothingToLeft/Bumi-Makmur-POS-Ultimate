@@ -131,7 +131,7 @@ async function fetchSourcePage(source) {
   try {
     const response = await safeFetch(source.url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BumiMakmurPOS/6.3; product-image-helper)' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BumiMakmurPOS/6.3.1; product-image-helper)' }
     });
     if (!response.ok) return null;
     const type = String(response.headers.get('content-type') || '').toLowerCase();
@@ -169,7 +169,7 @@ async function fetchSelectedImageDataUrl(imageUrl) {
   try {
     const response = await safeFetch(imageUrl, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BumiMakmurPOS/6.3; product-image-helper)' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BumiMakmurPOS/6.3.1; product-image-helper)' }
     });
     if (!response.ok) throw new Error(`Sumber gambar merespons ${response.status}.`);
     const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
@@ -225,7 +225,7 @@ export async function onRequestPost(context) {
     try {
       // Jangan jadikan endpoint ini proxy gambar umum. Gambar hanya boleh diambil
       // bila URL tersebut benar-benar ditemukan kembali pada halaman sumber yang
-      // sebelumnya diberikan Gemini grounding.
+      // sebelumnya dipilih atau ditemukan oleh perangkat.
       const sourcePage = await fetchSourcePage({ url: sourcePageUrl, title: '' });
       const allowedImages = new Set((sourcePage?.images || []).map(value => safeHttpUrl(value)).filter(Boolean));
       if (!allowedImages.has(imageUrl)) throw new Error('Gambar tidak lagi terverifikasi pada halaman sumber. Jalankan pencarian ulang.');
@@ -240,7 +240,7 @@ export async function onRequestPost(context) {
   const query = clean(body?.query).slice(0, 180);
   const sources = normalizeSources(body?.sources);
   if (query.length < 3) return json({ error: 'Nama produk terlalu pendek.' }, 400);
-  if (!sources.length) return json({ error: 'Gemini belum memberikan sumber produk yang dapat diverifikasi.' }, 400);
+  if (!sources.length) return json({ error: 'Belum ada sumber halaman produk yang dapat diverifikasi.' }, 400);
 
   const pages = (await Promise.all(sources.map(fetchSourcePage))).filter(Boolean);
   const rawCandidates = [];
@@ -270,7 +270,7 @@ export async function onRequestPost(context) {
     query,
     candidates,
     note: candidates.length
-      ? 'Pilih foto yang watt/ukuran/modelnya benar. API key Gemini tetap hanya berada di perangkat dan dikirim langsung ke Gemini; Cloudflare hanya membaca halaman sumber yang sudah ditemukan Gemini.'
-      : 'Google Search menemukan sumber, tetapi halaman tersebut tidak menyediakan gambar produk yang dapat dipakai sebagai kandidat.'
+      ? 'Pilih foto yang watt/ukuran/modelnya benar. Cloudflare hanya membaca halaman sumber yang dikirim perangkat dan tidak pernah menerima API key Gemini.'
+      : 'Halaman sumber ditemukan, tetapi belum menyediakan gambar produk yang dapat dipakai sebagai kandidat.'
   });
 }

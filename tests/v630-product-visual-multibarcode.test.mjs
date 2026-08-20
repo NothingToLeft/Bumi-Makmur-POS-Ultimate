@@ -26,7 +26,7 @@ const philips6 = {
   barcodes: [], prices: { retail: 35000 }
 };
 
-test('v6.3.0 keeps factory, internal, supplier, package, and shared barcodes distinct', () => {
+test('v6.3.1 keeps factory, internal, supplier, package, and shared barcodes distinct', () => {
   const entries = productBarcodeEntries(philips10);
   assert.equal(entries.find(item => item.code === '8719514345998')?.source, 'factoryBarcode');
   assert.equal(entries.find(item => item.code === 'BM-PHI-LED-010')?.source, 'internalBarcode');
@@ -127,8 +127,9 @@ test('product editor and cashier UI expose per-variant barcodes, package factors
 
 test('Gemini key goes directly to Gemini and never through the Cloudflare product-image helper', async () => {
   const media = await read('src/services/productMedia.js');
+  const runtime = await read('src/services/geminiRuntime.js');
   const fn = await read('functions/api/product-image-search.js');
-  assert.match(media, /generativelanguage\.googleapis\.com/);
+  assert.match(runtime, /generativelanguage\.googleapis\.com/);
   assert.match(media, /tools:\s*\[\{ google_search: \{\} \}\]/);
   assert.match(media, /API key hanya dikirim langsung dari perangkat ke Gemini/);
   assert.doesNotMatch(fn, /generativelanguage\.googleapis\.com|google_search|body\?\.apiKey|x-goog-api-key/);

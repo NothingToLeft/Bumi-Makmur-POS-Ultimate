@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.3.1 — AI Quota Resilience Patch
+
+- Menangani Gemini quota/rate-limit/API key/model/network/service error melalui shared runtime dan pesan Bahasa Indonesia.
+- Menambahkan anti-request-loop cooldown dan Tes Gemini manual.
+- Menambahkan cache kandidat foto 12 jam untuk menghemat quota.
+- Menambahkan fallback kandidat gambar dari link halaman produk tanpa Gemini.
+- Menambahkan Status Gemini + Diagnostik AI lokal tanpa API key.
+- Mempertahankan Spark-only, Cloudflare source verification, seluruh Product Visual & Multi-Barcode v6.3.0, dan kompatibilitas data lama.
+
 ## v6.0.3 — Cloud & Customer Display Stability
 
 - Memperbaiki queue offline lintas akun: mutation Karyawan tidak lagi dicoba memakai Auth Owner dan sebaliknya; queue akun lain tetap aman sampai pemiliknya login kembali.

@@ -1,5 +1,6 @@
 import { isNativeAndroid, recognizeTextFromImage } from './nativeDevice.js';
 import { findBestProductMatch, normalizeProductCode, normalizeProductText, parseProductTextLocally } from '../utils/aiProductParsing.js';
+import { clearGeminiRuntimeBlock, requestGeminiGenerateContent } from './geminiRuntime.js';
 
 export { findBestProductMatch, parseProductTextLocally } from '../utils/aiProductParsing.js';
 
@@ -25,8 +26,10 @@ export function getAiDeviceSettings() {
 }
 
 export function saveAiDeviceSettings(patch = {}) {
-  const next = { ...getAiDeviceSettings(), ...patch };
+  const current = getAiDeviceSettings();
+  const next = { ...current, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+  if ((Object.prototype.hasOwnProperty.call(patch, 'apiKey') && String(current.apiKey || '') !== String(next.apiKey || '')) || (Object.prototype.hasOwnProperty.call(patch, 'model') && String(current.model || '') !== String(next.model || ''))) clearGeminiRuntimeBlock();
   return next;
 }
 
@@ -141,16 +144,13 @@ export async function analyzeProductWithGemini({ dataUrl, ocrText = '', barcode 
   const imageData = comma >= 0 ? dataUrl.slice(comma + 1) : '';
   const parts = [{ text: prompt }];
   if (settings.sendImageToAi !== false && imageData) parts.push({ inlineData: { mimeType, data: imageData } });
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({
+  const payload = await requestGeminiGenerateContent({
+    apiKey, model, scope: 'Analisis foto produk',
+    body: {
       contents: [{ role: 'user', parts }],
       generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0.1 }
-    })
+    }
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error?.message || `Gemini gagal (${response.status}).`);
   const text = extractGeminiText(payload);
   if (!text) throw new Error('Gemini tidak mengembalikan hasil produk.');
   let result;
@@ -217,12 +217,9 @@ export async function testGeminiConnection(settings = getAiDeviceSettings()) {
   const apiKey = String(settings.apiKey || '').trim();
   if (!apiKey) throw new Error('Masukkan Gemini API key terlebih dahulu.');
   const model = String(settings.model || DEFAULT_AI_SETTINGS.model).trim();
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({ contents: [{ parts: [{ text: 'Balas hanya dengan BM-AI-OK' }] }], generationConfig: { temperature: 0 } })
+  const payload = await requestGeminiGenerateContent({
+    apiKey, model, scope: 'Tes koneksi Gemini', bypassCooldown: true,
+    body: { contents: [{ parts: [{ text: 'Balas hanya dengan BM-AI-OK' }] }], generationConfig: { temperature: 0 } }
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error?.message || `Koneksi Gemini gagal (${response.status}).`);
   return extractGeminiText(payload) || 'OK';
 }

@@ -33,7 +33,7 @@ const required = [
   'package.json', 'src/App.jsx', 'src/store/PosContext.jsx', 'src/services/firebase.js',
   'firestore.rules', 'firestore.indexes.json', 'public/manifest.webmanifest', 'public/sw.js',
   'public/_redirects', 'public/_headers', '.github/workflows/build-android.yml', '.github/workflows/build-windows.yml', 'electron/main.cjs', 'electron/preload.cjs',
-  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.1.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.2.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.0.md', 'functions/api/product-image-search.js'
+  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.1.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.2.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.1.md', 'CHANGELOG-Bumi-Makmur-POS-v6.3.1.md', 'QA-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'FINAL-RELEASE-CHECKLIST-v6.3.1.md', 'functions/api/product-image-search.js', 'src/services/geminiRuntime.js'
 ];
 for (const item of required) {
   try { await access(path.join(root, item)); } catch { errors.push(`File wajib hilang: ${item}`); }
@@ -112,7 +112,7 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '6.3.0') errors.push(`Versi package harus 6.3.0, ditemukan ${pkg.version}`);
+if (pkg.version !== '6.3.1') errors.push(`Versi package harus 6.3.1, ditemukan ${pkg.version}`);
 if (pkg.dependencies?.['firebase-functions']) errors.push('Dependency firebase-functions tidak boleh digunakan; backend Firebase harus tetap Spark-only.');
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 
@@ -122,7 +122,8 @@ if (Object.prototype.hasOwnProperty.call(firebaseJson, 'storage')) errors.push('
 
 const imageSearchFunction = await readFile(path.join(root, 'functions/api/product-image-search.js'), 'utf8');
 const productMedia = await readFile(path.join(root, 'src/services/productMedia.js'), 'utf8');
-if (!productMedia.includes('google_search') || !productMedia.includes('generativelanguage.googleapis.com')) errors.push('Pencarian foto produk belum memakai Gemini Google Search grounding langsung dari perangkat.');
+const geminiRuntime = await readFile(path.join(root, 'src/services/geminiRuntime.js'), 'utf8');
+if (!productMedia.includes('google_search') || !geminiRuntime.includes('generativelanguage.googleapis.com') || !geminiRuntime.includes('x-goog-api-key')) errors.push('Pencarian foto produk belum memakai Gemini Google Search grounding langsung dari perangkat melalui runtime lokal.');
 if (/generativelanguage\.googleapis\.com|google_search|body\?\.apiKey|apiKey\s*=/.test(imageSearchFunction)) errors.push('Cloudflare Pages Function tidak boleh menerima/menyimpan/meneruskan Gemini API key atau memanggil Gemini.');
 if (/firebase-functions|firebase\/functions/.test(imageSearchFunction)) errors.push('Cloudflare Pages Function tidak boleh bergantung Firebase Functions.');
 if (!/safeFetch|127\.0\.0\.1|localhost|isBlockedHostname/i.test(imageSearchFunction)) errors.push('Cloudflare Pages image helper belum menunjukkan SSRF/private-network guard.');

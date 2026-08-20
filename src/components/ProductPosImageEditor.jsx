@@ -1,16 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Camera, ImagePlus, Images, Loader2, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, Bot, Camera, ExternalLink, ImagePlus, Images, Link2, Loader2, Search, Trash2 } from 'lucide-react';
 import { Badge, Button, Card, Input } from './ui.jsx';
 import {
-  buildProductImageQuery, createCashierThumbnail, createCashierThumbnailFromDataUrl, fetchProductImageCandidateDataUrl,
-  normalizePosImage, searchProductImageCandidates
+  buildProductImageQuery, buildProductWebSearchUrl, createCashierThumbnail, createCashierThumbnailFromDataUrl,
+  fetchProductImageCandidateDataUrl, normalizePosImage, searchProductImageCandidates, searchProductImageCandidatesFromSourceUrl
 } from '../services/productMedia.js';
+import { describeGeminiError, getGeminiRuntimeStatus } from '../services/geminiRuntime.js';
 
 function sourceLabel(image) {
   if (!image) return 'Belum ada foto';
   if (image.sourceType === 'ai-web') return image.sourceDomain ? `AI/Web · ${image.sourceDomain}` : 'AI/Web';
+  if (image.sourceType === 'web-link') return image.sourceDomain ? `Web · ${image.sourceDomain}` : 'Web / Link Produk';
   if (image.sourceType === 'ai-capture') return 'Foto AI / Kamera';
   return 'Foto manual';
+}
+
+function aiStatusMeta(status = {}) {
+  if (status.status === 'ready') return { tone: 'green', label: 'Gemini siap' };
+  if (status.status === 'quota') return { tone: 'orange', label: 'Kuota dijeda' };
+  if (status.status === 'rate_limit') return { tone: 'orange', label: 'Rate limit' };
+  if (status.status === 'auth') return { tone: 'red', label: 'API key perlu dicek' };
+  if (status.status === 'model') return { tone: 'red', label: 'Model perlu dicek' };
+  if (status.status === 'service') return { tone: 'orange', label: 'Layanan dijeda' };
+  if (status.status === 'retry_available') return { tone: 'blue', label: 'Bisa dicoba lagi' };
+  return { tone: 'gray', label: 'Gemini belum diuji' };
 }
 
 export default function ProductPosImageEditor({ value, onChange, product = {}, title = 'Foto Produk untuk Kasir', compact = false }) {
@@ -18,17 +31,22 @@ export default function ProductPosImageEditor({ value, onChange, product = {}, t
   const cameraRef = useRef(null);
   const normalized = normalizePosImage(value);
   const [query, setQuery] = useState(() => buildProductImageQuery(product));
+  const [sourceUrl, setSourceUrl] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [aiIssue, setAiIssue] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const preview = normalized?.dataUrl || normalized?.url || '';
   const autoQuery = useMemo(() => buildProductImageQuery(product), [product.brand, product.name, product.parentName, product.variantName, product.model, product.specifications]);
   useEffect(() => { if (autoQuery) setQuery(autoQuery); }, [autoQuery]);
 
+  const runtimeStatus = getGeminiRuntimeStatus();
+  const runtimeMeta = aiStatusMeta(runtimeStatus);
+
   const pickFile = async file => {
     if (!file) return;
-    setBusy('photo'); setError(''); setNotice('Mengompres foto menjadi thumbnail ringan untuk Kasir...');
+    setBusy('photo'); setError(''); setAiIssue(null); setNotice('Mengompres foto menjadi thumbnail ringan untuk Kasir...');
     try {
       const image = await createCashierThumbnail(file, { sourceType: 'manual', query: autoQuery || query });
       onChange?.(image);
@@ -41,14 +59,41 @@ export default function ProductPosImageEditor({ value, onChange, product = {}, t
 
   const search = async () => {
     const finalQuery = String(query || autoQuery || '').trim();
-    setBusy('search'); setError(''); setNotice('Gemini sedang mencari sumber produk yang paling sesuai melalui Google Search...'); setCandidates([]);
+    setBusy('search'); setError(''); setAiIssue(null); setNotice('Mencari sumber produk yang paling sesuai...'); setCandidates([]);
     try {
       const result = await searchProductImageCandidates(finalQuery);
       setCandidates(result.candidates || []);
       setNotice(result.note || `Ditemukan ${result.candidates?.length || 0} kandidat. Pilih foto yang benar sebelum disimpan.`);
     } catch (searchError) {
-      setError(searchError.message || 'Foto produk tidak ditemukan.'); setNotice('');
+      if (searchError?.isGeminiError) {
+        const issue = describeGeminiError(searchError);
+        setAiIssue(issue);
+        setError(issue.userMessage);
+      } else {
+        setError(searchError.message || 'Foto produk tidak ditemukan.');
+      }
+      setNotice('');
     } finally { setBusy(''); }
+  };
+
+  const searchFromLink = async () => {
+    const finalQuery = String(query || autoQuery || '').trim();
+    setBusy('source'); setError(''); setNotice('Memeriksa gambar dari halaman produk tanpa memakai Gemini...'); setCandidates([]);
+    try {
+      const result = await searchProductImageCandidatesFromSourceUrl(finalQuery, sourceUrl);
+      setCandidates(result.candidates || []);
+      setAiIssue(null);
+      setNotice(result.note || `Ditemukan ${result.candidates?.length || 0} kandidat dari link produk.`);
+    } catch (sourceError) {
+      setError(sourceError.message || 'Link produk belum dapat digunakan.'); setNotice('');
+    } finally { setBusy(''); }
+  };
+
+  const openWebSearch = () => {
+    const url = buildProductWebSearchUrl(query || autoQuery);
+    if (!url) { setError('Isi nama/merek/varian produk terlebih dahulu.'); return; }
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!popup && !/Electron/i.test(navigator.userAgent || '')) setNotice('Pencarian web dibuka jika browser mengizinkan tab baru. Setelah menemukan halaman produk yang benar, salin link halaman lalu tempel di bawah.');
   };
 
   const chooseCandidate = async candidate => {
@@ -56,7 +101,8 @@ export default function ProductPosImageEditor({ value, onChange, product = {}, t
     try {
       const sourceDataUrl = await fetchProductImageCandidateDataUrl(candidate);
       const image = await createCashierThumbnailFromDataUrl(sourceDataUrl, {
-        sourceType: 'ai-web', sourcePageUrl: candidate.sourcePageUrl, sourceDomain: candidate.sourceDomain, query: query || autoQuery
+        sourceType: candidate.sourceType || 'ai-web', sourcePageUrl: candidate.sourcePageUrl,
+        sourceDomain: candidate.sourceDomain, query: query || autoQuery
       });
       if (!image) throw new Error('Kandidat foto tidak dapat diproses menjadi thumbnail Kasir.');
       onChange?.(image);
@@ -86,12 +132,28 @@ export default function ProductPosImageEditor({ value, onChange, product = {}, t
         <input ref={galleryRef} className="hidden" type="file" accept="image/*" onChange={event => { void pickFile(event.target.files?.[0]); event.target.value = ''; }}/>
 
         <div className="mt-4 rounded-2xl bg-white border p-3">
-          <div className="flex gap-2 items-start"><Bot size={18} className="text-violet-600 shrink-0 mt-1"/><div className="min-w-0 flex-1"><p className="font-black text-sm">Cari Foto Otomatis</p><p className="text-[11px] text-gray-500 mt-1">Nama, merek, model, dan varian dirangkai otomatis. Gemini memakai Google Search untuk mencari sumber produk, lalu kamu tetap memilih kandidat agar watt/ukuran tidak salah.</p></div></div>
+          <div className="flex gap-2 items-start"><Bot size={18} className="text-violet-600 shrink-0 mt-1"/><div className="min-w-0 flex-1"><div className="flex flex-wrap gap-2 items-center"><p className="font-black text-sm">Cari Foto Otomatis</p><Badge tone={runtimeMeta.tone}>{runtimeMeta.label}</Badge></div><p className="text-[11px] text-gray-500 mt-1">Nama, merek, model, dan varian dirangkai otomatis. Hasil yang sama disimpan sementara di perangkat agar pencarian ulang tidak menghabiskan kuota Gemini.</p></div></div>
           <div className="mt-3 flex flex-col sm:flex-row gap-2"><Input value={query} onChange={event => setQuery(event.target.value)} placeholder={autoQuery || 'Contoh: Philips LED Bulb 10W E27 6500K'}/><Button type="button" variant="secondary" onClick={() => void search()} disabled={Boolean(busy) || !(query || autoQuery).trim()} className="shrink-0">{busy === 'search' ? <Loader2 size={16} className="animate-spin"/> : <Search size={16}/>} Cari Otomatis</Button></div>
           {!query && autoQuery && <button type="button" className="text-[11px] text-violet-700 font-bold mt-2" onClick={() => setQuery(autoQuery)}>Gunakan: {autoQuery}</button>}
         </div>
+
+        {aiIssue && <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 p-3">
+          <div className="flex gap-2 items-start"><AlertTriangle size={18} className="text-orange-600 shrink-0 mt-0.5"/><div><p className="text-xs font-black text-orange-900">Pencarian AI sementara tidak tersedia</p><p className="text-[11px] text-orange-800 mt-1">Tidak ada data produk yang hilang. Kamu bisa tetap mengambil foto, memilih dari galeri, atau memakai fallback gratis di bawah.</p></div></div>
+          <div className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)_auto] gap-2 mt-3">
+            <Button type="button" size="sm" variant="outline" onClick={openWebSearch} disabled={Boolean(busy)}><ExternalLink size={15}/> Cari di Web</Button>
+            <Input value={sourceUrl} onChange={event => setSourceUrl(event.target.value)} placeholder="Tempel link halaman produk resmi / toko di sini"/>
+            <Button type="button" size="sm" variant="secondary" onClick={() => void searchFromLink()} disabled={Boolean(busy) || !sourceUrl.trim()}>{busy === 'source' ? <Loader2 size={15} className="animate-spin"/> : <Link2 size={15}/>} Ambil dari Link</Button>
+          </div>
+          <p className="text-[10px] text-orange-700 mt-2">Fallback link tidak memakai Gemini. Cloudflare hanya membaca metadata gambar dari halaman produk yang kamu pilih dan tetap memverifikasi sumber sebelum gambar dipakai.</p>
+        </div>}
+
+        {!aiIssue && <details className="mt-3 rounded-xl border border-gray-200 bg-white">
+          <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-bold text-gray-600 flex gap-2 items-center"><Link2 size={14}/> Fallback gratis: cari dari link halaman produk</summary>
+          <div className="border-t p-3"><p className="text-[11px] text-gray-500">Berguna jika Gemini sedang quota/rate-limit. Cari produk di web, salin URL halaman produknya, lalu tempel di sini.</p><div className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)_auto] gap-2 mt-2"><Button type="button" size="sm" variant="outline" onClick={openWebSearch} disabled={Boolean(busy)}><ExternalLink size={15}/> Cari di Web</Button><Input value={sourceUrl} onChange={event => setSourceUrl(event.target.value)} placeholder="https://... halaman produk"/><Button type="button" size="sm" variant="secondary" onClick={() => void searchFromLink()} disabled={Boolean(busy) || !sourceUrl.trim()}>{busy === 'source' ? <Loader2 size={15} className="animate-spin"/> : <Link2 size={15}/>} Ambil dari Link</Button></div></div>
+        </details>}
+
         {notice && <p className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-xl p-2 mt-3">{notice}</p>}
-        {error && <p className="text-xs font-bold text-red-700 bg-red-50 border border-red-100 rounded-xl p-2 mt-3">{error}</p>}
+        {error && <p className={`text-xs font-bold rounded-xl p-2 mt-3 ${aiIssue ? 'text-orange-800 bg-orange-50 border border-orange-200' : 'text-red-700 bg-red-50 border border-red-100'}`}>{error}</p>}
       </div>
     </div>
     {candidates.length > 0 && <div className="mt-4"><p className="font-black text-sm mb-2">Pilih foto yang paling sesuai</p><div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">{candidates.map(candidate => {

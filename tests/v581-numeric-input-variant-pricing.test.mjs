@@ -81,8 +81,8 @@ test('hotfix v5.8.1 tetap tercatat setelah upgrade v6', async () => {
   const [defaults, sw, settings, pkg] = await Promise.all([
     read('src/data/defaults.js'), read('public/sw.js'), read('src/screens/DeviceSettingsScreens.jsx'), read('package.json')
   ]);
-  assert.match(defaults, /APP_VERSION\s*=\s*'6\.3\.0'/);
-  assert.match(sw, /freesync-v6\.3\.0/);
+  assert.match(defaults, /APP_VERSION\s*=\s*'6\.3\.1'/);
+  assert.match(sw, /freesync-v6\.3\.1/);
   assert.match(settings, /Numeric Input & Variant Pricing Stability v5\.8\.1/);
-  assert.equal(JSON.parse(pkg).version, '6.3.0');
+  assert.equal(JSON.parse(pkg).version, '6.3.1');
 });

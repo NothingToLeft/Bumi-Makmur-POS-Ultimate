@@ -1,6 +1,6 @@
-# Bumi Makmur POS FreeSync v6.3.0 — Product Visual & Multi-Barcode
+# Bumi Makmur POS FreeSync v6.3.1 — AI Quota Resilience Patch
 
-Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.3.0 menambahkan **barcode pabrik + internal per varian**, **multi-barcode per SKU/satuan**, **label barcode massal dengan EAN-13 asli**, serta **foto produk ringan khusus halaman Kasir** dari kamera, galeri, atau pencarian otomatis Gemini + Google Search grounding. Seluruh hardening data v6.2.0, Unified AutoSync, AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan PDF closing profesional tetap dipertahankan.
+Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.3.1 mem-patch fitur Foto Produk agar **quota/rate-limit Gemini tidak lagi menampilkan error mentah atau memicu request berulang**, menambahkan **cache kandidat 12 jam**, **status/diagnostik AI lokal**, serta **fallback link halaman produk tanpa Gemini**. Seluruh Product Visual & Multi-Barcode v6.3.0, hardening data v6.2.0, Unified AutoSync, AI Product Capture, Smart Receiving, Smart Restock, PO parsial, quotation, serial & garansi, stock opname scanner, inventory aging, multi-unit/varian/bundle, approval PIN, Customer Display, dan PDF closing profesional tetap dipertahankan.
 
 ## Platform dan arsitektur
 
@@ -11,6 +11,16 @@ Satu source code untuk **Android HP/tablet, Web/PWA, dan Windows Desktop**. v6.3
 - **Offline:** IndexedDB, antrean mutasi tahan restart, cache login, dan rebase konflik lintas perangkat.
 - **Tanpa layanan berbayar:** tidak memakai Cloud Functions, Firebase Storage, Blaze, atau billing.
 
+
+
+## AI Quota Resilience v6.3.1
+
+- Error Gemini 429/`RESOURCE_EXHAUSTED`, rate-limit, API key, model, network, dan service error sekarang diterjemahkan menjadi pesan Bahasa Indonesia yang aman; pesan mentah provider hanya masuk Diagnostik AI lokal.
+- Runtime Gemini menahan request otomatis berulang selama cooldown sehingga tombol Cari Otomatis tidak terus menghabiskan request gagal. Tes Gemini manual tetap tersedia untuk memeriksa pemulihan.
+- Kandidat foto berhasil di-cache lokal selama 12 jam (maksimum 24 query per perangkat) agar pencarian produk yang sama tidak memakai quota grounding lagi.
+- Jika Gemini tidak tersedia, pengguna dapat **Cari di Web → salin link halaman produk → Ambil dari Link**. Jalur ini tidak memakai Gemini dan tetap melewati Cloudflare SSRF/source-verification guard.
+- Pengaturan → AI & Otomasi menampilkan status Gemini, waktu jeda, keberhasilan terakhir, dan Diagnostik AI lokal tanpa menyimpan API key.
+- Patch tidak mengubah Firestore schema/rules/indexes. Firebase tetap Auth + Firestore Spark tanpa Functions, Storage, atau Blaze.
 
 
 ## Product Visual & Multi-Barcode v6.3.0
@@ -260,13 +270,13 @@ Menu Promo tidak lagi ditampilkan dan transaksi baru tidak menerapkan promo otom
 ## Upload source melalui GitHub Desktop
 
 1. Backup JSON dan pastikan **Antrean Offline = 0**.
-2. Ekstrak ZIP v6.3.0.
+2. Ekstrak ZIP v6.3.1.
 3. Salin **seluruh isi** hasil ekstrak ke root repository lokal `Bumi-Makmur-POS-Ultimate` dan pilih **Replace files**.
 4. Pastikan `package.json`, `src`, `.github`, `firestore.rules`, dan `electron` berada langsung di root, bukan di subfolder baru.
 5. Commit yang disarankan:
 
 ```text
-Bumi Makmur POS v6.3.0 Product Visual & Multi-Barcode
+Bumi Makmur POS v6.3.1 AI Quota Resilience Patch
 ```
 
 6. Klik **Push origin**.
@@ -277,7 +287,7 @@ Bumi Makmur POS v6.3.0 Product Visual & Multi-Barcode
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.3.0
+→ Build Bumi Makmur POS v6.3.1
 → test-only
 ```
 
@@ -285,7 +295,7 @@ Pastikan core tests, audit statis, dan Vite build hijau.
 
 ### 2. Firestore Rules + Indexes
 
-**Rules logic tetap ruleset `BUMI_MAKMUR_RULESET_VERSION=6.1.0`, tetapi v6.3.0 mengubah `firestore.indexes.json`.** Jalankan sekali:
+**v6.3.1 tidak mengubah Rules/Indexes.** Rules logic tetap ruleset `BUMI_MAKMUR_RULESET_VERSION=6.1.0`; perubahan index thumbnail berasal dari v6.3.0. Jika index exemption v6.3.0 belum pernah dipublikasikan, jalankan sekali:
 
 ```text
 Actions
@@ -293,13 +303,13 @@ Actions
 → Run workflow
 ```
 
-Workflow tetap Spark-only dan hanya men-deploy `firestore:rules,firestore:indexes`. Deploy ini menerapkan index exemption thumbnail Kasir.
+Jika deployment index v6.3.0 sudah pernah hijau, langkah ini boleh dilewati untuk v6.3.1. Workflow tetap Spark-only dan hanya men-deploy `firestore:rules,firestore:indexes`.
 
 ### 3. Android
 
 ```text
 Actions
-→ Build Bumi Makmur POS v6.3.0
+→ Build Bumi Makmur POS v6.3.1
 → android-release
 ```
 
@@ -309,11 +319,11 @@ Instal APK langsung di atas versi lama. **Jangan uninstall**, agar data lokal da
 
 ```text
 Actions
-→ Build Bumi Makmur POS Desktop v6.3.0
+→ Build Bumi Makmur POS Desktop v6.3.1
 → windows-release
 ```
 
-EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.3.0**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
+EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.3.1**. Cloudflare Pages memperbarui Web otomatis setelah push ke `main`.
 
 ## Uji penerimaan minimum
 
@@ -330,27 +340,27 @@ EXE, MSI, checksum, APK, dan AAB akan dipublikasikan ke **GitHub Releases v6.3.0
 
 Installer belum memakai sertifikat code-signing komersial. Windows SmartScreen dapat menampilkan peringatan publisher tidak dikenal pada pemasangan pertama. Unduh hanya dari GitHub Releases repository sendiri dan cocokkan SHA-256.
 
-## Release acceptance v6.3.0
+## Release acceptance v6.3.1
 
 Full-pass source audit final pada 20 Agustus 2026 menghasilkan:
 
-- **249/249 automated core/regression tests PASS**.
-- Static project audit **PASS**.
-- TypeScript transpile/syntax pass seluruh source: **0 diagnostics**.
-- Electron main/preload dan Cloudflare Function Node syntax **PASS**.
+- **253/253 automated core/regression tests PASS**.
+- Static project audit **PASS** untuk 121 file JS/JSX/MJS dan konfigurasi Spark/security.
+- Independent TypeScript transpile/syntax validation: **68 file, 0 diagnostics**.
+- Electron main/preload dan Cloudflare Pages Function Node syntax **PASS**.
 - GitHub Actions YAML dan JSON konfigurasi **PASS**.
 - Firebase Spark-only + secret guard **PASS**.
-- Production `npm install` lokal tidak dapat diselesaikan karena registry tidak merespons dalam batas waktu container; GitHub Actions/Cloudflare tetap final compilation gate.
+- Production `npm install` lokal dicoba kembali tetapi registry npm tetap timeout dan `node_modules` tidak terbentuk; karena itu Vite production bundle tidak diklaim PASS secara lokal. GitHub Actions/Cloudflare Pages tetap final dependency-install + compilation gate.
 
 Acceptance flow produksi yang disarankan setelah push:
 
 1. Backup JSON. **Jangan hapus antrean offline yang masih ada.**
-2. Jalankan **Deploy Firebase Spark Rules** sekali setelah upload v6.3.0 untuk menerapkan index exemption foto; rules logic tetap v6.1.0.
+2. Jika Firestore index exemption foto dari v6.3.0 **belum pernah** dipublikasikan, jalankan **Deploy Firebase Spark Rules** sekali. v6.3.1 sendiri tidak mengubah rules/indexes.
 3. Login dengan akun yang membuat mutation tertunda dan tekan **Sinkronkan Sekarang** sampai antrean akun tersebut 0.
-4. Jalankan Android workflow `test-only` sampai hijau.
-5. Deploy Web, lalu uji Owner ↔ Karyawan dan `Layar Pelanggan → Buka Layar 2`.
-6. Jalankan `android-release`; APK/AAB dipublikasikan ke GitHub Releases.
-7. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases.
-8. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, dan refund transaksi tempo.
+4. Jalankan workflow Android `test-only` v6.3.1 sampai hijau; ini menjadi production Vite compilation gate pertama.
+5. Tunggu Cloudflare Pages hijau, lalu smoke test `Cari Foto Otomatis`, error quota, fallback link produk, Owner ↔ Karyawan, dan `Layar Pelanggan → Buka Layar 2`.
+6. Jalankan `android-release`; APK/AAB dipublikasikan ke GitHub Releases v6.3.1.
+7. Jalankan Windows `test-only`, lalu `windows-release`; EXE/MSI dipublikasikan ke GitHub Releases v6.3.1.
+8. Smoke test fisik: Infinix Note 40 Pro+, Huawei MatePad SE 11, printer toko, Windows, QRIS, offline→reconnect, PO partial, serial/warranty, refund transaksi tempo, Kamera/Galeri, serta fallback foto tanpa Gemini.
 
-Lihat `QA-REPORT-Bumi-Makmur-POS-v6.3.0.md` untuk coverage barcode, foto Kasir, image-search security, data integrity, dan regression suite. Container audit tidak memiliki registry dependency/Android SDK, sehingga binary native tidak diklaim lulus secara lokal; GitHub Actions adalah production build gate.
+Lihat `QA-REPORT-Bumi-Makmur-POS-v6.3.1.md`, `BUILD-REPORT-Bumi-Makmur-POS-v6.3.1.md`, dan `RELEASE-NOTES-Bumi-Makmur-POS-v6.3.1.md` untuk gate lengkap. Binary native tidak diklaim lulus secara lokal karena dependency registry/Android SDK tidak tersedia pada container; GitHub Actions adalah production binary gate.
