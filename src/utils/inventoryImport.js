@@ -272,6 +272,7 @@ export function buildInventoryImportPlan(rawRows = [], { products = [], categori
 export async function parseInventoryFile(file) {
   const name = lower(file?.name);
   if (!file) throw new Error('Pilih file terlebih dahulu.');
+  if (Number(file.size || 0) > 10 * 1024 * 1024) throw new Error('File impor melebihi 10 MB. Bagi impor menjadi beberapa berkas lebih kecil.');
   if (name.endsWith('.csv') || name.endsWith('.txt')) return rowsToObjects(parseCsvText(await file.text()));
   if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
     const XLSX = await import('xlsx');

@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { ReceiptText, RotateCcw, Ban, Printer, MessageCircle, Share2, ArrowUpDown, Clock3, UserRound } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { ReceiptText, RotateCcw, Ban, Printer, MessageCircle, Share2, ArrowUpDown, Clock3, UserRound, Download } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
-import { formatRp, printHtmlDocument } from '../utils/helpers.js';
+import { downloadFile, formatRp, localDateKey, printHtmlDocument } from '../utils/helpers.js';
+import { buildTransactionsCsv } from '../utils/csvExport.js';
 import { formatQuantity, normalizeQuantity, quantityStepLabel } from '../utils/fractionalUnits.js';
+import { remainingSaleLineQty } from '../utils/saleLines.js';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, NumberInput, PageHeader, SearchBox, Select, StatusBadge, Textarea } from '../components/ui.jsx';
 import { buildReceiptPrintHtml, getReceiptPaymentSummary, openWhatsappReceipt, receiptPaymentLabel, shareReceipt } from '../services/receiptShare.js';
 import { formatDateTimeId, sortNewest, sortOldest } from '../utils/temporal.js';
@@ -55,9 +57,11 @@ export default function TransactionsScreen(){
    return sortNewest(filtered,transactionTimeFields);
  },[scoped.sales,search,status,sortMode]);
  const canRefund=hasPermission('transactions.refund'); const canVoid=hasPermission('transactions.void');
- const process=async data=>{try{await refundSale(data);setRefundMode(null);setSelected(null);alert(data.voidAll?'Transaksi dibatalkan.':'Refund berhasil.')}catch(e){alert(e.message)}};
+ const exportCsv=()=>downloadFile(`Transaksi-Bumi-Makmur-${localDateKey()}.csv`,buildTransactionsCsv(rows,{cashierName:sale=>userNames.get(String(sale.createdBy||sale.userId||''))||sale.cashierName||''}),'text/csv;charset=utf-8');
+ const processingRef=useRef(false);
+ const process=async data=>{if(processingRef.current)return;processingRef.current=true;try{await refundSale(data);setRefundMode(null);setSelected(null);alert(data.voidAll?'Transaksi dibatalkan.':'Refund berhasil.')}catch(e){alert(e.message)}finally{processingRef.current=false}};
  return <div className="h-full flex flex-col bg-gray-50 generic-bg">
-   <PageHeader title="Transaksi, Refund & Void" subtitle="Riwayat pembayaran tersusun kronologis, cetak ulang, refund penuh/sebagian, dan pembatalan"/>
+   <PageHeader title="Transaksi, Refund & Void" subtitle="Riwayat pembayaran tersusun kronologis, cetak ulang, refund penuh/sebagian, dan pembatalan" actions={hasPermission('reports.view')&&<Button variant="secondary" onClick={exportCsv} disabled={!rows.length}><Download size={17}/> Ekspor CSV ({rows.length})</Button>}/>
    <div className="p-4 md:p-6 flex-1 overflow-y-auto pb-24 md:pb-6">
      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_220px_220px] gap-3 mb-3">
        <SearchBox value={search} onChange={setSearch} placeholder="Cari invoice, pelanggan, barang, barcode, atau pembayaran..."/>
@@ -137,8 +141,7 @@ function TransactionDetail({sale,configs,refunds,canRefund,canVoid,onClose,onRef
 function RefundModal({ sale, refunds, serialNumbers = [], voidAll, onClose, onSubmit }) {
   const refundedSerialIds = new Set((refunds || []).flatMap(refund => (refund.items || []).flatMap(item => item.serialIds || [])));
   const [items, setItems] = useState(() => sale.items.map(line => {
-    const refunded = (refunds || []).reduce((sum, refund) => sum + refund.items.filter(item => item.lineId === line.lineId || item.productId === line.productId).reduce((itemSum, item) => itemSum + Number(item.qty || 0), 0), 0);
-    const maxQty = Math.max(0, Number(line.qty) - refunded);
+    const maxQty = remainingSaleLineQty(line, refunds);
     const originalSerialIds = (line.serialIds || []).filter(id => !refundedSerialIds.has(id));
     const serialOptions = originalSerialIds.map(id => serialNumbers.find(row => row.id === id)).filter(Boolean).filter(row => row.saleId === sale.id && row.status === 'SOLD');
     const basePerQty = Number(line.baseQty || line.qty || 0) / Math.max(0.000001, Number(line.qty || 0));
@@ -181,7 +184,7 @@ function RefundModal({ sale, refunds, serialNumbers = [], voidAll, onClose, onSu
       <Card className="p-3 bg-red-50"><p className="text-xs text-red-700">Perkiraan nilai item refund</p><p className="font-black text-xl text-red-800">{formatRp(amount)}</p><p className="text-[11px] text-red-600 mt-1">Nominal final mengikuti diskon, pajak, dan pembulatan transaksi asli.</p></Card>
       <div className="space-y-2">{items.map((item, index) => {
         const requiredSerials = item.serialTracking ? Math.max(0, Math.round(Number(item.qty || 0) * Number(item.basePerQty || 1))) : 0;
-        return <Card key={item.lineId} className="p-3">
+        return <Card key={item.lineId || `${item.productId}-${index}`} className="p-3">
           <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_120px] gap-2 items-center"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">Maksimal {formatQuantity(item.maxQty)} {item.unit}</p></div><NumberInput inputMode="decimal" min="0" max={item.maxQty} step={item.step} disabled={voidAll} value={item.qty} title={item.step < 1 ? quantityStepLabel(item.step, item.unit) : undefined} onValueChange={value => updateQty(index, value)}/></div>
           {item.serialTracking && Number(item.qty || 0) > 0 && <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3"><p className="text-xs font-black text-violet-900">Serial yang dikembalikan ({(item.serialIds || []).length}/{requiredSerials})</p>{item.serialOptions.length === 0 ? <p className="text-xs text-red-700 mt-2">Tidak ada serial SOLD yang tersedia. Jika serial sedang dalam proses garansi, selesaikan klaim terlebih dahulu.</p> : <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">{item.serialOptions.map(serial => <label key={serial.id} className="flex items-center gap-2 bg-white border rounded-lg p-2 text-xs"><input type="checkbox" checked={(item.serialIds || []).includes(serial.id)} disabled={voidAll} onChange={() => toggleSerial(index, serial.id)}/><span className="font-bold break-all">{serial.serial}</span></label>)}</div>}</div>}
         </Card>;

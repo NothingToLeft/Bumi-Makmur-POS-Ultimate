@@ -559,3 +559,7 @@
 - Cloudflare Pages untuk web dan PC PWA.
 - Direct Firestore atomic mutation, idempotency receipt, conflict rebase, dan audit log.
 - Persistent multi-tab cache serta offline queue terenkripsi.
+
+## v6.4.2 (11 Oct 2026, candidate)
+
+Claude reviewed productivity enhancements retained: command palette, dashboard insights, cash counter and CSV export. Additional fix for per-line refund modal, QRIS duplicate-session guard in same checkout, short-lived local Manager approval tickets, CSV formula prefix and inventory import size limit. Source version/PWA cache consistency. See `RELEASE-NOTES-Bumi-Makmur-POS-v6.4.2.md`; not yet signed or deployed.

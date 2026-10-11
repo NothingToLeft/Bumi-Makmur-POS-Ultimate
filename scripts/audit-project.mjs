@@ -41,10 +41,10 @@ const required = [
   'FINAL-RELEASE-CHECKLIST-v6.4.0.md', 'docs/IMPLEMENTATION-NOTES-v6.4.0.md',
   'docs/QRIS-PAYMENT-ASSURANCE-API-v6.4.0.md', 'docs/QRIS-SOURCE-AUDIT-v6.4.0.md',
   'docs/FOLDER-STRUCTURE-v6.4.0.md', 'THIRD-PARTY-NOTICES.md',
-  'RELEASE-NOTES-Bumi-Makmur-POS-v6.4.1.md', 'CHANGELOG-Bumi-Makmur-POS-v6.4.1.md',
-  'QA-REPORT-Bumi-Makmur-POS-v6.4.1.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.4.1.md',
-  'FINAL-RELEASE-CHECKLIST-v6.4.1.md', 'docs/IMPLEMENTATION-NOTES-v6.4.1.md',
-  'docs/FOLDER-STRUCTURE-v6.4.1.md'
+  'RELEASE-NOTES-Bumi-Makmur-POS-v6.4.2.md', 'CHANGELOG-Bumi-Makmur-POS-v6.4.2.md',
+  'QA-REPORT-Bumi-Makmur-POS-v6.4.2.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.4.2.md',
+  'FINAL-RELEASE-CHECKLIST-v6.4.2.md', 'docs/IMPLEMENTATION-NOTES-v6.4.2.md',
+  'docs/FOLDER-STRUCTURE-v6.4.2.md'
 ];
 for (const item of required) {
   try { await access(path.join(root, item)); } catch { errors.push(`File wajib hilang: ${item}`); }
@@ -117,7 +117,7 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '6.4.1') errors.push(`Versi package harus 6.4.1, ditemukan ${pkg.version}`);
+if (pkg.version !== '6.4.2') errors.push(`Versi package harus 6.4.2, ditemukan ${pkg.version}`);
 if (pkg.dependencies?.['firebase-functions']) errors.push('Dependency firebase-functions tidak boleh digunakan; backend Firebase harus tetap Spark-only.');
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 

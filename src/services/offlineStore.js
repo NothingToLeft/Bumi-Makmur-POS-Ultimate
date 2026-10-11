@@ -314,13 +314,57 @@ export async function cacheOfflineCredential(storeCode, pin, profile, cloudCrede
   return true;
 }
 
+// Pembatasan percobaan PIN. PIN 4 digit hanya punya 10.000 kombinasi, sehingga tanpa
+// pembatasan PIN Owner/Manager (termasuk PIN persetujuan diskon) dapat ditebak lewat UI.
+// Kunci jeda bersifat per perangkat+toko dan eskalatif; berhasil login mereset hitungan.
+const PIN_LOCK_STEPS = [
+  { failures: 10, lockMs: 5 * 60 * 1000 },
+  { failures: 8, lockMs: 2 * 60 * 1000 },
+  { failures: 5, lockMs: 30 * 1000 }
+];
+
+function pinGuardKey(storeKey) { return `pin-guard:${storeKey}`; }
+
+function createPinLockedError(remainingMs) {
+  const seconds = Math.max(1, Math.ceil(remainingMs / 1000));
+  const label = seconds >= 60 ? `${Math.ceil(seconds / 60)} menit` : `${seconds} detik`;
+  const error = new Error(`Terlalu banyak PIN salah. Coba lagi dalam ${label}.`);
+  error.code = 'PIN_LOCKED';
+  error.retryAfterMs = remainingMs;
+  return error;
+}
+
+async function assertPinNotLocked(storeKey) {
+  const state = await cacheGet(pinGuardKey(storeKey)).catch(() => null);
+  const remaining = Number(state?.lockedUntil || 0) - Date.now();
+  if (remaining > 0) throw createPinLockedError(remaining);
+}
+
+async function recordPinFailure(storeKey) {
+  const state = (await cacheGet(pinGuardKey(storeKey)).catch(() => null)) || {};
+  const failures = Number(state.failures || 0) + 1;
+  const step = PIN_LOCK_STEPS.find(item => failures >= item.failures);
+  await cachePut(pinGuardKey(storeKey), {
+    failures,
+    lockedUntil: step ? Date.now() + step.lockMs : 0,
+    updatedAt: new Date().toISOString()
+  }).catch(() => false);
+}
+
+async function clearPinFailures(storeKey) {
+  const state = await cacheGet(pinGuardKey(storeKey)).catch(() => null);
+  if (state?.failures) await cacheDelete(pinGuardKey(storeKey)).catch(() => false);
+}
+
 export async function verifyOfflineLogin(storeCode, pin, options = {}) {
   if (!/^\d{4}$/.test(String(pin || ''))) return null;
   const key = normalizeStoreKey(storeCode);
+  await assertPinNotLocked(key);
   const expectedRole = String(options.expectedRole || 'any');
   const expectedLoginName = normalizeEmployeeLoginName(options.loginName || '');
   const expectedBranchId = String(options.branchId || '');
   const credentials = (await cacheGet(`credentials:${key}`)) || [];
+  let compared = false;
   for (const record of credentials) {
     if (!record?.active || !record?.profile?.id) continue;
     if (record.expiresAt && new Date(record.expiresAt).getTime() < Date.now()) continue;
@@ -332,14 +376,18 @@ export async function verifyOfflineLogin(storeCode, pin, options = {}) {
       if (profileLoginName !== expectedLoginName) continue;
     }
     if (expectedBranchId && profile.branchId !== expectedBranchId) continue;
+    compared = true;
     const candidate = await hashPin(pin, record.pinSalt, record.pinIterations || 180000);
     if (candidate === record.pinHash) {
+      await clearPinFailures(key);
       return {
         profile: clone(profile),
         cloudCredential: await decryptCloudCredential(key, pin, record.cloudCredential)
       };
     }
   }
+  // Hanya PIN yang benar-benar dibandingkan dan tidak cocok yang dihitung sebagai percobaan gagal.
+  if (compared) await recordPinFailure(key);
   return null;
 }
 

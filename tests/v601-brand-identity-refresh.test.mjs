@@ -12,15 +12,15 @@ test('v6.1.0 memakai logo resmi Bumi Makmur 2 pada aset global', async () => {
     text('package.json'), text('VERSION.txt'), text('public/logo-bm.svg'), text('public/icon.svg'),
     text('src/data/defaults.js'), text('src/App.jsx'), text('src/screens/LoginScreen.jsx'), text('public/sw.js')
   ]);
-  assert.equal(JSON.parse(pkg).version, '6.4.1');
-  assert.equal(version.trim(), '6.4.1');
+  assert.equal(JSON.parse(pkg).version, '6.4.2');
+  assert.equal(version.trim(), '6.4.2');
   assert.match(logoSvg, /Bumi Makmur 2/);
   assert.match(logoSvg, /data:image\/png;base64/);
   assert.match(iconSvg, /data:image\/png;base64/);
   assert.match(defaults, /receiptLogo: '\/logo-bm\.svg'/);
   assert.match(app, /src="\/logo-bm\.svg"/);
   assert.match(login, /src="\/logo-bm\.svg"/);
-  assert.match(sw, /freesync-v6\.4\.1/);
+  assert.match(sw, /freesync-v6\.4\.2/);
 });
 
 test('aset launcher, maskable, splash, master, dan Windows icon tersedia', async () => {

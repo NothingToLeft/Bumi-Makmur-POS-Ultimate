@@ -21,6 +21,7 @@ import PublicReceiptScreen from './screens/PublicReceiptScreen.jsx';
 import DesktopCustomerDisplayScreen from './screens/DesktopCustomerDisplayScreen.jsx';
 import BusinessToolsScreen from './screens/BusinessToolsScreen.jsx';
 import ScreenErrorBoundary from './components/ScreenErrorBoundary.jsx';
+import CommandPalette from './components/CommandPalette.jsx';
 
 export default function App(){const params=new URLSearchParams(window.location.search);if(params.get('desktopDisplay')==='1')return <DesktopCustomerDisplayScreen/>;const match=window.location.pathname.match(/^\/receipt\/([^/]+)/);if(match)return <PublicReceiptScreen token={decodeURIComponent(match[1])}/>;return <PosProvider><AppShell/></PosProvider>}
 
@@ -29,7 +30,7 @@ function AppShell(){
  const requestedScreen=new URLSearchParams(window.location.search).get('screen');
  const activeBranch=db.branches.find(item=>item.id===branchId)||db.branches[0];
  const storeName=activeBranch?.name||db.configs.companyName||'BUMI MAKMUR';
- const [active,setActive]=useState(requestedScreen || (currentUser?.role==='kasir'?'pos':'dashboard')); const[more,setMore]=useState(false); const[cloudRetrying,setCloudRetrying]=useState(false); const[cloudRetryMessage,setCloudRetryMessage]=useState('');
+ const [active,setActive]=useState(requestedScreen || (currentUser?.role==='kasir'?'pos':'dashboard')); const[more,setMore]=useState(false); const[cloudRetrying,setCloudRetrying]=useState(false); const[cloudRetryMessage,setCloudRetryMessage]=useState(''); const[paletteOpen,setPaletteOpen]=useState(false);
  const allowed=useMemo(()=>currentUser?MODULES.filter(module=>can(currentUser,module.permission)):[],[currentUser]);
  useEffect(()=>{
   if(db.configs.cameraPermissionOnStartup!==false) void requestStartupCameraPermission();
@@ -42,6 +43,12 @@ function AppShell(){
  useEffect(() => {
   if (currentUser && !allowed.some(module => module.id === active)) setActive(allowed[0]?.id || 'pos');
  }, [currentUser, active, allowed]);
+ useEffect(()=>{
+  if(!currentUser)return undefined;
+  const onKey=event=>{if((event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&String(event.key).toLowerCase()==='k'){event.preventDefault();setPaletteOpen(open=>!open);}};
+  window.addEventListener('keydown',onKey);
+  return()=>window.removeEventListener('keydown',onKey);
+ },[currentUser]);
  if(!currentUser)return <LoginScreen/>;
  if(initializingApp&&!dataReady)return <CloudLoadingScreen storeName={storeName}/>;
  const navigate=id=>{setActive(id);setMore(false)};
@@ -69,7 +76,7 @@ function AppShell(){
     </div>
    </div>
    <nav className="flex-1 overflow-y-auto p-2 lg:p-3 space-y-3 custom-scrollbar">{Object.entries(allowed.reduce((groups,module)=>{(groups[module.group||'Menu']??=[]).push(module);return groups;},{})).map(([group,modules])=><div key={group}><p className="hidden lg:block px-3 pb-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400">{group}</p><div className="space-y-1">{modules.map(module=>{const Icon=module.icon;return <button key={module.id} title={module.label} onClick={()=>navigate(module.id)} className={`w-full min-h-[46px] rounded-xl flex items-center justify-center lg:justify-start gap-3 px-3 transition-colors ${active===module.id?'bg-emerald-600 text-white shadow-md':'text-emerald-100 hover:bg-emerald-800'}`}><Icon size={20}/><span className="hidden lg:block font-bold text-sm whitespace-nowrap">{module.label}</span></button>})}</div></div>)}</nav>
-   <div className="p-2 lg:p-3 border-t border-emerald-800"><button onClick={logout} className="w-full min-h-[48px] rounded-xl bg-red-500/10 text-red-100 hover:bg-red-500 flex items-center justify-center lg:justify-start gap-3 px-3"><LogOut size={20}/><span className="hidden lg:block font-bold">Keluar</span></button></div>
+   <div className="p-2 lg:p-3 border-t border-emerald-800"><button onClick={()=>setPaletteOpen(true)} className="hidden lg:flex w-full min-h-[44px] mb-2 rounded-xl bg-white/10 text-emerald-50 hover:bg-white/20 items-center gap-3 px-3 text-sm" title="Cari menu (Ctrl+K)">Cari menu<kbd className="ml-auto text-[10px] font-bold opacity-70 border border-white/30 rounded px-1.5 py-0.5">Ctrl K</kbd></button><button onClick={logout} className="w-full min-h-[48px] rounded-xl bg-red-500/10 text-red-100 hover:bg-red-500 flex items-center justify-center lg:justify-start gap-3 px-3"><LogOut size={20}/><span className="hidden lg:block font-bold">Keluar</span></button></div>
   </aside>
   <main className="flex-1 min-w-0 h-full flex flex-col bg-gray-50 main-content-bg relative">
    {cloudSaving&&<div className="absolute top-2 left-1/2 -translate-x-1/2 z-[120] bg-emerald-900 text-white px-4 py-2 rounded-full shadow-xl text-xs font-bold flex items-center gap-2"><CloudUpload size={15} className="animate-pulse"/>Menyinkronkan {activePendingSyncCount>0?`${activePendingSyncCount} pembaruan akun aktif`:''}</div>}
@@ -81,6 +88,7 @@ function AppShell(){
    <nav className="md:hidden bg-white border-t border-gray-200 flex items-center justify-around px-1 pb-safe bottom-nav shrink-0 z-50">{bottom.map(module=>{const Icon=module.icon;return <button key={module.id} onClick={()=>navigate(module.id)} className={`min-h-[58px] flex-1 flex flex-col items-center justify-center gap-1 ${active===module.id&&!more?'text-emerald-600':'text-gray-500'}`}><Icon size={22}/><span className="text-[10px] font-bold">{module.label}</span></button>})}<button onClick={()=>setMore(true)} className={`min-h-[58px] flex-1 flex flex-col items-center justify-center gap-1 ${more?'text-emerald-600':'text-gray-500'}`}><Menu size={22}/><span className="text-[10px] font-bold">Lainnya</span></button></nav>
    {more&&<div className="md:hidden absolute inset-0 z-[90] flex flex-col"><button className="flex-1 bg-black/50 backdrop-blur-sm" onClick={()=>setMore(false)}/><div className="bg-white rounded-t-3xl p-4 max-h-[82vh] overflow-y-auto modal-bg"><div className="flex justify-between items-center mb-4"><div><p className="font-black text-lg">Menu Lainnya</p><p className="text-xs text-gray-500">{currentUser.name} · {currentUser.role}</p></div><button onClick={()=>setMore(false)} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center"><X/></button></div><div className="space-y-5 pb-safe">{Object.entries(moreModules.reduce((groups,module)=>{(groups[module.group||'Menu']??=[]).push(module);return groups;},{})).map(([group,modules])=><section key={group}><p className="text-[11px] font-black uppercase tracking-wider text-gray-400 mb-2">{group}</p><div className="grid grid-cols-3 sm:grid-cols-4 gap-x-2 gap-y-4">{modules.map(module=>{const Icon=module.icon;return <button key={module.id} onClick={()=>navigate(module.id)} className="flex flex-col items-center gap-2 min-w-0"><div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${active===module.id?'bg-emerald-100 text-emerald-700':'bg-gray-50 text-gray-600 border border-gray-100'}`}><Icon size={23}/></div><span className="text-[10px] font-bold text-center leading-tight line-clamp-2">{module.label}</span></button>})}</div></section>)}</div></div></div>}
   </main>
+  {paletteOpen&&<CommandPalette modules={allowed} onSelect={id=>{navigate(id);setPaletteOpen(false)}} onClose={()=>setPaletteOpen(false)}/>}
  </div>
 }
 

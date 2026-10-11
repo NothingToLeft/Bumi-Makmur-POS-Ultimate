@@ -108,7 +108,8 @@ test('checkout dan pembelian mendukung satuan konversi serta jumlah desimal', as
   assert.match(orders, /Mengurangi stok/);
   assert.match(context, /baseQty \?\? cartItem\.qty/);
   assert.match(context, /validateBaseQuantity\(row\.product, row\.qty, 'Jumlah penjualan'\)/);
-  assert.match(context, /refundStep/);
+  // Validasi refund dipindah ke util murni pada v6.4.2 agar dapat diuji secara perilaku.
+  assert.match(await read('src/utils/refundPlan.js'), /refundStep/);
   assert.match(context, /Jumlah restock refund/);
   assert.match(context, /Jumlah retur .* harus mengikuti kelipatan/);
   assert.match(context, /Tambahkan minimal satu barang ke pesanan/);

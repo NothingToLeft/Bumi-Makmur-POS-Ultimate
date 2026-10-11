@@ -44,6 +44,10 @@ import { normalizeEmployeeLoginName } from '../utils/employeeLogin.js';
 import { dataUrlByteLength } from '../utils/assetProcessing.js';
 import { normalizeDbShape } from '../utils/dbShape.js';
 import { toEpochMs } from '../utils/temporal.js';
+import { addCalendarMonths, findSaleLine, isSameSaleLine } from '../utils/saleLines.js';
+import { assertUniqueQrisSessions } from '../utils/qrisSessionGuard.js';
+import { createApprovalTickets } from '../utils/approvalTickets.js';
+import { computeRefundPlan } from '../utils/refundPlan.js';
 import { buildClosingSummary } from '../services/dailyClosingReport.js';
 import { buildProductLifecycleSummary } from '../utils/productLifecycle.js';
 import { normalizeConversionRows, sortCategories, sortProductsByName } from '../utils/productCatalog.js';
@@ -192,6 +196,8 @@ export function PosProvider({ children }) {
   const initialLoadFinishedRef = useRef(false);
   const employeeDirectoryPublishSignatureRef = useRef('');
   const persistentCloudIssueRef = useRef('');
+  const approvalTicketsRef = useRef(null);
+  if (!approvalTicketsRef.current) approvalTicketsRef.current = createApprovalTickets({ generate: () => `LOCAL-${generateId('APPROVAL')}` });
 
   useEffect(() => {
     const normalized = normalizeSyncDiagnostics(syncDiagnostics);
@@ -826,10 +832,15 @@ export function PosProvider({ children }) {
   const login = useCallback(async (pin, expectedRole = 'any', options = {}) => {
     const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;
     const selectedBranchId = String(options.branchId || '');
+    let pinLockMessage = '';
     const offlineLogin = await verifyOfflineLogin(key, pin, {
       expectedRole,
       branchId: expectedRole === 'employee' ? selectedBranchId : ''
-    }).catch(() => null);
+    }).catch(error => {
+      if (error?.code === 'PIN_LOCKED') pinLockMessage = error.message;
+      return null;
+    });
+    if (pinLockMessage) return { success: false, message: pinLockMessage };
     let profile = offlineLogin?.profile || null;
 
     if (!profile && !firebaseConfigured) {
@@ -906,11 +917,16 @@ export function PosProvider({ children }) {
         return { success: false, message: friendlyCloudError(error, error?.message || 'Login karyawan belum berhasil.') };
       }
     } else {
+      let pinLockMessage = '';
       const offlineLogin = await verifyOfflineLogin(key, pin, {
         expectedRole: 'employee',
         loginName: normalizedLoginName,
         branchId
-      }).catch(() => null);
+      }).catch(error => {
+        if (error?.code === 'PIN_LOCKED') pinLockMessage = error.message;
+        return null;
+      });
+      if (pinLockMessage) return { success: false, message: pinLockMessage };
       profile = offlineLogin?.profile || null;
       if (!profile) return { success: false, message: 'Akun ini belum pernah login di perangkat saat online. Sambungkan internet terlebih dahulu.' };
     }
@@ -1871,7 +1887,8 @@ export function PosProvider({ children }) {
     return { id };
   });
 
-  const completeSale = payload => commit('SALE_COMPLETE', payload.total, next => {
+  const completeSale = payload => {
+    const result = commit('SALE_COMPLETE', payload.total, next => {
     if (!payload.items?.length) throw new Error('Keranjang kosong.');
     if (payload.items.some(item => Number(item.qty || 0) <= 0 || money(item.price) < 0)) throw new Error('Jumlah atau harga item transaksi tidak valid.');
     if (payload.id && next.sales.some(sale => sale.id === payload.id)) throw new Error('Transaksi ini sudah tersimpan. Hindari menekan tombol bayar dua kali.');
@@ -1940,6 +1957,12 @@ export function PosProvider({ children }) {
     const safeGlobalDiscount = Math.min(recalculatedSubtotal, money(payload.globalDiscount));
     const safePromoDiscount = 0;
     const safePointsRedeemed = money(payload.pointsRedeemed);
+    if (safePointsRedeemed > 0) {
+      const loyaltyCustomer = next.customers.find(item => item.id === payload.customerId);
+      if (!next.configs.loyaltyEnabled) throw new Error('Program poin loyalitas tidak aktif.');
+      if (!loyaltyCustomer || loyaltyCustomer.name === 'Umum (Non-Member)') throw new Error('Penukaran poin wajib memilih pelanggan terdaftar.');
+      if (safePointsRedeemed > money(loyaltyCustomer.points)) throw new Error('Poin yang ditukar melebihi saldo poin pelanggan.');
+    }
     const safeLoyaltyDiscount = Math.min(
       Math.max(0, recalculatedSubtotal - safeGlobalDiscount - safePromoDiscount),
       safePointsRedeemed * money(next.configs.pointValue)
@@ -1951,6 +1974,13 @@ export function PosProvider({ children }) {
       ? Number(next.configs.cashierMaxDiscountPercent ?? 5)
       : Number(next.configs.managerMaxDiscountPercent ?? 20);
     const hasApproval = Boolean(payload.approvedBy && payload.approvalToken);
+    if (hasApproval) {
+      const purpose = belowCostSale ? 'SALE_BELOW_COST' : 'SALE_DISCOUNT';
+      if (payload.approvalPurpose !== purpose || !approvalTicketsRef.current.isValid({
+        token: payload.approvalToken, userId: payload.approvedBy, purpose
+      })) throw new Error('Token persetujuan Manager tidak valid atau tidak sesuai tindakan. Masukkan ulang PIN Manager.');
+    }
+
     if (currentUser.role !== 'owner' && approvalDiscountPercent > approvalLimit && !hasApproval) {
       throw new Error(`Diskon ${approvalDiscountPercent.toFixed(1)}% melebihi batas ${approvalLimit}%. Minta persetujuan Owner atau Store Manager.`);
     }
@@ -1974,6 +2004,7 @@ export function PosProvider({ children }) {
     if (overpayment > cashTotal) throw new Error('Pembayaran non-tunai tidak boleh melebihi total tagihan. Kelebihan hanya boleh berasal dari pembayaran tunai sebagai kembalian.');
     const qrisProfile = (next.branchPaymentProfiles || []).find(row => row.branchId === branchId || row.id === branchId);
     const qrisPayments = (payload.payments || []).filter(payment => payment.methodId === 'qris' || payment.brand === 'qris');
+    assertUniqueQrisSessions(payload.payments || [], next.sales);
     for (const payment of qrisPayments) {
       const qrisAmount = money(payment.amount);
       if (qrisAmount < QRIS_MIN_AMOUNT || qrisAmount > QRIS_MAX_AMOUNT) throw new Error(`Nominal QRIS per pembayaran harus antara Rp${QRIS_MIN_AMOUNT.toLocaleString('id-ID')} dan Rp${QRIS_MAX_AMOUNT.toLocaleString('id-ID')}. Gunakan split payment untuk nominal yang lebih besar.`);
@@ -1998,6 +2029,8 @@ export function PosProvider({ children }) {
       if (String(assurance.verification.confirmedBy) !== String(currentUser.id)) throw new Error('Konfirmasi QRIS harus dilakukan oleh kasir yang sedang login.');
       const confirmedAtMs = Date.parse(String(assurance.verification.confirmedAt || ''));
       if (!Number.isFinite(confirmedAtMs)) throw new Error('Waktu konfirmasi QRIS tidak valid.');
+      if (confirmedAtMs > Date.now() + 5 * 60 * 1000) throw new Error('Waktu konfirmasi QRIS berada di masa depan. Periksa jam perangkat lalu ulangi pembayaran.');
+      // Replay checks (including duplicate rows in this checkout) live in assertUniqueQrisSessions.
     }
 
     const stockMap = new Map();
@@ -2037,16 +2070,14 @@ export function PosProvider({ children }) {
         const serial = (next.serialNumbers || []).find(row => row.id === serialId && row.branchId === branchId);
         if (!serial) continue;
         const warrantyMonths = Math.max(0, Math.round(Number(serial.warrantyMonths || 0)));
-        const start = new Date(sale.createdAt);
-        const end = new Date(start);
-        end.setMonth(end.getMonth() + warrantyMonths);
+        const end = addCalendarMonths(sale.createdAt, warrantyMonths);
         serial.status = 'SOLD';
         serial.saleId = sale.id;
         serial.customerId = sale.customerId || '';
         serial.customerName = sale.customerName || '';
         serial.soldAt = sale.createdAt;
         serial.warrantyStartAt = sale.createdAt;
-        serial.warrantyEndsAt = warrantyMonths > 0 ? end.toISOString() : '';
+        serial.warrantyEndsAt = warrantyMonths > 0 && end ? end.toISOString() : '';
         serial.updatedAt = sale.createdAt;
       }
     }
@@ -2087,10 +2118,18 @@ export function PosProvider({ children }) {
       sale.pointsEarned = earned;
     }
     return sale;
-  });
+    });
+    if (payload.approvedBy && payload.approvalToken) {
+      approvalTicketsRef.current.discard(payload.approvalToken);
+    }
+    return result;
+  };
 
   const authorizeManagerPin = async (pin, purpose = 'GENERAL') => {
-    const profile = await verifyOfflinePin(storeCode, pin).catch(() => null);
+    const profile = await verifyOfflinePin(storeCode, pin).catch(error => {
+      if (error?.code === 'PIN_LOCKED') throw error;
+      return null;
+    });
     if (!profile || !['owner', 'manager'].includes(profile.role) || profile.active === false) {
       throw new Error('PIN Manager/Owner tidak valid pada perangkat ini. Hubungkan akun Manager/Owner sekali pada perangkat agar approval tersedia.');
     }
@@ -2098,55 +2137,14 @@ export function PosProvider({ children }) {
       success: true,
       purpose,
       user: profile,
-      approvalToken: `LOCAL-${generateId('APPROVAL')}`
+      approvalToken: approvalTicketsRef.current.issue({ userId: profile.id, purpose })
     };
   };
 
   const refundSale = async payload => {
     if (!payload.items?.length) throw new Error('Pilih minimal satu item untuk refund.');
     if (!String(payload.reason || '').trim()) throw new Error('Alasan refund wajib diisi.');
-    const sale = db.sales.find(item => item.id === payload.saleId);
-    if (!sale) throw new Error('Transaksi tidak ditemukan.');
-    if (['REFUNDED', 'VOIDED'].includes(sale.status)) throw new Error('Transaksi ini sudah selesai direfund/dibatalkan.');
-    const previousRefunds = db.refunds.filter(item => item.saleId === sale.id);
-    if (payload.voidAll && previousRefunds.length > 0) throw new Error('Transaksi yang sudah memiliki refund sebagian tidak dapat di-void penuh.');
-    const alreadyRefundedSerialIds = new Set(previousRefunds.flatMap(refund => (refund.items || []).flatMap(item => item.serialIds || [])));
-    const requestedRefundSerialIds = new Set();
-    for (const refundItem of payload.items) {
-      const original = sale.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
-      if (!original) throw new Error(`Item ${refundItem.name || refundItem.productId} tidak ditemukan pada transaksi.`);
-      const alreadyRefunded = previousRefunds.reduce((sum, refund) => sum + refund.items.filter(item => item.lineId === original.lineId || item.productId === original.productId).reduce((itemSum, item) => itemSum + Number(item.qty || 0), 0), 0);
-      const remaining = Math.max(0, Number(original.qty || 0) - alreadyRefunded);
-      const refundQty = Number(refundItem.qty || 0);
-      const refundStep = Math.max(0.001, Number(original.quantityStep || 1));
-      if (refundQty <= 0 || refundQty > remaining) throw new Error(`Jumlah refund ${original.name} melebihi sisa yang dapat direfund (${remaining}).`);
-      if (!isStepAligned(refundQty, refundStep)) throw new Error(`Jumlah refund ${original.name} harus kelipatan ${formatQuantity(refundStep)} ${original.unit || 'satuan'}.`);
-      const originalSerialIds = Array.isArray(original.serialIds) ? original.serialIds : [];
-      if (originalSerialIds.length > 0) {
-        const basePerQty = Number(original.baseQty || original.qty || 0) / Math.max(0.000001, Number(original.qty || 0));
-        const requiredSerials = Math.round(refundQty * basePerQty);
-        const selectedSerialIds = Array.isArray(refundItem.serialIds) ? refundItem.serialIds.filter(Boolean) : [];
-        if (selectedSerialIds.length !== requiredSerials) throw new Error(`Pilih tepat ${requiredSerials} serial ${original.name} yang direfund.`);
-        for (const serialId of selectedSerialIds) {
-          if (!originalSerialIds.includes(serialId)) throw new Error(`Serial refund ${original.name} tidak termasuk pada transaksi ini.`);
-          if (alreadyRefundedSerialIds.has(serialId)) throw new Error('Salah satu serial sudah pernah direfund sebelumnya.');
-          if (requestedRefundSerialIds.has(serialId)) throw new Error('Nomor serial yang sama dipilih lebih dari sekali pada refund.');
-          const serial = (db.serialNumbers || []).find(row => row.id === serialId && row.branchId === sale.branchId);
-          if (!serial || serial.status !== 'SOLD' || serial.saleId !== sale.id) throw new Error(`Serial ${serial?.serial || serialId} tidak berstatus SOLD pada transaksi ini.`);
-          requestedRefundSerialIds.add(serialId);
-        }
-      }
-    }
-    const itemNetTotal = sale.items.reduce((sum, item) => sum + Math.max(0, Number(item.netUnitPrice ?? item.price) || 0) * Number(item.qty || 0), 0);
-    const saleAllocationRatio = itemNetTotal > 0 ? money(sale.total) / itemNetTotal : 0;
-    const calculatedRefund = payload.items.reduce((sum, refundItem) => {
-      const original = sale.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
-      if (!original) return sum;
-      const base = Math.max(0, Number(original.netUnitPrice ?? original.price) || 0) * Number(refundItem.qty || 0);
-      return sum + Math.round(base * saleAllocationRatio);
-    }, 0);
-    const amount = Math.min(Math.max(0, money(sale.total) - money(sale.refundedTotal)), calculatedRefund);
-    if (amount <= 0) throw new Error('Nilai refund tidak valid atau transaksi sudah direfund penuh.');
+    const { amount } = computeRefundPlan(db, payload);
     if (currentUser.role === 'kasir' || amount >= money(db.configs.refundApprovalLimit)) {
       const approval = await authorizeManagerPin(payload.managerPin, payload.voidAll ? 'SALE_VOID' : 'SALE_REFUND');
       if (!approval) throw new Error('PIN Manager/Owner tidak valid.');
@@ -2154,8 +2152,16 @@ export function PosProvider({ children }) {
       payload.approvedByName = approval.user.name;
       payload.approvalToken = approval.approvalToken;
     }
-    return commit(payload.voidAll ? 'SALE_VOID' : 'SALE_REFUND', `${payload.saleId}:${amount}`, next => {
-      const target = next.sales.find(item => item.id === payload.saleId);
+    const requiredPurpose = payload.voidAll ? 'SALE_VOID' : 'SALE_REFUND';
+    if (payload.approvedBy || payload.approvalToken) {
+      if (!approvalTicketsRef.current.isValid({ token: payload.approvalToken, userId: payload.approvedBy, purpose: requiredPurpose })) {
+        throw new Error('Persetujuan Manager untuk refund tidak valid atau kedaluwarsa.');
+      }
+    }
+    const result = commit(payload.voidAll ? 'SALE_VOID' : 'SALE_REFUND', `${payload.saleId}:${amount}`, next => {
+      // Validasi ulang terhadap state terbaru: mencegah refund ganda akibat klik ganda/retry.
+      const { sale: target, amount: freshAmount } = computeRefundPlan(next, payload);
+      const amount = freshAmount;
       const refund = {
         id: generateId(payload.voidAll ? 'VOID' : 'REF'), branchId: target.branchId, saleId: target.id,
         items: payload.items, amount, reason: payload.reason, restock: payload.restock,
@@ -2167,7 +2173,7 @@ export function PosProvider({ children }) {
       target.refundedTotal = money(target.refundedTotal) + amount;
       const allRefunds = [...next.refunds].filter(item => item.saleId === target.id);
       const fullyRefundedByQty = target.items.every(original => {
-        const returnedQty = allRefunds.reduce((sum, refundRow) => sum + refundRow.items.filter(item => item.lineId === original.lineId || item.productId === original.productId).reduce((itemSum, item) => itemSum + Number(item.qty || 0), 0), 0);
+        const returnedQty = allRefunds.reduce((sum, refundRow) => sum + (refundRow.items || []).filter(item => isSameSaleLine(original, item)).reduce((itemSum, item) => itemSum + Number(item.qty || 0), 0), 0);
         return returnedQty >= Number(original.qty || 0);
       });
       if (payload.voidAll) target.status = 'VOIDED'; else if (fullyRefundedByQty) target.status = 'REFUNDED'; else target.status = 'PARTIAL_REFUND';
@@ -2212,7 +2218,7 @@ export function PosProvider({ children }) {
 
       if (payload.restock) {
         for (const refundItem of payload.items) {
-          const original = target.items.find(item => item.lineId === refundItem.lineId || item.productId === refundItem.productId);
+          const original = findSaleLine(target.items, refundItem);
           if (!original) continue;
           const rows = resolveProductStockRows(next, { ...original, qty: refundItem.qty, baseQty: (original.baseQty / original.qty) * refundItem.qty }, target.branchId);
           for (const row of rows) {
@@ -2249,6 +2255,8 @@ export function PosProvider({ children }) {
       if (activeShift && refund.method === 'Tunai' && money(refund.payoutAmount) > 0) next.cashMovements.unshift({ id: generateId('CASH'), branchId: target.branchId, shiftId: activeShift.id, type: 'REFUND', amount: money(refund.payoutAmount), note: refund.id, createdAt: refund.createdAt, userId: currentUser.id });
       return refund;
     }, { approvalToken: payload.approvalToken || '' });
+    if (payload.approvedBy && payload.approvalToken) approvalTicketsRef.current.discard(payload.approvalToken);
+    return result;
   };
 
   const normalizePurchasingItems = (next, rawItems = [], targetBranchId = branchId) => (rawItems || []).map(item => {

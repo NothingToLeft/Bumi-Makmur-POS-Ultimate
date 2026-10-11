@@ -25,6 +25,6 @@ test('v6.1.0 keeps cashier shift writes identity and branch scoped', () => {
   assert.match(shifts, /cashier\(storeId\)/);
 });
 
-test('app version is 6.4.1', () => {
-  assert.match(defaults, /APP_VERSION = '6\.4\.1'/);
+test('app version is 6.4.2', () => {
+  assert.match(defaults, /APP_VERSION = '6\.4\.2'/);
 });

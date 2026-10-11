@@ -4,6 +4,7 @@ import { usePos } from '../store/PosContext.jsx';
 import { isToday, formatRp } from '../utils/helpers.js';
 import { calculateNetHpp } from '../utils/accounting.js';
 import { Card, EmptyState, PageHeader, StatusBadge, SummaryCard } from '../components/ui.jsx';
+import SalesInsightsPanel from '../components/SalesInsightsPanel.jsx';
 import { formatDateTimeId, formatTimeId, sortNewest } from '../utils/temporal.js';
 
 export default function DashboardScreen() {
@@ -34,6 +35,8 @@ export default function DashboardScreen() {
           <SummaryCard title="Piutang Aktif" value={formatRp(stats.openReceivables)} icon={WalletCards} tone="orange" />
           <SummaryCard title="Hutang Pemasok" value={formatRp(stats.openPayables)} icon={PackageSearch} tone="purple" />
         </div>
+
+        <SalesInsightsPanel sales={scoped.sales} refunds={scoped.refunds} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="p-5 lg:col-span-2">

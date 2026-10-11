@@ -123,6 +123,6 @@ test('closing harian dapat dicetak dan workflow rilis memakai versi 6.0.3', asyn
   ]);
   assert.match(shift, /LAPORAN CLOSING SHIFT/);
   assert.match(shift, /Cetak laporan closing/);
-  assert.match(android, /6\.4\.1/);
-  assert.match(windows, /6\.4\.1/);
+  assert.match(android, /6\.4\.2/);
+  assert.match(windows, /6\.4\.2/);
 });
