@@ -19,8 +19,9 @@
 | Regression suite | `node --test tests/*.test.mjs` | **299/299 PASS** (290 lama + 9 baru) |
 | Syntax modul JS baru | `node --check` | PASS |
 | Production Vite build | `npm run build` | Lihat `docs/QA-v6.5.0.md` (hasil sebenarnya, bukan asumsi) |
-| Android APK / Windows EXE | — | **BELUM** dibuat atau ditandatangani |
+| Android APK / Windows EXE | GitHub Actions | **SUDAH** dibangun & ditandatangani, terunggah ke Release v6.5.0; belum diuji perangkat |
 | Firestore Rules emulator | — | **BELUM** dijalankan |
+| Provider AI (Gemini/OpenAI) | unit test + tombol Tes Koneksi | perilaku teruji; **belum** dengan API key asli |
 | Uji perangkat nyata | — | **BELUM** |
 
 ## Risiko yang masih terbuka (tidak berubah dari baseline)

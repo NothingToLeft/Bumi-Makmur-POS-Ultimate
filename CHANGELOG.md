@@ -6,8 +6,12 @@
 - **Bug nyata #2 — kredensial offline kedaluwarsa diam-diam.** Kredensial PIN perangkat memiliki TTL 30 hari dan sebelumnya tidak pernah diperpanjang, sehingga perangkat yang dipakai setiap hari tetap kehilangan login PIN dan menampilkan pesan seolah PIN tidak pernah tersimpan. Kini masa berlaku diperpanjang otomatis setelah login PIN berhasil (`refreshOfflineCredential`) dan kredensial cloud terenkripsi disegarkan kembali setelah sesi cloud terverifikasi.
 - Menambahkan `getOfflineCredentialStatus()` untuk membedakan "belum terdaftar", "kedaluwarsa", dan "salah PIN" tanpa membocorkan hash maupun kredensial.
 - **Fitur baru — Tier Pelanggan (Bronze/Silver/Gold/Platinum).** Modul murni `src/utils/customerTiers.js` menghitung tier, tier berikutnya, dan progres poin. Detail Pelanggan kini menampilkan badge tier dan progress bar menuju tier berikutnya. Perhitungan poin, penukaran, dan pembalikan poin saat refund **tidak diubah** sehingga tidak ada risiko pada alur uang.
+- **Fitur baru — AI provider fleksibel.** `src/services/aiProvider.js` mendukung **Gemini** (default), **OpenAI/OpenAI-compatible** (OpenAI, OpenRouter, Groq, DeepSeek, Ollama/LM Studio via Base URL), dan **Kustom**. Pilihan provider, Model, dan Base URL ada di Pengaturan → AI & Otomasi; Base URL + model disinkronkan, API key tetap hanya di perangkat. Galat 401/403, 429, timeout, dan Base URL kosong kini berpesan jelas dalam Bahasa Indonesia.
+- **Perbaikan tampilan login untuk HP & tablet.** Header ditumpuk di layar sempit, logo 56px, padding aman, ditambah CSS `max-height: 700px` dan landscape `max-height: 620px` agar kartu login dan keypad PIN tidak terpotong.
+- **Perbaikan bug kecil.** Mengganti provider/Base URL kini mereset jeda (cooldown) runtime AI yang lama, sehingga provider baru tidak langsung diblokir status kuota provider sebelumnya.
+- Regression suite kini **309/309 PASS**, termasuk 12 tes baru (tier, diagnosa PIN, dan perilaku provider AI: payload, 401, 429, validasi Base URL/API key).
 - Bump versi konsisten 6.4.2 → **6.5.0** pada `package.json`, `APP_VERSION`, `CACHE_NAME` service worker, dan `VERSION.txt` agar cache PWA benar-benar diperbarui di perangkat.
-- Regression suite: **299/299 PASS** (`node --test tests/*.test.mjs`), termasuk 9 tes baru untuk tier dan diagnosa PIN.
+- Regression suite: **309/309 PASS** (`node --test tests/*.test.mjs`), termasuk 12 tes baru untuk tier, diagnosa PIN, dan provider AI.
 - Tidak ada perubahan skema Firestore, migrasi destruktif, index baru, atau layanan berbayar. Firebase tetap Spark-only.
 
 # Changelog
