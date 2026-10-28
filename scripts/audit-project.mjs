@@ -117,7 +117,11 @@ for (const file of allFiles.filter(file => !/\.(?:png|jpg|jpeg|webp|zip|jks|aab|
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-if (pkg.version !== '6.4.2') errors.push(`Versi package harus 6.4.2, ditemukan ${pkg.version}`);
+// Sumber kebenaran versi adalah VERSION.txt, sehingga bump rilis tidak perlu
+// mengubah skrip audit. Semua metadata versi lain tetap wajib konsisten.
+const expectedVersion = (await readFile(path.join(root, 'VERSION.txt'), 'utf8')).trim();
+if (!/^\d+\.\d+\.\d+$/.test(expectedVersion)) errors.push(`VERSION.txt tidak valid: "${expectedVersion}"`);
+if (pkg.version !== expectedVersion) errors.push(`Versi package harus ${expectedVersion}, ditemukan ${pkg.version}`);
 if (pkg.dependencies?.['firebase-functions']) errors.push('Dependency firebase-functions tidak boleh digunakan; backend Firebase harus tetap Spark-only.');
 if (!pkg.dependencies?.firebase) errors.push('Dependency firebase hilang');
 

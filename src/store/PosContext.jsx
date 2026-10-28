@@ -27,12 +27,14 @@ import {
   enqueuePendingMutation,
   enqueuePendingMutations,
   getCachedOfflineProfile,
+  getOfflineCredentialStatus,
   getOfflineQueueStats,
   getOfflineQueueOwnershipStats,
   loadCachedDb,
   readPendingMutations,
   pendingMutationBelongsToUser,
   recoverPendingMutations,
+  refreshOfflineCredential,
   removeOfflineCredential,
   removePendingMutation,
   replacePendingMutation,
@@ -848,11 +850,28 @@ export function PosProvider({ children }) {
     }
 
     if (!profile) {
+      if (!firebaseConfigured) return { success: false, code: 'PIN_INVALID', message: 'PIN tidak dikenali.' };
+      const status = await getOfflineCredentialStatus(key, { expectedRole }).catch(() => null);
+      if (status?.expiredCount > 0 && !status?.hasUsableCredential) {
+        return {
+          success: false,
+          code: 'PIN_CREDENTIAL_EXPIRED',
+          message: 'Masa berlaku PIN pada perangkat ini sudah berakhir (30 hari). Masuk sekali menggunakan email Owner untuk memperbarui PIN perangkat. Data toko tidak terhapus.'
+        };
+      }
+      if (status?.hasUsableCredential) {
+        return {
+          success: false,
+          code: 'PIN_INVALID',
+          message: expectedRole === 'owner'
+            ? 'PIN Owner salah. Periksa kembali 4 digit PIN Anda.'
+            : 'PIN tidak cocok dengan akun pada perangkat ini.'
+        };
+      }
       return {
         success: false,
-        message: firebaseConfigured
-          ? 'PIN Owner belum tersimpan pada perangkat ini. Masuk sekali menggunakan email Owner.'
-          : 'PIN tidak dikenali.'
+        code: 'PIN_NOT_ENROLLED',
+        message: 'PIN Owner belum tersimpan pada perangkat ini. Masuk sekali menggunakan email Owner.'
       };
     }
 
@@ -877,6 +896,8 @@ export function PosProvider({ children }) {
           const cloudProfile = await connectCloudAccount({ ...offlineLogin.cloudCredential, expectedRole });
           if (cloudProfile?.id !== profile.id) throw new Error('Kredensial cloud tidak cocok dengan profil PIN.');
           profile = { ...profile, ...cloudProfile };
+          // Segarkan kredensial terenkripsi + TTL setelah sesi cloud terverifikasi.
+          void cacheOfflineCredential(key, pin, profile, offlineLogin.cloudCredential).catch(() => false);
         } else {
           const cloudProfile = await getCloudSessionProfile();
           if (cloudProfile?.id === profile.id) profile = { ...profile, ...cloudProfile };
@@ -895,8 +916,13 @@ export function PosProvider({ children }) {
     setDeviceSettingsState(previous => ({ ...previous, activeBranchId }));
     setInitializingApp(!hydrated);
     setCurrentUser(profile);
+    try {
+      await refreshOfflineCredential(key, profile.id);
+    } catch (error) {
+      console.warn('Masa berlaku kredensial offline belum dapat diperpanjang.', error);
+    }
     return { success: true, user: profile, mode: navigator.onLine ? 'hybrid' : 'offline' };
-  }, [activateLocalSeed, deviceSettings.activeBranchId, deviceSettings.storeCode, hydrateLocal]);
+  }, [activateLocalSeed, deviceSettings.activeBranchId, deviceSettings.storeCode, getOfflineCredentialStatus, hydrateLocal, refreshOfflineCredential]);
 
   const loginEmployee = useCallback(async ({ loginName, name, pin, branchId }) => {
     const key = deviceSettings.storeCode || DEFAULT_STORE_CODE;

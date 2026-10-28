@@ -1,20 +1,31 @@
-# Bumi Makmur POS — Project Status
+# Bumi Makmur POS — Project Status (v6.5.0)
 
-## Baseline verified
+## Baseline
 
-User attachment `Bumi-Makmur-POS-Ultimate-v6.4.2-reviewed.zip` is the source for this update. Internal package metadata was 6.4.1 before the continuation. This copy now identifies as 6.4.2. Original attachments untouched.
+- Source: `Bumi-Makmur-POS-Ultimate-v6.4.2-Continued-HARDENED.zip`, dinaikkan menjadi **6.5.0**.
+- Metadata versi konsisten: `package.json`, `src/data/defaults.js` (`APP_VERSION`), `public/sw.js` (`CACHE_NAME`), `VERSION.txt`.
 
-## Supported architecture
+## Perubahan v6.5.0 (terverifikasi)
 
-React/Vite web PWA, Capacitor Android, Electron Windows, Firebase Auth + Firestore Spark, Cloudflare Pages, offline queue, cashier/stock/variant/employee/receipts/QRIS, reporting. Four productivity features added by Claude retained.
+1. **Diagnosa login PIN Owner.** `login()` membedakan `PIN_INVALID`, `PIN_CREDENTIAL_EXPIRED`, dan `PIN_NOT_ENROLLED`. Sebelumnya ketiganya memakai pesan "PIN Owner belum tersimpan pada perangkat ini", sehingga PIN salah ketik disalahartikan sebagai perangkat belum terdaftar.
+2. **Perpanjangan masa berlaku kredensial offline.** TTL 30 hari sebelumnya tidak pernah diperpanjang; perangkat yang dipakai harian tetap kehilangan login PIN. Sekarang diperpanjang setiap login PIN berhasil.
+3. **Tier pelanggan.** `src/utils/customerTiers.js` (murni) + tampilan badge/progres di Detail Pelanggan. Tidak mengubah perhitungan poin, penukaran, atau pembalikan poin.
+4. **Bump versi 6.5.0** agar service worker memperbarui cache PWA di perangkat.
 
-## Risks before production
+## Hasil verifikasi nyata
 
-1. Manager approval client token is not authoritative and can be manipulated by a modified client; Firestore rules/server governance design required.
-2. QRIS merchant confirmation remains manual; replay guard local only, not cross-device atomic.
-3. Spreadsheet import XLSX package `xlsx@0.18.5` has known security advisories; no verified update possible in this offline build environment.
-4. Build dependencies/lockfile absent, so no authenticated signed APK/EXE or online deployment has been verified.
+| Pemeriksaan | Perintah | Hasil |
+| --- | --- | --- |
+| Regression suite | `node --test tests/*.test.mjs` | **299/299 PASS** (290 lama + 9 baru) |
+| Syntax modul JS baru | `node --check` | PASS |
+| Production Vite build | `npm run build` | Lihat `docs/QA-v6.5.0.md` (hasil sebenarnya, bukan asumsi) |
+| Android APK / Windows EXE | — | **BELUM** dibuat atau ditandatangani |
+| Firestore Rules emulator | — | **BELUM** dijalankan |
+| Uji perangkat nyata | — | **BELUM** |
 
-## Next verified milestone
+## Risiko yang masih terbuka (tidak berubah dari baseline)
 
-Online reproducible npm install with lockfile, Vite build, Android/Windows CI builds, Firebase emulator transaction policy checks, real-device acceptance tests, and rollback rehearsal.
+1. Token persetujuan manager masih dihasilkan klien; bukan otorisasi server. Firestore Rules belum menegakkan alur persetujuan.
+2. Konfirmasi QRIS masih manual; penjagaan replay bersifat lokal, bukan atomik lintas perangkat.
+3. `xlsx@0.18.5` masih memiliki advisory keamanan yang diketahui; penggantian belum diverifikasi.
+4. Belum ada lockfile tervalidasi + build APK/EXE bertanda tangan, sehingga klaim "siap rilis" belum bisa diberikan.

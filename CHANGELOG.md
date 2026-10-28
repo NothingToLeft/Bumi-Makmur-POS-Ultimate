@@ -1,5 +1,17 @@
 # Changelog Bumi Makmur POS
 
+## v6.5.0 — Professional Readiness: Diagnosa PIN & Tier Pelanggan
+
+- **Bug nyata #1 — pesan PIN Owner menyesatkan.** Sebelumnya PIN salah dan perangkat yang belum pernah di-enroll menghasilkan pesan identik ("PIN Owner belum tersimpan pada perangkat ini. Masuk sekali menggunakan email Owner."). Owner diarahkan mengulang login email padahal hanya salah ketik PIN. Kini `login()` membedakan tiga penyebab dengan kode `PIN_INVALID`, `PIN_CREDENTIAL_EXPIRED`, dan `PIN_NOT_ENROLLED` beserta pesan yang sesuai. Tidak ada data, PIN, atau sesi yang dihapus.
+- **Bug nyata #2 — kredensial offline kedaluwarsa diam-diam.** Kredensial PIN perangkat memiliki TTL 30 hari dan sebelumnya tidak pernah diperpanjang, sehingga perangkat yang dipakai setiap hari tetap kehilangan login PIN dan menampilkan pesan seolah PIN tidak pernah tersimpan. Kini masa berlaku diperpanjang otomatis setelah login PIN berhasil (`refreshOfflineCredential`) dan kredensial cloud terenkripsi disegarkan kembali setelah sesi cloud terverifikasi.
+- Menambahkan `getOfflineCredentialStatus()` untuk membedakan "belum terdaftar", "kedaluwarsa", dan "salah PIN" tanpa membocorkan hash maupun kredensial.
+- **Fitur baru — Tier Pelanggan (Bronze/Silver/Gold/Platinum).** Modul murni `src/utils/customerTiers.js` menghitung tier, tier berikutnya, dan progres poin. Detail Pelanggan kini menampilkan badge tier dan progress bar menuju tier berikutnya. Perhitungan poin, penukaran, dan pembalikan poin saat refund **tidak diubah** sehingga tidak ada risiko pada alur uang.
+- Bump versi konsisten 6.4.2 → **6.5.0** pada `package.json`, `APP_VERSION`, `CACHE_NAME` service worker, dan `VERSION.txt` agar cache PWA benar-benar diperbarui di perangkat.
+- Regression suite: **299/299 PASS** (`node --test tests/*.test.mjs`), termasuk 9 tes baru untuk tier dan diagnosa PIN.
+- Tidak ada perubahan skema Firestore, migrasi destruktif, index baru, atau layanan berbayar. Firebase tetap Spark-only.
+
+# Changelog
+
 ## v6.4.1 — CI Secret Scan Hotfix
 
 - Memperbaiki `npm run build` release yang gagal karena Firebase Web API key pada `.env.production` salah dianggap private secret.

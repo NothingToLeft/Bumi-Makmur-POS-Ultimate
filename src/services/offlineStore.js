@@ -396,6 +396,53 @@ export async function verifyOfflinePin(storeCode, pin, options = {}) {
   return result?.profile || null;
 }
 
+// Diagnosa penyebab gagal login PIN. Tanpa ini, PIN yang salah dan perangkat yang
+// belum pernah dienroll menampilkan pesan yang sama, sehingga Owner diarahkan
+// mengulang login email padahal PIN-nya hanya salah ketik.
+export async function getOfflineCredentialStatus(storeCode, options = {}) {
+  const key = normalizeStoreKey(storeCode);
+  const expectedRole = String(options.expectedRole || 'any');
+  const credentials = (await cacheGet(`credentials:${key}`).catch(() => null)) || [];
+  const now = Date.now();
+  const relevant = credentials.filter(record => {
+    if (!record?.profile?.id) return false;
+    if (expectedRole === 'owner') return record.profile.role === 'owner';
+    if (expectedRole === 'employee') return record.profile.role !== 'owner';
+    return true;
+  });
+  const usable = relevant.filter(record => record.active !== false && (!record.expiresAt || new Date(record.expiresAt).getTime() >= now));
+  const expiries = usable
+    .map(record => new Date(record.expiresAt || 0).getTime())
+    .filter(value => Number.isFinite(value) && value > 0);
+  return {
+    hasAnyCredential: credentials.length > 0,
+    hasUsableCredential: usable.length > 0,
+    relevantCount: relevant.length,
+    expiredCount: relevant.length - usable.length,
+    nearestExpiryAt: expiries.length ? new Date(Math.min(...expiries)).toISOString() : null
+  };
+}
+
+// Perpanjang masa berlaku kredensial offline setiap login PIN berhasil.
+// Tanpa ini perangkat yang dipakai harian tetap kehilangan PIN setelah 30 hari
+// dan menampilkan pesan seolah PIN tidak pernah tersimpan.
+export async function refreshOfflineCredential(storeCode, userId) {
+  if (!userId) return false;
+  const key = normalizeStoreKey(storeCode);
+  const credentials = (await cacheGet(`credentials:${key}`).catch(() => null)) || [];
+  const target = credentials.find(record => record?.id === userId);
+  if (!target) return false;
+  const next = credentials.map(record => record?.id === userId
+    ? {
+        ...record,
+        expiresAt: new Date(Date.now() + OFFLINE_CREDENTIAL_TTL_MS).toISOString(),
+        lastUsedAt: new Date().toISOString()
+      }
+    : record);
+  await cachePut(`credentials:${key}`, next);
+  return true;
+}
+
 export async function removeOfflineCredential(storeCode, userId) {
   const key = normalizeStoreKey(storeCode);
   const credentials = (await cacheGet(`credentials:${key}`)) || [];
