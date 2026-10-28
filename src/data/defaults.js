@@ -148,7 +148,7 @@ export const createSeedDb = () => ({
     },
     activeBranchId: MAIN_BRANCH_ID, darkMode: false, printAuto: false, taxEnabled: false, taxRate: 11,
     cameraPermissionOnStartup: true, shiftWarningHours: 14, reorderMultiplier: 2,
-    aiProductAssistant: { enabled: true, provider: 'gemini', model: 'gemini-2.5-flash', useNativeOcr: true, sendImageToAi: true, rememberLastPhoto: false },
+    aiProductAssistant: { enabled: true, provider: 'gemini', model: 'gemini-2.5-flash', baseUrl: '', useNativeOcr: true, sendImageToAi: true, rememberLastPhoto: false },
     serviceEnabled: false, serviceRate: 0, roundingStep: 0, loyaltyEnabled: true, pointRate: 10000,
     pointValue: 100, refundApprovalLimit: 500000, requireShiftForCash: true,
     cashierMaxDiscountPercent: 5, managerMaxDiscountPercent: 20, stockAdjustmentApprovalThreshold: 1000000,

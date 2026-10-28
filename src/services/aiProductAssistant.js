@@ -1,6 +1,7 @@
 import { isNativeAndroid, recognizeTextFromImage } from './nativeDevice.js';
 import { findBestProductMatch, normalizeProductCode, normalizeProductText, parseProductTextLocally } from '../utils/aiProductParsing.js';
 import { clearGeminiRuntimeBlock, requestGeminiGenerateContent } from './geminiRuntime.js';
+import { normalizeProviderId, requestOpenAiCompatible } from './aiProvider.js';
 
 export { findBestProductMatch, parseProductTextLocally } from '../utils/aiProductParsing.js';
 
@@ -10,6 +11,7 @@ export const DEFAULT_AI_SETTINGS = Object.freeze({
   enabled: true,
   provider: 'gemini',
   model: 'gemini-2.5-flash',
+  baseUrl: '',
   apiKey: '',
   useNativeOcr: true,
   sendImageToAi: true,
@@ -33,7 +35,7 @@ export function saveAiDeviceSettings(patch = {}) {
   return next;
 }
 
-export const AI_SYNCABLE_KEYS = Object.freeze(['enabled', 'provider', 'model', 'useNativeOcr', 'sendImageToAi', 'rememberLastPhoto']);
+export const AI_SYNCABLE_KEYS = Object.freeze(['enabled', 'provider', 'model', 'baseUrl', 'useNativeOcr', 'sendImageToAi', 'rememberLastPhoto']);
 
 export function pickSyncableAiSettings(settings = {}) {
   return Object.fromEntries(AI_SYNCABLE_KEYS.map(key => [key, settings[key] ?? DEFAULT_AI_SETTINGS[key]]));
@@ -132,29 +134,53 @@ function extractGeminiText(payload) {
   return parts.map(part => part.text || '').join('').trim();
 }
 
+export function extractJsonObjectText(value) {
+  const raw = String(value || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start < 0 || end <= start) return raw;
+  return raw.slice(start, end + 1);
+}
+
 export async function analyzeProductWithGemini({ dataUrl, ocrText = '', barcode = '', categories = [], settings = getAiDeviceSettings() }) {
+  const provider = normalizeProviderId(settings.provider);
   const apiKey = String(settings.apiKey || '').trim();
-  if (!apiKey) throw new Error('Gemini API key belum diatur pada Pengaturan → AI & Otomasi.');
-  if (!navigator.onLine) throw new Error('Analisis Gemini memerlukan internet. OCR lokal tetap dapat digunakan pada Android.');
+  if (!apiKey) throw new Error('API key AI belum diatur pada Pengaturan → AI & Otomasi.');
+  if (!navigator.onLine) throw new Error('Analisis AI memerlukan internet. OCR lokal tetap dapat digunakan pada Android.');
   const model = String(settings.model || DEFAULT_AI_SETTINGS.model).trim();
   const categoryList = categories.length ? categories.join(', ') : 'Listrik, Air & Pipa, Besi & Paku, Perkakas, Material, Paket';
   const prompt = `Anda adalah asisten katalog POS toko listrik/material Indonesia. Ekstrak informasi yang benar-benar terlihat pada foto/teks kemasan. Jangan menebak harga modal, harga jual, stok, supplier, garansi, atau barcode yang tidak terlihat.\nKategori yang diizinkan: ${categoryList}. Pilih yang paling dekat dari daftar tersebut.\nUntuk kemasan seperti QTY 100 PCS, isi packQty=100, packUnit=pack, baseUnit=pcs. productName sebaiknya nama keluarga produk (contoh: Cable Ties VISALUX), sedangkan ukuran/warna masuk ke variantName.\nBarcode hasil scanner lokal bila ada: ${barcode || '(tidak ada)'}. Pertahankan barcode ini kecuali foto jelas menunjukkan kode lain yang sama jenisnya.\nOCR lokal bila ada:\n${ocrText || '(tidak ada OCR lokal)'}`;
   const comma = dataUrl.indexOf(',');
   const mimeType = dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/jpeg';
   const imageData = comma >= 0 ? dataUrl.slice(comma + 1) : '';
-  const parts = [{ text: prompt }];
-  if (settings.sendImageToAi !== false && imageData) parts.push({ inlineData: { mimeType, data: imageData } });
-  const payload = await requestGeminiGenerateContent({
-    apiKey, model, scope: 'Analisis foto produk',
-    body: {
-      contents: [{ role: 'user', parts }],
-      generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0.1 }
-    }
-  });
-  const text = extractGeminiText(payload);
-  if (!text) throw new Error('Gemini tidak mengembalikan hasil produk.');
+  const includeImage = settings.sendImageToAi !== false && Boolean(imageData);
+  let text = '';
+  if (provider === 'gemini') {
+    const parts = [{ text: prompt }];
+    if (includeImage) parts.push({ inlineData: { mimeType, data: imageData } });
+    const payload = await requestGeminiGenerateContent({
+      apiKey, model, scope: 'Analisis foto produk',
+      body: {
+        contents: [{ role: 'user', parts }],
+        generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0.1 }
+      }
+    });
+    text = extractGeminiText(payload);
+  } else {
+    const result = await requestOpenAiCompatible({
+      baseUrl: settings.baseUrl,
+      apiKey,
+      model,
+      prompt,
+      system: 'Selalu balas HANYA objek JSON valid sesuai kunci yang diminta. Tanpa penjelasan, tanpa markdown.',
+      imageDataUrl: includeImage ? dataUrl : '',
+      temperature: 0.1
+    });
+    text = extractJsonObjectText(result.text);
+  }
+  if (!text) throw new Error('AI tidak mengembalikan hasil produk.');
   let result;
-  try { result = JSON.parse(text); } catch { throw new Error('Hasil Gemini tidak dapat dibaca sebagai data produk.'); }
+  try { result = JSON.parse(text); } catch { throw new Error('Hasil AI tidak dapat dibaca sebagai data produk.'); }
   const local = parseProductTextLocally(ocrText, { barcode, categories });
   const allowedCategory = categories.find(category => String(category).toLowerCase() === String(result.category || '').toLowerCase());
   const valueOrLocal = (value, fallback) => normalizeProductText(value) || fallback || '';
@@ -177,7 +203,7 @@ export async function analyzeProductWithGemini({ dataUrl, ocrText = '', barcode 
     suggestedVariantMode: Boolean(result.suggestedVariantMode ?? local.suggestedVariantMode),
     confidence: Math.min(1, Math.max(0, Number(result.confidence || Math.max(local.confidence, 0.7)))),
     warnings: Array.isArray(result.warnings) ? result.warnings.map(normalizeProductText).filter(Boolean) : [],
-    source: 'gemini+vision',
+    source: provider === 'gemini' ? 'gemini+vision' : `${provider}+text`,
     rawText: ocrText
   };
 }
@@ -206,10 +232,10 @@ export async function analyzeProductPhoto(file, { categories = [], settings = ge
       const result = await analyzeProductWithGemini({ dataUrl: signals.optimized.dataUrl, ocrText: signals.ocrText, barcode: signals.barcode, categories, settings });
       return { ...signals, result };
     } catch (error) {
-      return { ...signals, result: { ...signals.local, warnings: [...(signals.local.warnings || []), `Gemini tidak digunakan: ${error.message}`] }, aiError: error.message };
+      return { ...signals, result: { ...signals.local, warnings: [...(signals.local.warnings || []), `AI tidak digunakan: ${error.message}`] }, aiError: error.message };
     }
   }
-  const reason = !settings.apiKey ? 'Gemini API key belum diatur; memakai OCR/barcode lokal.' : !navigator.onLine ? 'Offline; memakai OCR/barcode lokal.' : 'AI dinonaktifkan; memakai OCR/barcode lokal.';
+  const reason = !settings.apiKey ? 'API key AI belum diatur; memakai OCR/barcode lokal.' : !navigator.onLine ? 'Offline; memakai OCR/barcode lokal.' : 'AI dinonaktifkan; memakai OCR/barcode lokal.';
   return { ...signals, result: { ...signals.local, warnings: [...(signals.local.warnings || []), reason] } };
 }
 

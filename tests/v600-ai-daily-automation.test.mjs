@@ -66,7 +66,7 @@ test('v6 menyimpan Gemini key lokal, menyediakan fallback OCR, dan tidak menamba
   assert.match(runtime, /x-goog-api-key/);
   assert.match(ai, /responseSchema/);
   assert.match(settings, /AI & Otomasi/);
-  assert.match(settings, /API key tidak dimasukkan ke Firestore/);
+  assert.match(settings, /API key tidak masuk Firestore/);
   assert.match(android, /com\.google\.mlkit:text-recognition:16\.0\.1/);
   assert.match(android, /whatsapp-opened/);
   assert.match(native, /preferWhatsApp/);

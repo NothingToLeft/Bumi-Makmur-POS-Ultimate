@@ -61,9 +61,9 @@ test('AI settings expose runtime status and local diagnostics without synchroniz
   const [settings, ai, runtime] = await Promise.all([
     read('src/screens/DeviceSettingsScreens.jsx'), read('src/services/aiProductAssistant.js'), read('src/services/geminiRuntime.js')
   ]);
-  assert.match(settings, /Status Gemini di perangkat ini/);
+  assert.match(settings, /Status AI di perangkat ini/);
   assert.match(settings, /Diagnostik AI lokal/);
-  assert.match(settings, /Tes Gemini tetap dapat dijalankan secara manual/);
+  assert.match(settings, /Tes koneksi tetap dapat dijalankan manual/);
   assert.match(ai, /requestGeminiGenerateContent/);
   assert.match(runtime, /DIAGNOSTICS_KEY/);
   assert.match(runtime, /assertGeminiRequestAllowed/);

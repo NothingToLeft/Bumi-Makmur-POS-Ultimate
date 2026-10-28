@@ -237,6 +237,22 @@ input, select, textarea { min-width: 0; }
   .premium-page-header p { font-size: .8rem; line-height: 1.45; }
 }
 
+/* Layar pendek (HP kecil / HP dengan keyboard / tablet landscape rendah).
+   Tanpa ini kartu login terpotong dan tombol PIN terdorong keluar layar. */
+@media (max-height: 700px) {
+  .login-page-shell { align-items: flex-start; padding-top: max(8px, env(safe-area-inset-top)); }
+  .login-card { max-height: calc(100dvh - 16px); border-radius: 1.25rem; }
+  .login-role-card { min-height: 66px; padding: .7rem; }
+  .login-role-icon { width: 40px; height: 40px; border-radius: 12px; }
+  .pin-key { height: 50px; font-size: 1.1rem; }
+}
+
+@media (max-height: 620px) and (orientation: landscape) {
+  .login-page-shell { padding: 6px; }
+  .login-card { max-height: calc(100dvh - 12px); }
+  .login-role-card { min-height: 58px; }
+}
+
 .theme-dark .search-field-icon { color: #cbd5e1; }
 .theme-dark .search-field-clear { color: #cbd5e1; }
 

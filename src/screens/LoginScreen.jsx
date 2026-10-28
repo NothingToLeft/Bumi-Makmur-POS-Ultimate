@@ -180,12 +180,12 @@ export default function LoginScreen() {
     <div className="login-page-shell min-h-screen bg-gradient-to-br from-emerald-950 via-emerald-900 to-slate-900 flex items-center justify-center p-3 sm:p-5">
       <div className="login-card bg-white w-full max-w-md rounded-[2rem] shadow-2xl relative overflow-hidden">
         {busy && <BusyOverlay label={busyLabel}/>} 
-        <div className="p-5 sm:p-7">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <img src="/logo-bm.svg" alt="Logo Bumi Makmur" className="w-16 h-16 rounded-[1.25rem] shadow-xl ring-1 ring-emerald-100"/>
-            <div className="text-left min-w-0">
-              <h1 className="font-black text-2xl tracking-tight text-gray-900">{loginHeader}</h1>
-              <p className="text-xs text-gray-500">{loginSubheader}</p>
+        <div className="p-4 sm:p-7">
+          <div className="flex flex-col items-center text-center gap-2 mb-3 sm:flex-row sm:items-center sm:text-left sm:gap-3 sm:mb-4">
+            <img src="/logo-bm.svg" alt="Logo Bumi Makmur" className="w-14 h-14 sm:w-16 sm:h-16 rounded-[1.25rem] shadow-xl ring-1 ring-emerald-100 shrink-0"/>
+            <div className="text-center sm:text-left min-w-0">
+              <h1 className="font-black text-xl sm:text-2xl tracking-tight text-gray-900 leading-tight break-words">{loginHeader}</h1>
+              <p className="text-[11px] sm:text-xs text-gray-500 leading-snug mt-0.5">{loginSubheader}</p>
             </div>
           </div>
 
