@@ -7,7 +7,8 @@ import {
   chatCompletionsUrl,
   describeProvider,
   normalizeBaseUrl,
-  normalizeProviderId
+  normalizeProviderId,
+  requestOpenAiCompatible
 } from '../src/services/aiProvider.js';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -68,4 +69,54 @@ test('halaman login responsif pada layar pendek (HP kecil dan landscape)', () =>
   const login = read('src/screens/LoginScreen.jsx');
   assert.match(login, /flex-col items-center text-center/);
   assert.match(login, /w-14 h-14 sm:w-16 sm:h-16/);
+});
+
+test('requestOpenAiCompatible: mengirim payload benar dan mengembalikan teks', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: 'BM-AI-OK' } }] })
+    };
+  };
+  const result = await requestOpenAiCompatible({
+    baseUrl: 'https://api.contoh.ai/v1',
+    apiKey: 'sk-test',
+    model: 'gpt-4o-mini',
+    prompt: 'Halo',
+    system: 'Ringkas.'
+  });
+  assert.equal(result.text, 'BM-AI-OK');
+  assert.equal(result.provider, 'openai');
+  assert.equal(calls[0].url, 'https://api.contoh.ai/v1/chat/completions');
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.model, 'gpt-4o-mini');
+  assert.equal(body.messages[0].role, 'system');
+  assert.equal(body.messages[1].content, 'Halo');
+});
+
+test('requestOpenAiCompatible: 401 dan 429 menjadi pesan Indonesia yang jelas', async () => {
+  globalThis.fetch = async () => ({ ok: false, status: 401, text: async () => 'unauthorized' });
+  await assert.rejects(
+    () => requestOpenAiCompatible({ baseUrl: 'https://x.ai', apiKey: 'k', model: 'm', prompt: 'p' }),
+    /API key provider AI ditolak/
+  );
+  globalThis.fetch = async () => ({ ok: false, status: 429, text: async () => 'quota' });
+  await assert.rejects(
+    () => requestOpenAiCompatible({ baseUrl: 'https://x.ai', apiKey: 'k', model: 'm', prompt: 'p' }),
+    /Kuota\/rate limit provider AI tercapai/
+  );
+});
+
+test('requestOpenAiCompatible: base URL atau API key kosong ditolak sebelum request', async () => {
+  await assert.rejects(
+    () => requestOpenAiCompatible({ baseUrl: '', apiKey: 'k', model: 'm', prompt: 'p' }),
+    /Base URL provider AI belum diisi/
+  );
+  await assert.rejects(
+    () => requestOpenAiCompatible({ baseUrl: 'https://x.ai', apiKey: '', model: 'm', prompt: 'p' }),
+    /API key provider AI belum diisi/
+  );
 });
