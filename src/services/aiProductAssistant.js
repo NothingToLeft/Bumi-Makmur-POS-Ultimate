@@ -31,7 +31,7 @@ export function saveAiDeviceSettings(patch = {}) {
   const current = getAiDeviceSettings();
   const next = { ...current, ...patch };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-  if ((Object.prototype.hasOwnProperty.call(patch, 'apiKey') && String(current.apiKey || '') !== String(next.apiKey || '')) || (Object.prototype.hasOwnProperty.call(patch, 'model') && String(current.model || '') !== String(next.model || ''))) clearGeminiRuntimeBlock();
+  if ((Object.prototype.hasOwnProperty.call(patch, 'apiKey') && String(current.apiKey || '') !== String(next.apiKey || '')) || (Object.prototype.hasOwnProperty.call(patch, 'model') && String(current.model || '') !== String(next.model || '')) || (Object.prototype.hasOwnProperty.call(patch, 'provider') && String(current.provider || '') !== String(next.provider || '')) || (Object.prototype.hasOwnProperty.call(patch, 'baseUrl') && String(current.baseUrl || '') !== String(next.baseUrl || ''))) clearGeminiRuntimeBlock();
   return next;
 }
 

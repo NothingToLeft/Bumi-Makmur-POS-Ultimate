@@ -13,7 +13,7 @@ import { DEFAULT_LOGIN_APPEARANCE, normalizeLoginAppearance, renderLoginTemplate
 import BarcodeScannerModal from '../components/BarcodeScannerModal.jsx';
 import ReceiptDocument from '../components/ReceiptDocument.jsx';
 import { DEFAULT_AI_SETTINGS, clearAiApiKey, getAiDeviceSettings, pickSyncableAiSettings, saveAiDeviceSettings } from '../services/aiProductAssistant.js';
-import { AI_PROVIDERS, DEFAULT_PROVIDER_ID, describeProvider, normalizeProviderId, testAiProviderConnection } from '../services/aiProvider.js';
+import { AI_PROVIDERS, describeProvider, normalizeProviderId, testAiProviderConnection } from '../services/aiProvider.js';
 import { clearGeminiDiagnostics, getGeminiDiagnostics, getGeminiRuntimeStatus } from '../services/geminiRuntime.js';
 import { openCustomerDisplayWindow, publishCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
 import { normalizeSyncDiagnostics } from '../utils/syncDiagnostics.js';
