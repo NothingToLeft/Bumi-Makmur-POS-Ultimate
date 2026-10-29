@@ -17,7 +17,18 @@ export function Button({ children, className = '', variant = 'primary', size = '
 }
 
 export function Field({ label, hint, children, className = '' }) {
-  return <label className={`block ${className}`}><span className="field-label">{label}</span>{children}{hint && <span className="text-[11px] text-gray-400 mt-1 block">{hint}</span>}</label>;
+  const id = React.useId();
+  let linked = false;
+  const linkControl = nodes => React.Children.map(nodes, child => {
+    if (!React.isValidElement(child) || linked) return child;
+    if (['input', 'select', 'textarea', Input, Select, Textarea, NumberInput, MoneyInput].includes(child.type)) {
+      linked = true;
+      return React.cloneElement(child, { id, 'aria-describedby': hint ? `${id}-hint` : undefined });
+    }
+    return child.props.children ? React.cloneElement(child, {}, linkControl(child.props.children)) : child;
+  });
+  const controls = linkControl(children);
+  return <div className={`block min-w-0 ${className}`}><label htmlFor={id} className="field-label">{label}</label>{controls}{hint && <span id={`${id}-hint`} className="text-[11px] text-gray-400 mt-1 block">{hint}</span>}</div>;
 }
 
 export function Input(props) { return <input {...props} className={`field-input ${props.className || ''}`} />; }
@@ -128,16 +139,37 @@ export function Card({ children, className = '', onClick }) {
 }
 
 export function Modal({ open = true, onClose, title, children, footer, size = 'lg', mobileSheet = true }) {
+  const dialogRef = React.useRef(null);
+  const closeRef = React.useRef(onClose);
+  closeRef.current = onClose;
+  React.useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement;
+    const dialog = dialogRef.current;
+    if (!dialog.contains(document.activeElement)) dialog.querySelector('button, input, select, textarea, [tabindex="0"]')?.focus();
+    const keydown = event => {
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (dialogs[dialogs.length - 1] !== dialog) return;
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeRef.current?.(); }
+      if (event.key !== 'Tab') return;
+      const controls = [...dialog.querySelectorAll('button, input, select, textarea, [tabindex="0"]')].filter(item => !item.disabled && item.getClientRects().length);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => { document.removeEventListener('keydown', keydown); if (previous?.isConnected) previous.focus?.(); };
+  }, [open]);
   if (!open) return null;
   const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl', xl: 'max-w-4xl', full: 'max-w-6xl' };
   return (
     <div className={`fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex justify-center ${mobileSheet ? 'items-end md:items-center' : 'items-center'} p-0 md:p-4 animate-in fade-in`}>
-      <div className={`bg-white w-full ${sizes[size]} ${mobileSheet ? 'rounded-t-3xl md:rounded-3xl' : 'rounded-3xl'} shadow-2xl max-h-[94vh] flex flex-col overflow-hidden modal-bg`}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} className={`bg-white w-full min-w-0 ${sizes[size]} ${mobileSheet ? 'rounded-t-3xl md:rounded-3xl' : 'rounded-3xl'} shadow-2xl max-h-[94dvh] flex flex-col overflow-hidden modal-bg`}>
         <div className="p-4 border-b border-gray-100 flex items-center justify-between shrink-0">
           <h2 className="font-bold text-lg text-gray-800">{title}</h2>
-          <button onClick={onClose} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center"><X size={20}/></button>
+          <button onClick={onClose} aria-label="Tutup dialog" className="w-12 h-12 shrink-0 rounded-full bg-gray-100 flex items-center justify-center"><X size={20}/></button>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-5">{children}</div>
+        <div className="flex-1 min-h-0 min-w-0 overflow-y-auto custom-scrollbar p-4 md:p-5">{children}</div>
         {footer && <div className="p-4 border-t border-gray-100 flex gap-2 justify-end flex-wrap shrink-0 pb-safe">{footer}</div>}
       </div>
     </div>

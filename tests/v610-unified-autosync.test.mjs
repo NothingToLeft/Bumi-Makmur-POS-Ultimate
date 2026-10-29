@@ -6,7 +6,7 @@ const root = new URL('../', import.meta.url);
 const read = rel => readFileSync(new URL(rel, root), 'utf8');
 
 test('v6.4.0 keeps unified autosync aligned with the deployed v6.4.0 ruleset', () => {
-  assert.match(read('src/data/defaults.js'), /APP_VERSION = '6\.5\.0'/);
+  assert.match(read('src/data/defaults.js'), /APP_VERSION = '6\.5\.1'/);
   assert.match(read('src/utils/syncDiagnostics.js'), /FIRESTORE_RULESET_VERSION = '6\.4\.0'/);
   assert.match(read('firestore.rules'), /BUMI_MAKMUR_RULESET_VERSION=6\.4\.0/);
 });

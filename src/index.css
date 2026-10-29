@@ -139,6 +139,12 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { min-height: 100dvh; }
 button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 input, select, textarea { min-width: 0; }
+.order-form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
+.order-form-grid > * { min-width: 0; }
+.order-form-grid .field-input { max-width: 100%; }
+@media (min-width: 1024px) {
+  .order-form-grid { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+}
 .field-input {
   display: block;
   width: 100%;
@@ -153,6 +159,7 @@ input, select, textarea { min-width: 0; }
   transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
 }
 .field-input::placeholder { color: #94a3b8; opacity: 1; }
+.field-input.product-picker-trigger { display: flex; }
 .field-input:focus { border-color: #10b981; background: #fff; box-shadow: 0 0 0 4px rgba(16,185,129,.12); }
 .field-input.field-input-trailing { padding-right: 2.75rem !important; }
 

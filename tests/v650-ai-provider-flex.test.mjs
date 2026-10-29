@@ -56,7 +56,7 @@ test('pengaturan AI menyediakan Base URL dan sinkronisasi provider', () => {
   const assistant = read('src/services/aiProductAssistant.js');
   assert.match(assistant, /baseUrl: ''/);
   assert.match(assistant, /AI_SYNCABLE_KEYS[\s\S]*'baseUrl'/);
-  const screen = read('src/screens/DeviceSettingsScreens.jsx');
+  const screen = read('src/screens/DeviceSettingsScreens.jsx') + read('src/components/AiConnectionManager.jsx');
   assert.match(screen, /AI_PROVIDERS\.map/);
   assert.match(screen, /testAiProviderConnection/);
   assert.match(screen, /Base URL/);

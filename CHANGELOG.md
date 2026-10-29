@@ -1,5 +1,14 @@
 # Changelog Bumi Makmur POS
 
+## v6.5.1 — Pesanan responsif dan daftar provider AI
+
+- Modal pesanan tidak meluber pada desktop; HP/tablet memakai satu kolom. Pelanggan umum menjadi default yang aman.
+- Provider AI tampil sebagai daftar ringkas dengan Gunakan/Edit/Hapus. Form modal menyimpan perubahan hanya setelah Simpan; Batal mempertahankan koneksi aktif.
+- Beberapa provider dan kunci tersimpan lokal, terisolasi per endpoint. Analisis OpenAI-compatible menerima skema JSON lengkap.
+- Konversi pesanan berulang memakai open bill yang sama. Label input, navigasi keyboard modal, dan pesan gagal simpan diperbaiki.
+- Dependency rentan diperbarui, SheetJS resmi 0.20.3 diuji ekspor/impor. CI memakai lockfile dengan npm ci.
+- Lihat docs/QA-v6.5.1.md dan RELEASE-NOTES-Bumi-Makmur-POS-v6.5.1.md untuk bukti dan batas verifikasi.
+
 ## v6.5.0 — Professional Readiness: Diagnosa PIN & Tier Pelanggan
 
 - **Bug nyata #1 — pesan PIN Owner menyesatkan.** Sebelumnya PIN salah dan perangkat yang belum pernah di-enroll menghasilkan pesan identik ("PIN Owner belum tersimpan pada perangkat ini. Masuk sekali menggunakan email Owner."). Owner diarahkan mengulang login email padahal hanya salah ketik PIN. Kini `login()` membedakan tiga penyebab dengan kode `PIN_INVALID`, `PIN_CREDENTIAL_EXPIRED`, dan `PIN_NOT_ENROLLED` beserta pesan yang sesuai. Tidak ada data, PIN, atau sesi yang dihapus.

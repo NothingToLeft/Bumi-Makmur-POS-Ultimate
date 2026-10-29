@@ -2,6 +2,7 @@ import { isNativeAndroid, recognizeTextFromImage } from './nativeDevice.js';
 import { findBestProductMatch, normalizeProductCode, normalizeProductText, parseProductTextLocally } from '../utils/aiProductParsing.js';
 import { clearGeminiRuntimeBlock, requestGeminiGenerateContent } from './geminiRuntime.js';
 import { normalizeProviderId, requestOpenAiCompatible } from './aiProvider.js';
+import { resolveConnectionKey } from './aiConnections.js';
 
 export { findBestProductMatch, parseProductTextLocally } from '../utils/aiProductParsing.js';
 
@@ -30,6 +31,7 @@ export function getAiDeviceSettings() {
 export function saveAiDeviceSettings(patch = {}) {
   const current = getAiDeviceSettings();
   const next = { ...current, ...patch };
+  if (!Object.prototype.hasOwnProperty.call(patch, 'apiKey')) next.apiKey = resolveConnectionKey(current, next);
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   if ((Object.prototype.hasOwnProperty.call(patch, 'apiKey') && String(current.apiKey || '') !== String(next.apiKey || '')) || (Object.prototype.hasOwnProperty.call(patch, 'model') && String(current.model || '') !== String(next.model || '')) || (Object.prototype.hasOwnProperty.call(patch, 'provider') && String(current.provider || '') !== String(next.provider || '')) || (Object.prototype.hasOwnProperty.call(patch, 'baseUrl') && String(current.baseUrl || '') !== String(next.baseUrl || ''))) clearGeminiRuntimeBlock();
   return next;
@@ -45,6 +47,8 @@ export function applyCloudAiPreferences(preferences = {}) {
   const current = getAiDeviceSettings();
   const synced = pickSyncableAiSettings(preferences);
   const next = { ...current, ...synced, apiKey: current.apiKey };
+  next.apiKey = resolveConnectionKey(current, next);
+  if (current.provider !== next.provider || current.model !== next.model || current.baseUrl !== next.baseUrl) clearGeminiRuntimeBlock();
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   return next;
 }
@@ -172,7 +176,7 @@ export async function analyzeProductWithGemini({ dataUrl, ocrText = '', barcode 
       apiKey,
       model,
       prompt,
-      system: 'Selalu balas HANYA objek JSON valid sesuai kunci yang diminta. Tanpa penjelasan, tanpa markdown.',
+      system: `Selalu balas HANYA objek JSON valid sesuai skema berikut. Tanpa penjelasan, tanpa markdown. Skema: ${JSON.stringify(RESPONSE_SCHEMA)}`,
       imageDataUrl: includeImage ? dataUrl : '',
       temperature: 0.1
     });

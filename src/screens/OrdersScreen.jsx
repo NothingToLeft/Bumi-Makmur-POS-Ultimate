@@ -3,7 +3,7 @@ import { ShoppingBag, Plus, ArrowRight, Trash2 } from 'lucide-react';
 import { usePos } from '../store/PosContext.jsx';
 import { formatRp, generateId } from '../utils/helpers.js';
 import { conversionFactor, formatQuantity, normalizeQuantity, normalizeQuantityStep, priceForSaleUnit, saleUnitOptions, toBaseQuantity } from '../utils/fractionalUnits.js';
-import { Button, Card, EmptyState, Field, Input, Modal, NumberInput, PageHeader, Select, StatusBadge, Textarea } from '../components/ui.jsx';
+import { Button, Card, EmptyState, Field, Modal, NumberInput, PageHeader, Select, StatusBadge, Textarea } from '../components/ui.jsx';
 import ProductPicker from '../components/ProductPicker.jsx';
 
 const activeProducts = products => products.filter(product => product.active !== false && product.available !== false);
@@ -31,10 +31,10 @@ export default function OrdersScreen({ onNavigate }) {
   </div>;
 }
 
-function OrderForm({ products, customers, onClose, onSave }) {
+export function OrderForm({ products, customers, onClose, onSave }) {
   const productsAvailable = activeProducts(products);
   const [channel, setChannel] = useState('WhatsApp');
-  const [customerId, setCustomerId] = useState(customers[0]?.id || '');
+  const [customerId, setCustomerId] = useState('');
   const [items, setItems] = useState([]);
   const [productId, setProductId] = useState(productsAvailable[0]?.id || '');
   const selectedProduct = productsAvailable.find(product => product.id === productId);
@@ -43,6 +43,7 @@ function OrderForm({ products, customers, onClose, onSave }) {
   const [qty, setQty] = useState(step);
   const [notes, setNotes] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [error, setError] = useState('');
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
 
   const chooseProduct = id => {
@@ -87,11 +88,14 @@ function OrderForm({ products, customers, onClose, onSave }) {
   const save = () => {
     if (!items.length) return;
     const customer = customers.find(item => item.id === customerId);
-    onSave({ channel, customerId: customer?.id, customerName: customer?.name || 'Umum', items, total, notes, deliveryAddress, status: 'NEW', saleType: 'retail' });
+    try {
+      onSave({ channel, customerId: customer?.id, customerName: customer?.name || 'Umum', items, total, notes, deliveryAddress, status: 'NEW', saleType: 'retail' });
+    } catch (saveError) { setError(saveError.message || 'Pesanan belum tersimpan. Coba kembali.'); }
   };
 
-  return <Modal title="Pesanan Online Baru" onClose={onClose} size="xl" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={save} disabled={!items.length}>Simpan Pesanan</Button></>}>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  return <Modal title="Pesanan Online Baru" onClose={onClose} size="full" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={save} disabled={!items.length}>Simpan Pesanan</Button></>}>
+    {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
+    <div className="order-form-grid">
       <Card className="p-4 space-y-3">
         <Field label="Kanal"><Select value={channel} onChange={event => setChannel(event.target.value)}><option>WhatsApp</option><option>Tokopedia</option><option>Shopee</option><option>Telepon</option><option>Delivery Internal</option><option>Proyek</option></Select></Field>
         <Field label="Pelanggan"><Select value={customerId} onChange={event => setCustomerId(event.target.value)}><option value="">Pelanggan umum</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</Select></Field>
@@ -99,14 +103,15 @@ function OrderForm({ products, customers, onClose, onSave }) {
         <Field label="Catatan"><Textarea value={notes} onChange={event => setNotes(event.target.value)}/></Field>
       </Card>
       <Card className="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-[minmax(180px,1fr)_120px_100px_auto] gap-3 items-end">
-          <ProductPicker products={productsAvailable} value={productId} onChange={id => chooseProduct(id)} label="Barang" className="sm:col-span-2 2xl:col-span-1"/>
+        <div className="grid grid-cols-2 gap-3 items-end min-w-0">
+          <ProductPicker products={productsAvailable} value={productId} onChange={id => chooseProduct(id)} label="Barang" className="col-span-2 min-w-0"/>
           <Field label="Satuan"><Select value={unit} onChange={event => chooseUnit(event.target.value)}>{selectedProduct && productUnits(selectedProduct).map(option => <option key={option.unit} value={option.unit}>{option.unit}{option.factor !== 1 ? ` = ${formatQuantity(option.factor)} ${selectedProduct.baseUnit}` : ''} · {formatRp(option.price)}</option>)}</Select></Field>
           <Field label="Jumlah"><NumberInput inputMode="decimal" min={step} step={step} value={qty} onValueChange={value => setQty(value)} onBlur={() => setQty(normalizeQuantity(qty, { allowFractional: step < 1, step, min: step }))}/></Field>
-          <Button onClick={add} className="sm:col-span-2 2xl:col-span-1 w-full 2xl:w-auto"><Plus size={17}/> Tambah</Button>
+          <Button onClick={add} disabled={!selectedProduct} className="col-span-2 w-full"><Plus size={17}/> Tambah Barang</Button>
         </div>
         {selectedProduct && <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold text-blue-700">{formatQuantity(qty)} {unit} = {formatQuantity(toBaseQuantity(selectedProduct, qty, unit))} {selectedProduct.baseUnit}. Harga: {formatRp(priceForSaleUnit(selectedProduct, unit, 'retail'))} per {unit}.</div>}
-        <div className="space-y-2 mt-4">{items.map((item, index) => <Card key={item.lineId} className="p-3 flex justify-between gap-3"><div><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">{formatQuantity(item.qty)} {item.unit} × {formatRp(item.price)}</p><p className="text-xs text-blue-600">Mengurangi stok {formatQuantity(item.baseQty)} {item.baseUnit}</p></div><div className="text-right"><b>{formatRp(item.qty * item.price)}</b><button type="button" onClick={() => setItems(previous => previous.filter((_, rowIndex) => rowIndex !== index))} className="mt-2 ml-auto flex items-center gap-1 text-xs font-bold text-red-600"><Trash2 size={13}/> Hapus</button></div></Card>)}</div>
+        {!items.length && <p className="mt-4 rounded-xl border border-dashed p-4 text-sm text-gray-500">Belum ada barang. Pilih barang, satuan, dan jumlah, lalu tekan Tambah Barang.</p>}
+        <div className="space-y-2 mt-4">{items.map((item, index) => <Card key={item.lineId} className="p-3 flex flex-wrap justify-between gap-3"><div className="min-w-0 break-words"><p className="font-bold text-sm">{item.name}</p><p className="text-xs text-gray-500">{formatQuantity(item.qty)} {item.unit} × {formatRp(item.price)}</p><p className="text-xs text-blue-600">Kebutuhan stok {formatQuantity(item.baseQty)} {item.baseUnit}</p></div><div className="text-right"><b>{formatRp(item.qty * item.price)}</b><button type="button" onClick={() => setItems(previous => previous.filter((_, rowIndex) => rowIndex !== index))} className="mt-2 ml-auto flex min-h-[44px] items-center gap-1 text-xs font-bold text-red-600"><Trash2 size={13}/> Hapus</button></div></Card>)}</div>
         <div className="flex justify-between border-t mt-4 pt-3 text-lg"><b>Total</b><b className="text-emerald-600">{formatRp(total)}</b></div>
       </Card>
     </div>

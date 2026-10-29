@@ -59,7 +59,7 @@ test('closing v6 menghitung refund restock, HPP snapshot, void, dan pembayaran b
 
 test('v6 menyimpan Gemini key lokal, menyediakan fallback OCR, dan tidak menambah layanan Firebase berbayar', async () => {
   const [ai, runtime, settings, android, native, rules, pkg, sw] = await Promise.all([
-    read('src/services/aiProductAssistant.js'), read('src/services/geminiRuntime.js'), read('src/screens/DeviceSettingsScreens.jsx'), read('scripts/prepare-android.mjs'),
+    read('src/services/aiProductAssistant.js'), read('src/services/geminiRuntime.js'), Promise.all([read('src/screens/DeviceSettingsScreens.jsx'), read('src/components/AiConnectionManager.jsx')]).then(parts=>parts.join('\n')), read('scripts/prepare-android.mjs'),
     read('src/services/nativeDevice.js'), read('firestore.rules'), read('package.json'), read('public/sw.js')
   ]);
   assert.match(ai, /localStorage\.setItem\(SETTINGS_KEY/);
@@ -71,8 +71,8 @@ test('v6 menyimpan Gemini key lokal, menyediakan fallback OCR, dan tidak menamba
   assert.match(android, /whatsapp-opened/);
   assert.match(native, /preferWhatsApp/);
   assert.doesNotMatch(rules, /match \/aiKeys\//);
-  assert.equal(JSON.parse(pkg).version, '6.5.0');
-  assert.match(sw, /freesync-v6\.5\.0/);
+  assert.equal(JSON.parse(pkg).version, '6.5.1');
+  assert.match(sw, /freesync-v6\.5\.1/);
 });
 
 test('v6 UI menyediakan Foto Produk AI, Smart Receiving, dan closing PDF WhatsApp', async () => {

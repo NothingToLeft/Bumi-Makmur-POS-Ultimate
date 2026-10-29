@@ -4,6 +4,7 @@ import { generateId, safeJSONParse, downloadFile, localDateKey } from '../utils/
 import { friendlyCloudError } from '../utils/cloudErrors.js';
 import { normalizeLoginAppearance } from '../utils/loginAppearance.js';
 import { applyCloudAiPreferences } from '../services/aiProductAssistant.js';
+import { existingBillForOrder } from '../utils/orderWorkflow.js';
 import { auth, firebaseConfigured, DEFAULT_STORE_CODE, STORE_ID } from '../services/firebase.js';
 import { bootstrapCloudStore, connectCloudAccount, connectEmployeeWithNamePin, deleteCloudEmployee, getCloudSessionProfile, signOutCloudAccount, upsertCloudEmployee } from '../services/cloudAuth.js';
 import {
@@ -2788,7 +2789,8 @@ export function PosProvider({ children }) {
 
   const convertOrderToBill = id => commit('ORDER_TO_BILL', id, next => {
     const order = next.onlineOrders.find(item => item.id === id);
-    if (!order) throw new Error('Pesanan tidak ditemukan.');
+    const existing = existingBillForOrder(order, next.heldSales);
+    if (existing) return existing;
     const bill = { id: generateId('BILL'), branchId: order.branchId, name: `${order.channel} ${order.id}`, customerId: order.customerId, customerName: order.customerName, items: order.items, saleType: order.saleType || 'retail', note: order.notes || '', createdAt: nowISO(), updatedAt: nowISO(), sourceOrderId: order.id };
     next.heldSales.unshift(bill); order.status = 'IN_POS';
     return bill;

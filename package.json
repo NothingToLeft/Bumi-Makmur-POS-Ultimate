@@ -1,7 +1,7 @@
 {
   "name": "bumi-makmur-pos",
   "private": true,
-  "version": "6.5.0",
+  "version": "6.5.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -27,29 +27,29 @@
     "desktop:dist:msi": "npm run build && electron-builder --win msi --x64 --publish never"
   },
   "dependencies": {
-    "@capacitor/android": "7.4.3",
-    "@capacitor/core": "7.4.3",
+    "@capacitor/android": "7.6.10",
+    "@capacitor/core": "7.6.10",
+    "@zxing/browser": "0.2.1",
+    "firebase": "12.16.0",
     "lucide-react": "0.468.0",
+    "qrcode": "1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "firebase": "12.16.0",
-    "xlsx": "0.18.5",
-    "@zxing/browser": "0.2.1",
-    "qrcode": "1.5.4"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@capacitor/cli": "7.4.3",
+    "@capacitor/cli": "7.6.10",
     "@types/react": "18.3.18",
     "@types/react-dom": "18.3.5",
     "@vitejs/plugin-react": "4.3.4",
     "autoprefixer": "10.4.20",
-    "postcss": "8.4.49",
+    "electron": "43.8.4",
+    "electron-builder": "26.15.3",
+    "postcss": "8.5.32",
     "tailwindcss": "3.4.17",
-    "vite": "6.0.7",
-    "electron": "43.2.0",
-    "electron-builder": "26.15.3"
+    "vite": "6.4.5"
   },
-  "description": "Bumi Makmur POS v6.5.0 Professional Readiness: seluruh fitur v6.4.2 dipertahankan, ditambah diagnosa login PIN Owner yang akurat, perpanjangan otomatis masa berlaku kredensial offline, dan tier pelanggan (Bronze/Silver/Gold/Platinum) tanpa mengubah alur poin atau data produksi.",
+  "description": "Bumi Makmur POS v6.5.1 Professional Readiness: seluruh fitur v6.4.2 dipertahankan, ditambah diagnosa login PIN Owner yang akurat, perpanjangan otomatis masa berlaku kredensial offline, dan tier pelanggan (Bronze/Silver/Gold/Platinum) tanpa mengubah alur poin atau data produksi.",
   "main": "electron/main.cjs",
   "build": {
     "appId": "app.bumimakmur.pos.desktop",

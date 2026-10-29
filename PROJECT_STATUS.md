@@ -1,32 +1,28 @@
-# Bumi Makmur POS — Project Status (v6.5.0)
+# Bumi Makmur POS — v6.5.1
 
 ## Baseline
+Continue GitHub main `7e748ca17399632cda1efaf1440ee90f36f7a414` (v6.5.0), cross-checked with supplied DeepSeek session and accessible prior project conversation. Older v6.4.2 reports are historical. PIN diagnostics, offline credential renewal, customer tiers and POS modules remain.
 
-- Source: `Bumi-Makmur-POS-Ultimate-v6.4.2-Continued-HARDENED.zip`, dinaikkan menjadi **6.5.0**.
-- Metadata versi konsisten: `package.json`, `src/data/defaults.js` (`APP_VERSION`), `public/sw.js` (`CACHE_NAME`), `VERSION.txt`.
+## Changes
+- Responsive bounded order modal; general customer default; empty/error states.
+- Compact AI provider rows with Use/Edit/Delete and a separate editor modal. Cancelling leaves active connection unchanged. Keys stay local and isolated by endpoint.
+- Full JSON schema for OpenAI-compatible product analysis; non-Gemini keys blocked from Gemini web photo search.
+- Idempotent local order-to-bill conversion; completed/cancelled orders cannot be converted again.
+- Accessible form labels, modal keyboard focus loop and Escape handling.
+- Security dependency updates, lockfile-based CI install, version/PWA cache bump. Business DB key, Firebase schema and rules unchanged.
 
-## Perubahan v6.5.0 (terverifikasi)
+## Verified locally — 2026-10-29
+- `npm ci --ignore-scripts --no-audit --no-fund`: PASS, 907 packages. Initial esbuild lock cleared by stopping QA before retry. Electron installation scripts skipped locally.
+- `node --test tests/*.test.mjs`: 314/314 PASS.
+- `npm run build`: PASS, including JSX parser, imports, secret scan and Spark-only checks. Bundle-size warning remains.
+- Headless Chrome: PASS at 360×800, 412×915, 768×1024, 1024×768, 1440×900, 1920×1080 and 915×412. Real order/provider components, fake inventory, mocked AI. No horizontal overflow/runtime errors.
+- SheetJS 0.20.3 workbook export/import round trip: PASS.
+- `npm audit`: 12 findings reduced to 4 high, 0 critical. Remaining Node gRPC chain is pinned by Firebase; no forced downgrade or override.
 
-1. **Diagnosa login PIN Owner.** `login()` membedakan `PIN_INVALID`, `PIN_CREDENTIAL_EXPIRED`, dan `PIN_NOT_ENROLLED`. Sebelumnya ketiganya memakai pesan "PIN Owner belum tersimpan pada perangkat ini", sehingga PIN salah ketik disalahartikan sebagai perangkat belum terdaftar.
-2. **Perpanjangan masa berlaku kredensial offline.** TTL 30 hari sebelumnya tidak pernah diperpanjang; perangkat yang dipakai harian tetap kehilangan login PIN. Sekarang diperpanjang setiap login PIN berhasil.
-3. **Tier pelanggan.** `src/utils/customerTiers.js` (murni) + tampilan badge/progres di Detail Pelanggan. Tidak mengubah perhitungan poin, penukaran, atau pembalikan poin.
-4. **Bump versi 6.5.0** agar service worker memperbarui cache PWA di perangkat.
+## Limits
+- Actual provider keys, production transactions, Firestore emulator, hardware scanners/printers, physical Android devices and Windows installer execution remain unverified locally.
+- Client manager approval and local QRIS replay checks remain architectural risks. Order-to-bill guard is local, not a multi-device lock.
+- Keys use local storage without app-level encryption. Profiles and keys require per-device setup; only active non-secret preferences sync.
+- Remote native builds/deployment require separate pipeline confirmation. Build success does not prove installation or device behavior.
 
-## Hasil verifikasi nyata
-
-| Pemeriksaan | Perintah | Hasil |
-| --- | --- | --- |
-| Regression suite | `node --test tests/*.test.mjs` | **299/299 PASS** (290 lama + 9 baru) |
-| Syntax modul JS baru | `node --check` | PASS |
-| Production Vite build | `npm run build` | Lihat `docs/QA-v6.5.0.md` (hasil sebenarnya, bukan asumsi) |
-| Android APK / Windows EXE | GitHub Actions | **SUDAH** dibangun & ditandatangani, terunggah ke Release v6.5.0; belum diuji perangkat |
-| Firestore Rules emulator | — | **BELUM** dijalankan |
-| Provider AI (Gemini/OpenAI) | unit test + tombol Tes Koneksi | perilaku teruji; **belum** dengan API key asli |
-| Uji perangkat nyata | — | **BELUM** |
-
-## Risiko yang masih terbuka (tidak berubah dari baseline)
-
-1. Token persetujuan manager masih dihasilkan klien; bukan otorisasi server. Firestore Rules belum menegakkan alur persetujuan.
-2. Konfirmasi QRIS masih manual; penjagaan replay bersifat lokal, bukan atomik lintas perangkat.
-3. `xlsx@0.18.5` masih memiliki advisory keamanan yang diketahui; penggantian belum diverifikasi.
-4. Belum ada lockfile tervalidasi + build APK/EXE bertanda tangan, sehingga klaim "siap rilis" belum bisa diberikan.
+Details: `docs/QA-v6.5.1.md`. Rollback source: `7e748ca`; preserve local storage and business data.

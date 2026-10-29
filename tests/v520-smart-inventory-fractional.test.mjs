@@ -105,7 +105,7 @@ test('checkout dan pembelian mendukung satuan konversi serta jumlah desimal', as
   assert.match(orders, /toBaseQuantity/);
   assert.match(orders, /Nama Karyawan|Pesanan Online Baru/);
   assert.match(orders, /quantityStep/);
-  assert.match(orders, /Mengurangi stok/);
+  assert.match(orders, /Kebutuhan stok/);
   assert.match(context, /baseQty \?\? cartItem\.qty/);
   assert.match(context, /validateBaseQuantity\(row\.product, row\.qty, 'Jumlah penjualan'\)/);
   // Validasi refund dipindah ke util murni pada v6.4.2 agar dapat diuji secara perilaku.

@@ -1,4 +1,5 @@
 import { getAiDeviceSettings } from './aiProductAssistant.js';
+import { normalizeProviderId } from './aiProvider.js';
 import { requestGeminiGenerateContent } from './geminiRuntime.js';
 
 const MAX_QUERY = 180;
@@ -236,6 +237,7 @@ function extractGroundingSources(payload) {
 }
 
 async function findGroundedProductSources(query, settings) {
+  if (normalizeProviderId(settings?.provider) !== 'gemini') throw new Error('Pencarian web foto memerlukan koneksi Gemini dengan Google Search. Pilih Gemini, tempel link produk, atau unggah foto manual.');
   const apiKey = String(settings?.apiKey || '').trim();
   if (!apiKey) throw new Error('Gemini API key belum diatur pada Pengaturan → AI & Otomasi.');
   const model = clean(settings?.model || 'gemini-2.5-flash').slice(0, 80);

@@ -49,6 +49,9 @@ export function normalizeBaseUrl(value) {
 export function chatCompletionsUrl(baseUrl) {
   const clean = normalizeBaseUrl(baseUrl);
   if (!clean) throw new Error('Base URL provider AI belum diisi.');
+  let parsed;
+  try { parsed = new URL(clean); } catch { throw new Error('Base URL provider AI tidak valid.'); }
+  if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error('Gunakan Base URL HTTP/HTTPS tanpa kredensial, query, atau fragmen.');
   return `${clean}/v1/chat/completions`;
 }
 

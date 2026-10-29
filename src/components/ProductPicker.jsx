@@ -47,7 +47,7 @@ export default function ProductPicker({
   return <>
     <label className={`block ${className}`}>
       {label && <span className="field-label">{label}</span>}
-      <button type="button" onClick={() => setOpen(true)} className="field-input min-h-[52px] text-left flex items-center justify-between gap-3">
+      <button type="button" onClick={() => setOpen(true)} className="field-input product-picker-trigger min-h-[52px] text-left flex items-center justify-between gap-3">
         <span className="min-w-0">
           <span className={`block font-bold truncate ${selected ? 'text-gray-800' : 'text-gray-400'}`}>{selected?.name || placeholder}</span>
           {selected && <span className="block text-[11px] text-gray-500 truncate">{selected.category || 'Tanpa kategori'} · {selected.sku || 'Tanpa SKU'}{showStock ? ` · stok ${formatQuantity(selected.stock)} ${selected.baseUnit}` : ''}</span>}
