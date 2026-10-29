@@ -98,7 +98,7 @@ Yang sengaja tidak dibawa:
 - random amount suffix tanpa mutation feed resmi;
 - customer QRIS surcharge.
 
-Lihat `docs/QRIS-SOURCE-AUDIT-v6.4.0.md` dan `THIRD-PARTY-NOTICES.md`.
+Lihat `technical/QRIS-SOURCE-AUDIT-v6.4.0.md` dan `THIRD-PARTY-NOTICES.md`.
 
 ## 10. Firebase Spark dan compatibility
 

@@ -31,3 +31,5 @@ SheetJS 0.20.3 uses the official distribution documented at https://docs.sheetjs
 ## Release evidence
 
 Final command counts, clean-install result and remote pipeline status are recorded in `PROJECT_STATUS.md`. Do not interpret earlier release documents as current test evidence.
+
+[Bukti build, rilis dan smoke produksi](RELEASE-VERIFICATION-v6.5.1.md).

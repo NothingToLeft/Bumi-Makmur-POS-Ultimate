@@ -1,21 +1,21 @@
-# Bumi Makmur POS Desktop Windows v5.6.1
+# Bumi Makmur POS Desktop Windows v6.5.1
 
 ## Build cloud tanpa program berat
 
 Buka GitHub:
 
 ```text
-Actions → Build Bumi Makmur POS Desktop v5.6.1
+Actions → Build Bumi Makmur POS Desktop v6.5.1
 → Run workflow → windows-release
 ```
 
-Unduh artifact `Bumi-Makmur-POS-Desktop-v5.6.1-Windows`.
+Unduh artifact `Bumi-Makmur-POS-Desktop-v6.5.1-Windows`.
 
 ## Isi artifact
 
 - Installer `.exe` untuk pemasangan umum.
 - Installer `.msi` untuk administrasi Windows.
-- `SHA256SUMS.txt` untuk pemeriksaan integritas.
+- `SHA256SUMS-Windows.txt` untuk pemeriksaan integritas.
 
 ## Fitur desktop
 

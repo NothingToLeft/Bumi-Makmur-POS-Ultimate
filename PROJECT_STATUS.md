@@ -26,3 +26,9 @@ Continue GitHub main `7e748ca17399632cda1efaf1440ee90f36f7a414` (v6.5.0), cross-
 - Remote native builds/deployment require separate pipeline confirmation. Build success does not prove installation or device behavior.
 
 Details: `docs/QA-v6.5.1.md`. Rollback source: `7e748ca`; preserve local storage and business data.
+
+## Verifikasi remote dan perapian repo
+
+Build Android/Windows dari `1a4d69b` sukses dan APK/AAB/EXE/MSI tersedia pada Release v6.5.1. Cloudflare deploy sukses; domain produksi mengembalikan service worker v6.5.1. Smoke login produksi lulus pada lebar 360/768/1440. Instalasi perangkat fisik dan transaksi produksi tetap belum diuji. Bukti: [verifikasi rilis](docs/RELEASE-VERIFICATION-v6.5.1.md).
+
+Root repo dirapikan dari 179 menjadi 25 file. Panduan aktif, catatan rilis, dan laporan historis dipisahkan dalam `docs/`; modul bisnis dan data tidak dihapus. 314 tes dan build tetap lulus setelah pemindahan.

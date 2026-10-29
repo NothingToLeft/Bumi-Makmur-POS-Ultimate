@@ -158,7 +158,7 @@ jobs:
           cp "$APK" "release/android/Bumi-Makmur-POS-Android-v${VERSION}.apk"
           cp "$AAB" "release/android/Bumi-Makmur-POS-Android-v${VERSION}.aab"
           sha256sum release/android/*.apk release/android/*.aab > release/android/SHA256SUMS-Android.txt
-          cp RELEASE-NOTES-Bumi-Makmur-POS-v6.5.1.md release/android/RELEASE-NOTES.md
+          cp docs/releases/RELEASE-NOTES-Bumi-Makmur-POS-v6.5.1.md release/android/RELEASE-NOTES.md
 
       - name: Upload signed Android release to Actions artifact
         if: ${{ inputs.run_mode == 'android-release' || inputs.run_mode == 'web-and-android' }}

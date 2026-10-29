@@ -102,7 +102,7 @@ jobs:
             "$hash  $($file.Name)"
           }
           $lines | Set-Content -Encoding utf8 release/windows/SHA256SUMS-Windows.txt
-          Copy-Item RELEASE-NOTES-Bumi-Makmur-POS-v6.5.1.md release/windows/RELEASE-NOTES.md -Force
+          Copy-Item docs/releases/RELEASE-NOTES-Bumi-Makmur-POS-v6.5.1.md release/windows/RELEASE-NOTES.md -Force
 
       - name: Upload Windows installers to Actions artifact
         if: ${{ inputs.build_mode == 'windows-release' }}

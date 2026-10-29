@@ -37,7 +37,7 @@
 
 ## Audit fitur
 
-Seluruh modul utama v4.2 dipertahankan. Lihat `docs/FEATURE-MATRIX.md` dan `QA-CHECKLIST.md`.
+Seluruh modul utama v4.2 dipertahankan. Lihat `docs/FEATURE-MATRIX.md` dan `../history/QA-CHECKLIST.md`.
 
 ## Verifikasi
 

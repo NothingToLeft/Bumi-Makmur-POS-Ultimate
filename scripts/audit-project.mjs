@@ -34,17 +34,17 @@ const required = [
   'package.json', 'src/App.jsx', 'src/store/PosContext.jsx', 'src/services/firebase.js',
   'firestore.rules', 'firestore.indexes.json', 'public/manifest.webmanifest', 'public/sw.js',
   'public/_redirects', 'public/_headers', '.github/workflows/build-android.yml', '.github/workflows/build-windows.yml', 'electron/main.cjs', 'electron/preload.cjs',
-  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.1.1.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.2.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.0.md', 'RELEASE-NOTES-Bumi-Makmur-POS-v6.3.1.md', 'CHANGELOG-Bumi-Makmur-POS-v6.3.1.md', 'QA-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'FINAL-RELEASE-CHECKLIST-v6.3.1.md', 'functions/api/product-image-search.js', 'src/services/geminiRuntime.js',
+  'src/screens/BusinessToolsScreen.jsx', 'src/utils/businessInsights.js', 'src/services/customerDisplayBridge.js', 'docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.0.3.md', 'docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.1.0.md', 'docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.1.1.md', 'docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.2.0.md', 'docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.3.0.md', 'docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.3.1.md', 'docs/history/CHANGELOG-Bumi-Makmur-POS-v6.3.1.md', 'docs/history/QA-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'docs/history/BUILD-REPORT-Bumi-Makmur-POS-v6.3.1.md', 'docs/history/FINAL-RELEASE-CHECKLIST-v6.3.1.md', 'functions/api/product-image-search.js', 'src/services/geminiRuntime.js',
   'src/utils/qrisDynamic.js', 'src/services/qrisPaymentAssurance.js', 'src/components/QrisCode.jsx',
-  'RELEASE-NOTES-Bumi-Makmur-POS-v6.4.0.md', 'CHANGELOG-Bumi-Makmur-POS-v6.4.0.md',
-  'QA-REPORT-Bumi-Makmur-POS-v6.4.0.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.4.0.md',
-  'FINAL-RELEASE-CHECKLIST-v6.4.0.md', 'docs/IMPLEMENTATION-NOTES-v6.4.0.md',
-  'docs/QRIS-PAYMENT-ASSURANCE-API-v6.4.0.md', 'docs/QRIS-SOURCE-AUDIT-v6.4.0.md',
-  'docs/FOLDER-STRUCTURE-v6.4.0.md', 'THIRD-PARTY-NOTICES.md',
-  'RELEASE-NOTES-Bumi-Makmur-POS-v6.4.2.md', 'CHANGELOG-Bumi-Makmur-POS-v6.4.2.md',
-  'QA-REPORT-Bumi-Makmur-POS-v6.4.2.md', 'BUILD-REPORT-Bumi-Makmur-POS-v6.4.2.md',
-  'FINAL-RELEASE-CHECKLIST-v6.4.2.md', 'docs/IMPLEMENTATION-NOTES-v6.4.2.md',
-  'docs/FOLDER-STRUCTURE-v6.4.2.md'
+  'docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.4.0.md', 'docs/history/CHANGELOG-Bumi-Makmur-POS-v6.4.0.md',
+  'docs/history/QA-REPORT-Bumi-Makmur-POS-v6.4.0.md', 'docs/history/BUILD-REPORT-Bumi-Makmur-POS-v6.4.0.md',
+  'docs/history/FINAL-RELEASE-CHECKLIST-v6.4.0.md', 'docs/history/technical/IMPLEMENTATION-NOTES-v6.4.0.md',
+  'docs/history/technical/QRIS-PAYMENT-ASSURANCE-API-v6.4.0.md', 'docs/history/technical/QRIS-SOURCE-AUDIT-v6.4.0.md',
+  'docs/history/technical/FOLDER-STRUCTURE-v6.4.0.md', 'THIRD-PARTY-NOTICES.md',
+  'docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.4.2.md', 'docs/history/CHANGELOG-Bumi-Makmur-POS-v6.4.2.md',
+  'docs/history/QA-REPORT-Bumi-Makmur-POS-v6.4.2.md', 'docs/history/BUILD-REPORT-Bumi-Makmur-POS-v6.4.2.md',
+  'docs/history/FINAL-RELEASE-CHECKLIST-v6.4.2.md', 'docs/history/technical/IMPLEMENTATION-NOTES-v6.4.2.md',
+  'docs/history/technical/FOLDER-STRUCTURE-v6.4.2.md'
 ];
 for (const item of required) {
   try { await access(path.join(root, item)); } catch { errors.push(`File wajib hilang: ${item}`); }

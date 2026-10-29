@@ -587,4 +587,10 @@
 
 ## v6.4.2 (11 Oct 2026, candidate)
 
-Claude reviewed productivity enhancements retained: command palette, dashboard insights, cash counter and CSV export. Additional fix for per-line refund modal, QRIS duplicate-session guard in same checkout, short-lived local Manager approval tickets, CSV formula prefix and inventory import size limit. Source version/PWA cache consistency. See `RELEASE-NOTES-Bumi-Makmur-POS-v6.4.2.md`; not yet signed or deployed.
+Claude reviewed productivity enhancements retained: command palette, dashboard insights, cash counter and CSV export. Additional fix for per-line refund modal, QRIS duplicate-session guard in same checkout, short-lived local Manager approval tickets, CSV formula prefix and inventory import size limit. Source version/PWA cache consistency. See `docs/history/RELEASE-NOTES-Bumi-Makmur-POS-v6.4.2.md`; not yet signed or deployed.
+
+## Perapian dokumentasi
+
+- Root 179 → 25 file; laporan lama ke `docs/history`, panduan ke `docs/guides`, catatan rilis ke `docs/releases`.
+- Hapus dua manifest checksum usang dan satu panduan duplikat; perbarui README, tautan, audit, tes dan workflow.
+- Fitur dan data tetap utuh. Build web dan 314 tes tetap lulus.
