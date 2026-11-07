@@ -60,6 +60,7 @@ import { appendSyncDiagnostic, buildSyncDiagnosticsExport, buildSyncStatus, clas
 import { validateBackupPayload } from '../utils/backupValidation.js';
 import { publishCustomerDisplaySnapshot } from '../services/customerDisplayBridge.js';
 import { QRIS_MAX_AMOUNT, QRIS_MIN_AMOUNT, validateQrisPayload, qrisPayloadMeta } from '../utils/qrisDynamic.js';
+import { buildPosSnapshot, getPosSyncKey, sendPosSnapshot } from '../services/superappSync.js';
 import {
   baseUnitCost as calculateBaseUnitCost, conversionFactor, formatQuantity,
   normalizeQuantityStep, recommendedQuantityStep
@@ -2993,6 +2994,24 @@ export function PosProvider({ children }) {
   const queueOwnership = useMemo(() => getOfflineQueueOwnershipStats(storeCode, currentUser?.id || ''), [pendingSyncCount, storeCode, currentUser?.id]);
   const activePendingSyncCount = currentUser ? queueOwnership.currentUserCount : pendingSyncCount;
   const otherUserPendingSyncCount = currentUser ? queueOwnership.otherUserCount : 0;
+  const lastPosPushRef = useRef({snapshot:'',at:0});
+  useEffect(() => {
+    if(currentUser?.role!=='owner'||!cloudReady||!online||cloudError||pendingSyncCount>0||auth?.currentUser?.uid!==currentUser.id||!getPosSyncKey(currentUser))return;
+    let cancelled=false;
+    const push=async()=>{
+      if(cancelled)return;
+      try{
+        const snapshot=JSON.stringify(buildPosSnapshot(db));
+        const previous=lastPosPushRef.current;
+        if(previous.snapshot===snapshot&&Date.now()-previous.at<15*60*1000)return;
+        await sendPosSnapshot({db,user:currentUser});
+        if(!cancelled)lastPosPushRef.current={snapshot,at:Date.now()};
+      }catch{/* POS cloud sync remains independent; the next update retries. */}
+    };
+    const first=setTimeout(push,1500);
+    const interval=setInterval(push,15*60*1000);
+    return()=>{cancelled=true;clearTimeout(first);clearInterval(interval);};
+  },[db,currentUser,cloudReady,online,cloudError,pendingSyncCount]);
   const authMatched = !currentUser || !firebaseConfigured || Boolean(auth?.currentUser && auth.currentUser.uid === currentUser.id);
   const syncStatus = useMemo(() => buildSyncStatus({
     online, cloudReady, cloudSaving, pendingCount: activePendingSyncCount, cloudError,
