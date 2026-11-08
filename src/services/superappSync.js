@@ -41,7 +41,7 @@ export async function sendPosSnapshot({db,user,pairCode='',syncKey=getPosSyncKey
   const payload={snapshot:buildPosSnapshot(db),...(syncKey?{syncKey}:{pairCode:String(pairCode).trim().toUpperCase()})};
   const response=await fetcher(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store'});
   if(!response.ok){
-    if(response.status===403||response.status===409)throw Error('Koneksi ditolak. Buat kode baru di SuperApp, lalu hubungkan kembali.');
+    if(response.status===401||response.status===403||response.status===409)throw Error('Koneksi ditolak. Buat kode baru di SuperApp, lalu hubungkan kembali.');
     throw Error('Ringkasan belum terkirim. Coba lagi setelah cloud POS sinkron.');
   }
   const data=await response.json();

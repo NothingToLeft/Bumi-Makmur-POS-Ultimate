@@ -126,7 +126,7 @@ export function PageHeader({ title, subtitle, actions, back }) {
   return (
     <div className="bg-white border-b border-gray-100 p-4 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm card-element premium-page-header flex-shrink-0">
       <div className="flex items-center gap-3 min-w-0">
-        {back && <button onClick={back} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center shrink-0"><ChevronLeft /></button>}
+        {back && <button onClick={back} aria-label="Kembali" className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center shrink-0"><ChevronLeft /></button>}
         <div className="min-w-0"><h1 className="font-bold text-xl md:text-2xl text-gray-800 truncate">{title}</h1>{subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}</div>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
